@@ -6,7 +6,7 @@ const videos = [
     title: "Lion vs Dragon Part 1",
     description:
       "A fearless lion enters a forbidden realm and comes face to face with an ancient dragon.",
-    src: "/videos/lion-vs-dragon-part-1.mp4",
+    src: "https://www.youtube.com/embed/ekvgU9epbnA?si=TKivt22T0PrGakWU",
     label: "Chapter 01",
     accent: "gold",
   },
@@ -14,7 +14,7 @@ const videos = [
     title: "Lion vs Dragon Part 2",
     description:
       "Former enemies become unlikely allies when a darker force threatens their world.",
-    src: "/videos/lion-vs-dragon-part-2.mp4",
+    src: "https://www.youtube.com/embed/nEiQ5ERGzWs?si=CwFBCA99y-fu0aju",
     label: "Chapter 02",
     accent: "violet",
   },
@@ -22,9 +22,17 @@ const videos = [
     title: "Funny Lion Restaurant",
     description:
       "A very serious lion walks into a fancy restaurant and orders dinner like a human. What could possibly go wrong?",
-    src: "/videos/funny-lion-restaurant.mp4",
+    src: "https://www.youtube.com/embed/Sv_tlCpX9Ec?si=tj9y9Ep_qVTCykX0",
     label: "Comedy",
     accent: "blue",
+  },
+  {
+    title: "Alien Visits Accra",
+    description:
+      "A mysterious visitor arrives in Accra and turns a familiar city into a surreal adventure.",
+    src: "https://www.youtube.com/embed/QYD6e6EEsoE?si=3LT7hJNa7YKq5BJ9",
+    label: "Featured",
+    accent: "gold",
   },
 ];
 
@@ -33,7 +41,6 @@ function VideoCard({ video }) {
   const [videoReady, setVideoReady] = useState(Boolean(video.src));
 
   const playPreview = () => {
-    player.current?.play();
     player.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
@@ -41,18 +48,16 @@ function VideoCard({ video }) {
     <article className={`videoCard videoCard--${video.accent}`}>
       <div className="videoFrame">
         {video.src ? (
-          <video
+          <iframe
             ref={player}
-            controls
-            playsInline
-            preload="metadata"
-            aria-label={`${video.title} video preview`}
-            onLoadedMetadata={() => setVideoReady(true)}
-            onError={() => setVideoReady(false)}
-          >
-            <source src={video.src} type="video/mp4" />
-            Your browser does not support MP4 video.
-          </video>
+            src={video.src}
+            title={`${video.title} video preview`}
+            loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="youtubeEmbed"
+          />
         ) : (
           <div className="comingSoonVisual" aria-hidden="true">
             <span className="cloche">♨</span>
@@ -63,7 +68,7 @@ function VideoCard({ video }) {
         {!videoReady && video.src && (
           <div className="missingVideo">
             <span className="playIcon">▶</span>
-            <small>Add the MP4 to preview</small>
+            <small>Video unavailable</small>
           </div>
         )}
       </div>
@@ -73,7 +78,7 @@ function VideoCard({ video }) {
         <p>{video.description}</p>
         {video.src ? (
           <button type="button" onClick={playPreview} disabled={!videoReady}>
-            {videoReady ? "Watch preview" : "MP4 coming soon"}
+            {videoReady ? "Watch preview" : "Video unavailable"}
           </button>
         ) : (
           <span className="placeholderButton" aria-label="Video coming soon">
@@ -174,7 +179,7 @@ function App() {
           <p className="eyebrow">The story continues</p>
           <h2>Follow the adventure.</h2>
           <p>New scenes, behind-the-scenes moments and AI stories are coming to TikTok.</p>
-          <a className="tiktokButton" href="https://www.tiktok.com/" target="_blank" rel="noreferrer">
+          <a className="tiktokButton" href="https://www.tiktok.com/@kianimation.studio" target="_blank" rel="noreferrer">
             <span>♪</span> Follow on TikTok
           </a>
         </section>
