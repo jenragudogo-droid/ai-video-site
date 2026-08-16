@@ -11,14 +11,6 @@ const videos = [
     accent: "gold",
   },
   {
-    title: "The Lion Who Ordered Food Like a Human",
-    description:
-      "A very serious lion walks into a fancy restaurant and orders dinner like a human. What could possibly go wrong?",
-    src: "https://www.youtube.com/embed/Sv_tlCpX9Ec?si=tj9y9Ep_qVTCykX0",
-    label: "Comedy",
-    accent: "blue",
-  },
-  {
     title: "Alien Visits Accra",
     description:
       "A mysterious visitor arrives in Accra and turns a familiar city into a surreal adventure.",
