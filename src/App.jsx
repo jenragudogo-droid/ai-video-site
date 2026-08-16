@@ -11,15 +11,7 @@ const videos = [
     accent: "gold",
   },
   {
-    title: "Lion vs Dragon Part 2",
-    description:
-      "Former enemies become unlikely allies when a darker force threatens their world.",
-    src: "https://www.youtube.com/embed/nEiQ5ERGzWs?si=CwFBCA99y-fu0aju",
-    label: "Chapter 02",
-    accent: "violet",
-  },
-  {
-    title: "Funny Lion Restaurant",
+    title: "The Lion Who Ordered Food Like a Human",
     description:
       "A very serious lion walks into a fancy restaurant and orders dinner like a human. What could possibly go wrong?",
     src: "https://www.youtube.com/embed/Sv_tlCpX9Ec?si=tj9y9Ep_qVTCykX0",
