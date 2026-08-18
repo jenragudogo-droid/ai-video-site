@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import "./App.css";
+import BeastBattleArena from "./components/BeastBattleArena";
 
 const videos = [
   {
@@ -76,6 +77,7 @@ function VideoCard({ video }) {
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [gameOpen, setGameOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -101,6 +103,7 @@ function App() {
         <nav id="main-navigation" className={menuOpen ? "navOpen" : ""}>
           <a href="#home" onClick={closeMenu}>Home</a>
           <a href="#videos" onClick={closeMenu}>Videos</a>
+          <a href="#games" onClick={closeMenu}>Games</a>
           <a href="#about" onClick={closeMenu}>About</a>
           <a className="navCta" href="#social" onClick={closeMenu}>Follow</a>
         </nav>
@@ -139,6 +142,49 @@ function App() {
           <p className="videoHint">
             MP4 setup: place your finished files in <code>public/videos</code> using the filenames configured for each preview.
           </p>
+        </section>
+
+        <section className="gamesSection" id="games">
+          <div className="sectionHeading">
+            <div>
+              <p className="eyebrow">Play games</p>
+              <h2>Step into the arena</h2>
+            </div>
+            <p>Playable browser games built around the creatures of AI Story World. No download, no sign up—just pick a fighter and go.</p>
+          </div>
+
+          <div className="gameGrid">
+            <article className="gameCard">
+              <div className="gameArt" aria-hidden="true">
+                <span className="gameArtGlow" />
+                <span className="gameArtBeast gameArtBeast--left" />
+                <span className="gameArtBeast gameArtBeast--right" />
+                <span className="gameArtFloor" />
+                <span className="episodeLabel">Game 01</span>
+              </div>
+              <div className="cardContent">
+                <h3>Beast Battle Arena</h3>
+                <p>
+                  Eight beasts, one arena. Choose your fighter, learn its special
+                  move and take down the AI opponent in a one-on-one duel.
+                </p>
+                <div className="gameTags">
+                  <span>8 fighters</span>
+                  <span>Special moves</span>
+                  <span>Touch + keyboard</span>
+                </div>
+                <button type="button" onClick={() => setGameOpen((open) => !open)}>
+                  {gameOpen ? "Close game" : "Play now"}
+                </button>
+              </div>
+            </article>
+          </div>
+
+          {gameOpen && (
+            <div className="gameStageWrap">
+              <BeastBattleArena />
+            </div>
+          )}
         </section>
 
         <section className="about" id="about">

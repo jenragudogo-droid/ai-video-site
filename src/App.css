@@ -155,3 +155,37 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: .01ms !important; }
 }
+
+/* ------------------------- Play Games section ------------------------- */
+.gamesSection { padding: 100px clamp(22px, 6vw, 96px) 96px; background: #0b0a0e; }
+.gameGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; max-width: 1240px; margin: 0 auto; }
+.gameCard { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; transition: transform .3s ease, border-color .3s ease; }
+.gameCard:hover { transform: translateY(-6px); border-color: rgba(255,255,255,.25); }
+.gameArt { height: 265px; position: relative; overflow: hidden; background: radial-gradient(circle at 50% 78%, rgba(148,74,200,.28), transparent 55%), linear-gradient(180deg, #0a0713, #17101f 60%, #0b0a0d); }
+.gameArtGlow { position: absolute; left: 50%; top: 24%; width: 130px; aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle at 40% 38%, #fff2d2, #d8ab68 55%, #6b4b26); box-shadow: 0 0 70px rgba(255,205,140,.35); opacity: .75; }
+.gameArtFloor { position: absolute; inset: auto 0 0 0; height: 26%; background: linear-gradient(180deg, #3a2b26, #150f11); border-top: 2px solid rgba(244,185,101,.3); }
+.gameArtBeast { position: absolute; bottom: 24%; width: 62px; height: 52px; border-radius: 46% 42% 34% 40% / 52% 54% 46% 48%; box-shadow: inset -6px -8px 16px rgba(0,0,0,.45); }
+.gameArtBeast::after { content: ""; position: absolute; width: 30px; height: 30px; bottom: 60%; border-radius: 50%; background: inherit; box-shadow: inset -4px -4px 10px rgba(0,0,0,.35); }
+.gameArtBeast--left { left: 22%; background: linear-gradient(160deg, #d9a03c, #9d6a1c); }
+.gameArtBeast--left::after { right: -8px; }
+.gameArtBeast--right { right: 22%; background: linear-gradient(160deg, #7d51d8, #3f2679); transform: scaleX(-1); }
+.gameArtBeast--right::after { right: -8px; }
+.gameArt::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.5)); }
+.gameTags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.gameTags span { padding: 5px 11px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #b6b2bc; font-size: .64rem; letter-spacing: .04em; }
+.gameCard .cardContent p { min-height: 66px; margin-bottom: 16px; }
+.gameStageWrap { max-width: 1240px; margin: 26px auto 0; padding: clamp(14px, 2vw, 22px); border: 1px solid var(--line); border-radius: 10px; background: #08080b; }
+
+@media (max-width: 900px) {
+  .gameGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gameCard { grid-column: 1 / -1; max-width: 560px; }
+}
+
+@media (max-width: 640px) {
+  .gamesSection { padding: 80px 18px 76px; }
+  .gameGrid { grid-template-columns: 1fr; }
+  .gameCard { max-width: none; }
+  .gameArt { height: 210px; }
+  .gameCard .cardContent p { min-height: auto; }
+  .gameStageWrap { padding: 10px; }
+}
