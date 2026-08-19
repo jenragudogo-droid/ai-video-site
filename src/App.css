@@ -200,3 +200,28 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
 .pitchBall { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 14px rgba(255,255,255,.6); animation: pitchBallDrift 5s ease-in-out infinite; }
 @keyframes pitchBallDrift { 0%,100% { transform: translate(-38px, 8px); } 50% { transform: translate(40px, -12px); } }
 @media (prefers-reduced-motion: reduce) { .pitchBall { animation: none; } }
+
+/* Metro City Bus card artwork */
+.gameArt--street { background: linear-gradient(180deg, #0a1220, #16233a 52%, #090c12); }
+.streetSky { position: absolute; inset: 0 0 44% 0; background: linear-gradient(180deg, #16264a 0%, #35507f 56%, #8a6f7d 86%, #d1946a 100%); }
+.streetSun { position: absolute; left: 56%; bottom: 44%; width: 54px; height: 54px; margin-left: -27px; border-radius: 50%; background: radial-gradient(circle, #ffdfae, #e79a54 60%, rgba(231,154,84,0)); opacity: .85; }
+.streetBlock { position: absolute; bottom: 42%; background: linear-gradient(180deg, #26355a, #141d31); box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+.streetBlock--l { left: 3%; width: 27%; height: 42%; clip-path: polygon(0 18%, 34% 18%, 34% 0, 68% 0, 68% 26%, 100% 26%, 100% 100%, 0 100%); }
+.streetBlock--r { right: 3%; width: 27%; height: 48%; clip-path: polygon(0 30%, 30% 30%, 30% 6%, 64% 6%, 64% 20%, 100% 20%, 100% 100%, 0 100%); }
+.streetRoad { position: absolute; inset: auto 0 0 0; height: 58%; background: linear-gradient(180deg, #5a616c 0%, #414751 38%, #2a2e35 100%); clip-path: polygon(40% 0, 60% 0, 122% 100%, -22% 100%); }
+.streetDash { position: absolute; left: 59%; width: 5px; background: rgba(244,240,224,.9); border-radius: 3px; transform: translateX(-50%); animation: streetRush 1.6s linear infinite; }
+.streetDash--1 { animation-delay: 0s; }
+.streetDash--2 { animation-delay: -.53s; }
+.streetDash--3 { animation-delay: -1.06s; }
+@keyframes streetRush {
+  0%   { bottom: 42%; height: 5px;  left: 55%; opacity: 0; transform: translateX(-50%) scaleX(.4); }
+  18%  { opacity: .95; }
+  100% { bottom: -8%; height: 34px; left: 76%; opacity: 0; transform: translateX(-50%) scaleX(3); }
+}
+.streetBus { position: absolute; left: 42%; bottom: 13%; width: 104px; height: 80px; margin-left: -52px; border-radius: 12px 12px 5px 5px; background: linear-gradient(180deg, #f7cf52 0%, #f0b429 46%, #c8901d 100%); box-shadow: 0 18px 32px rgba(0,0,0,.6), inset 0 -8px 0 rgba(0,0,0,.18); }
+.streetBus::after { content: ""; position: absolute; left: 6%; right: 6%; bottom: 21%; height: 7px; border-radius: 3px; background: #c0392b; }
+.streetBusGlass { position: absolute; left: 9%; right: 9%; top: 12%; height: 40%; border-radius: 7px; background: linear-gradient(160deg, #43647f, #1c2b3a 65%); box-shadow: inset 0 2px 0 rgba(255,255,255,.2); }
+.streetBusLamp { position: absolute; bottom: 6%; width: 18px; height: 9px; border-radius: 4px; background: #fff8de; box-shadow: 0 0 22px 9px rgba(255,240,190,.6); }
+.streetBusLamp--l { left: 10%; }
+.streetBusLamp--r { right: 10%; }
+@media (prefers-reduced-motion: reduce) { .streetDash { animation: none; opacity: .5; } }

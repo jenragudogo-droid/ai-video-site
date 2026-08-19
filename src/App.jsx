@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import "./App.css";
-import BeastBattleArena from "./components/BeastBattleArena";
-import KianimationFootball from "./components/KianimationFootball";
+// Beast Battle Arena and Kianimation Football League are unlisted for now.
+// Their source still lives in src/components/ — re-import them here, restore
+// their cards in the games grid and their mounts below to bring them back.
+import BusSimulator from "./components/BusSimulator";
 
 const videos = [
   {
@@ -78,8 +80,7 @@ function VideoCard({ video }) {
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [gameOpen, setGameOpen] = useState(false);
-  const [footballOpen, setFootballOpen] = useState(false);
+  const [busOpen, setBusOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -157,71 +158,45 @@ function App() {
 
           <div className="gameGrid">
             <article className="gameCard">
-              <div className="gameArt" aria-hidden="true">
-                <span className="gameArtGlow" />
-                <span className="gameArtBeast gameArtBeast--left" />
-                <span className="gameArtBeast gameArtBeast--right" />
-                <span className="gameArtFloor" />
-                <span className="episodeLabel">Game 01</span>
+              <div className="gameArt gameArt--street" aria-hidden="true">
+                <span className="streetSky" />
+                <span className="streetSun" />
+                <span className="streetBlock streetBlock--l" />
+                <span className="streetBlock streetBlock--r" />
+                <span className="streetRoad" />
+                <span className="streetDash streetDash--1" />
+                <span className="streetDash streetDash--2" />
+                <span className="streetDash streetDash--3" />
+                <span className="streetBus">
+                  <span className="streetBusGlass" />
+                  <span className="streetBusLamp streetBusLamp--l" />
+                  <span className="streetBusLamp streetBusLamp--r" />
+                </span>
+                <span className="episodeLabel">Game 03</span>
               </div>
               <div className="cardContent">
-                <h3>Beast Battle Arena</h3>
+                <h3>Metro City Bus</h3>
                 <p>
-                  Ten beasts, from the lion and the gorilla to a fire-breathing
-                  dragon. Build the special power meter and win two rounds to
-                  take the match.
+                  Drive a full-size city bus through a living 3D town. Run the
+                  route, pull up level with the kerb, watch the lights and keep
+                  your passengers comfortable.
                 </p>
                 <div className="gameTags">
-                  <span>10 fighters</span>
-                  <span>Best of 3</span>
-                  <span>Sound + music</span>
+                  <span>3D cockpit</span>
+                  <span>8 stops</span>
+                  <span>Live traffic</span>
                   <span>Touch + keyboard</span>
                 </div>
-                <button type="button" onClick={() => setGameOpen((open) => !open)}>
-                  {gameOpen ? "Close game" : "Play now"}
-                </button>
-              </div>
-            </article>
-
-            <article className="gameCard">
-              <div className="gameArt gameArt--pitch" aria-hidden="true">
-                <span className="gameArtGlow" />
-                <span className="pitchLine pitchLine--halfway" />
-                <span className="pitchLine pitchLine--circle" />
-                <span className="pitchLine pitchLine--boxLeft" />
-                <span className="pitchLine pitchLine--boxRight" />
-                <span className="pitchBall" />
-                <span className="episodeLabel">Game 02</span>
-              </div>
-              <div className="cardContent">
-                <h3>Kianimation Football League</h3>
-                <p>
-                  Full 11 v 11 football. Pick your formation and starting XI,
-                  play both halves with real fouls, offsides and set pieces,
-                  and bring on subs as your players tire.
-                </p>
-                <div className="gameTags">
-                  <span>11 v 11</span>
-                  <span>8 clubs</span>
-                  <span>Live commentary</span>
-                  <span>Touch + keyboard</span>
-                </div>
-                <button type="button" onClick={() => setFootballOpen((open) => !open)}>
-                  {footballOpen ? "Close game" : "Play now"}
+                <button type="button" onClick={() => setBusOpen((open) => !open)}>
+                  {busOpen ? "Close game" : "Play now"}
                 </button>
               </div>
             </article>
           </div>
 
-          {gameOpen && (
+          {busOpen && (
             <div className="gameStageWrap">
-              <BeastBattleArena />
-            </div>
-          )}
-
-          {footballOpen && (
-            <div className="gameStageWrap">
-              <KianimationFootball />
+              <BusSimulator />
             </div>
           )}
         </section>
