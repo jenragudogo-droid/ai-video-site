@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import "./App.css";
 import BeastBattleArena from "./components/BeastBattleArena";
+import KianimationFootball from "./components/KianimationFootball";
 
 const videos = [
   {
@@ -78,6 +79,7 @@ function VideoCard({ video }) {
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
+  const [footballOpen, setFootballOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -180,11 +182,46 @@ function App() {
                 </button>
               </div>
             </article>
+
+            <article className="gameCard">
+              <div className="gameArt gameArt--pitch" aria-hidden="true">
+                <span className="gameArtGlow" />
+                <span className="pitchLine pitchLine--halfway" />
+                <span className="pitchLine pitchLine--circle" />
+                <span className="pitchLine pitchLine--boxLeft" />
+                <span className="pitchLine pitchLine--boxRight" />
+                <span className="pitchBall" />
+                <span className="episodeLabel">Game 02</span>
+              </div>
+              <div className="cardContent">
+                <h3>Kianimation Football League</h3>
+                <p>
+                  Full 11 v 11 football. Pick your formation and starting XI,
+                  play both halves with real fouls, offsides and set pieces,
+                  and bring on subs as your players tire.
+                </p>
+                <div className="gameTags">
+                  <span>11 v 11</span>
+                  <span>8 clubs</span>
+                  <span>Live commentary</span>
+                  <span>Touch + keyboard</span>
+                </div>
+                <button type="button" onClick={() => setFootballOpen((open) => !open)}>
+                  {footballOpen ? "Close game" : "Play now"}
+                </button>
+              </div>
+            </article>
           </div>
 
           {gameOpen && (
             <div className="gameStageWrap">
               <BeastBattleArena />
+            </div>
+          )}
+
+          {footballOpen && (
+            <div className="gameStageWrap">
+              <KianimationFootball />
             </div>
           )}
         </section>

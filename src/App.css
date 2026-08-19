@@ -189,3 +189,14 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
   .gameCard .cardContent p { min-height: auto; }
   .gameStageWrap { padding: 10px; }
 }
+
+/* Kianimation Football League card artwork */
+.gameArt--pitch { background: radial-gradient(circle at 50% 70%, rgba(34,160,90,.35), transparent 58%), linear-gradient(180deg, #071409, #0e2c18 55%, #07100b); }
+.gameArt--pitch .pitchLine { position: absolute; border: 1px solid rgba(255,255,255,.28); }
+.pitchLine--halfway { left: 8%; right: 8%; top: 50%; height: 0; border-width: 1px 0 0; }
+.pitchLine--circle { left: 50%; top: 50%; width: 92px; height: 92px; transform: translate(-50%,-50%); border-radius: 50%; }
+.pitchLine--boxLeft { left: 8%; top: 28%; width: 46px; height: 44%; border-left: 0; }
+.pitchLine--boxRight { right: 8%; top: 28%; width: 46px; height: 44%; border-right: 0; }
+.pitchBall { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 14px rgba(255,255,255,.6); animation: pitchBallDrift 5s ease-in-out infinite; }
+@keyframes pitchBallDrift { 0%,100% { transform: translate(-38px, 8px); } 50% { transform: translate(40px, -12px); } }
+@media (prefers-reduced-motion: reduce) { .pitchBall { animation: none; } }
