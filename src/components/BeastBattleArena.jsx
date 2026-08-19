@@ -1,623 +1,192 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import AnimalArt from "./beastArena/AnimalArt.jsx";
+import { createBattleAudio } from "./beastArena/audio.js";
+import {
+  ARENAS,
+  MAX_HP,
+  MAX_METER,
+  ROSTER,
+  ROUNDS_TO_WIN,
+  WORLD_W,
+  byId,
+  drainEvents,
+  makeWorld,
+  snapshot,
+  stepWorld,
+} from "./beastArena/engine.js";
 import "./BeastBattleArena.css";
 
-/* ------------------------------------------------------------------ *
- * Beast Battle Arena — a small original 2D fighting game.
- * No external libraries: plain React state + a requestAnimationFrame loop.
- * The mutable world lives in a ref; each frame publishes a snapshot to
- * React so the arena can be drawn with regular DOM elements and CSS.
- * ------------------------------------------------------------------ */
+/* the artwork never changes for a given fighter, so keep it out of the
+   per-frame render entirely */
+const Art = memo(AnimalArt);
 
-const WORLD_W = 1000;          // virtual arena width
-const EDGE = 70;               // wall padding
-const MAX_HP = 100;
-const ATTACK_TIME = 360;       // ms, full normal attack
-const ATTACK_HIT = [90, 220];  // ms window where the normal attack connects
-const HURT_TIME = 250;
-const BLOCK_REDUCTION = 0.25;  // blocking keeps 25% of the damage
-const INTRO_TIME = 1500;
-const KO_TIME = 1100;
+const NO_INPUT = { left: false, right: false, attack: false, special: false, block: false };
+const arenaName = (id) => ARENAS.find((a) => a.id === id)?.name || "Arena";
 
-const ROSTER = [
-  {
-    id: "lion",
-    name: "Lion",
-    title: "Pride Sovereign",
-    attackName: "Claw Swipe",
-    specialName: "Roar Shockwave",
-    specialType: "shockwave",
-    speed: 0.3,
-    attack: 8,
-    range: 118,
-    specialDamage: 20,
-    cooldown: 6000,
-    fur: "#d9a03c",
-    fur2: "#9d6a1c",
-    glow: "#ffcf72",
-    blurb: "Balanced brawler with a roar that rips across the arena.",
-  },
-  {
-    id: "dragon",
-    name: "Dragon",
-    title: "Ashfall Wyrm",
-    attackName: "Claw Strike",
-    specialName: "Fire Breath",
-    specialType: "projectile",
-    speed: 0.26,
-    attack: 8,
-    range: 124,
-    specialDamage: 22,
-    cooldown: 7000,
-    fur: "#7d51d8",
-    fur2: "#3f2679",
-    glow: "#ff8a3d",
-    blurb: "Slow on foot, but breathes a stream of fire across any distance.",
-  },
-  {
-    id: "gorilla",
-    name: "Gorilla",
-    title: "Stone Silverback",
-    attackName: "Heavy Punch",
-    specialName: "Ground Smash",
-    specialType: "slam",
-    speed: 0.24,
-    attack: 11,
-    range: 108,
-    specialDamage: 20,
-    cooldown: 6500,
-    fur: "#4c4c58",
-    fur2: "#26262e",
-    glow: "#9fb0c6",
-    blurb: "Heaviest normal attack and a quake that punishes close range.",
-  },
-  {
-    id: "cheetah",
-    name: "Cheetah",
-    title: "Dust Runner",
-    attackName: "Quick Swipe",
-    specialName: "Speed Dash",
-    specialType: "charge",
-    dashSpeed: 1.15,
-    dashTime: 520,
-    speed: 0.44,
-    attack: 6,
-    range: 96,
-    specialDamage: 15,
-    cooldown: 4200,
-    fur: "#e0b451",
-    fur2: "#a4761f",
-    glow: "#ffe9a8",
-    blurb: "Fastest fighter alive — dashes in, strikes, and slips away.",
-  },
-  {
-    id: "elephant",
-    name: "Elephant",
-    title: "Grey Mountain",
-    attackName: "Trunk Strike",
-    specialName: "Powerful Charge",
-    specialType: "charge",
-    dashSpeed: 0.85,
-    dashTime: 700,
-    speed: 0.19,
-    attack: 10,
-    range: 128,
-    specialDamage: 24,
-    cooldown: 7500,
-    fur: "#8d93a6",
-    fur2: "#565c6d",
-    glow: "#d7ddec",
-    blurb: "Slowest mover, hardest charge. One clean hit changes the round.",
-  },
-  {
-    id: "crocodile",
-    name: "Crocodile",
-    title: "River Tyrant",
-    attackName: "Tail Swipe",
-    specialName: "Crushing Bite",
-    specialType: "bite",
-    speed: 0.28,
-    attack: 9,
-    range: 104,
-    specialDamage: 21,
-    cooldown: 6200,
-    fur: "#4f8a4a",
-    fur2: "#27512c",
-    glow: "#a8e06a",
-    blurb: "Waits in range, then locks on with a bite that does not let go.",
-  },
-  {
-    id: "eagle",
-    name: "Eagle",
-    title: "Storm Talon",
-    attackName: "Wing Strike",
-    specialName: "Dive Attack",
-    specialType: "dive",
-    dashSpeed: 0.8,
-    dashTime: 760,
-    speed: 0.4,
-    attack: 6,
-    range: 102,
-    specialDamage: 17,
-    cooldown: 5000,
-    fur: "#7a5330",
-    fur2: "#4a3120",
-    glow: "#ffd97a",
-    blurb: "Light and quick, drops out of the sky with talons first.",
-  },
-  {
-    id: "rhino",
-    name: "Rhino",
-    title: "Iron Horn",
-    attackName: "Heavy Headbutt",
-    specialName: "Horn Rush",
-    specialType: "charge",
-    dashSpeed: 0.98,
-    dashTime: 620,
-    speed: 0.27,
-    attack: 10,
-    range: 112,
-    specialDamage: 23,
-    cooldown: 7000,
-    fur: "#7d8794",
-    fur2: "#474e59",
-    glow: "#dbe4ee",
-    blurb: "Armoured front line — rushes forward and does not stop early.",
-  },
-];
-
-const byId = (id) => ROSTER.find((c) => c.id === id) || ROSTER[0];
-
-/* ---------------------------------- world ---------------------------------- */
-
-function makeFighter(char, side) {
-  return {
-    side,
-    charId: char.id,
-    x: side === "p1" ? 290 : 710,
-    y: 0,
-    hp: MAX_HP,
-    facing: side === "p1" ? 1 : -1,
-    state: "idle",
-    stateT: 0,
-    cd: 0,
-    hitDone: false,
-    lastHitAt: 0,
-  };
+function roundLabel(round) {
+  if (round >= 3) return "Final Round";
+  return `Round ${round}`;
 }
 
-function makeWorld(playerChar, enemyChar) {
-  return {
-    p1: makeFighter(playerChar, "p1"),
-    p2: makeFighter(enemyChar, "p2"),
-    fx: [],
-    fxId: 0,
-    phase: "intro",
-    phaseT: INTRO_TIME,
-    winner: null,
-    ai: { t: 600, act: "wait", fired: false },
-    shake: 0,
-  };
-}
+/* ---------------------------------- HUD ---------------------------------- */
 
-const dist = (a, b) => Math.abs(a.x - b.x);
-
-function spawnFx(w, fx) {
-  w.fxId += 1;
-  w.fx.push({ id: w.fxId, t: 0, ...fx });
-}
-
-function applyDamage(w, target, amount, fromX) {
-  if (target.state === "ko") return;
-  const blocked = target.state === "block";
-  const dealt = Math.round(blocked ? amount * BLOCK_REDUCTION : amount);
-  target.hp = Math.max(0, target.hp - dealt);
-  const dir = target.x >= fromX ? 1 : -1;
-  target.x = Math.min(WORLD_W - EDGE, Math.max(EDGE, target.x + dir * (blocked ? 8 : 26)));
-  if (!blocked) {
-    target.state = "hurt";
-    target.stateT = HURT_TIME;
-  }
-  w.shake = blocked ? 4 : 10;
-  spawnFx(w, {
-    type: blocked ? "guard" : "impact",
-    x: target.x - dir * 30,
-    y: 210,
-    life: blocked ? 260 : 320,
-  });
-}
-
-function startSpecial(w, f, char) {
-  f.state = "special";
-  f.hitDone = false;
-  f.cd = char.cooldown;
-  switch (char.specialType) {
-    case "projectile":
-      f.stateT = 760;
-      break;
-    case "shockwave":
-      f.stateT = 820;
-      break;
-    case "slam":
-      f.stateT = 720;
-      break;
-    case "bite":
-      f.stateT = 580;
-      break;
-    default:
-      f.stateT = char.dashTime || 620;
-  }
-}
-
-/** Per-frame special behaviour: movement, fx spawning and contact damage. */
-function runSpecial(w, f, opp, char, dt, elapsed) {
-  const type = char.specialType;
-
-  if (type === "projectile") {
-    if (elapsed >= 200 && !f.hitDone) {
-      f.hitDone = true;
-      spawnFx(w, {
-        type: "fire",
-        x: f.x + f.facing * 70,
-        y: 262,
-        dir: f.facing,
-        speed: 0.62,
-        life: 1400,
-        owner: f.side,
-        damage: char.specialDamage,
-      });
-    }
-    return;
-  }
-
-  if (type === "shockwave") {
-    if (elapsed >= 240 && !f.hitDone) {
-      f.hitDone = true;
-      spawnFx(w, {
-        type: "roar",
-        x: f.x + f.facing * 40,
-        y: 250,
-        dir: f.facing,
-        life: 720,
-        owner: f.side,
-        damage: char.specialDamage,
-        radius: 430,
-      });
-    }
-    return;
-  }
-
-  if (type === "slam") {
-    if (elapsed >= 260 && !f.hitDone) {
-      f.hitDone = true;
-      spawnFx(w, { type: "smash", x: f.x, y: 0, life: 560 });
-      if (dist(f, opp) < 235) applyDamage(w, opp, char.specialDamage, f.x);
-      w.shake = 14;
-    }
-    return;
-  }
-
-  if (type === "bite") {
-    // short lunge so the jaws can actually reach a backing-off opponent
-    if (elapsed < 300) {
-      f.x = Math.min(WORLD_W - EDGE, Math.max(EDGE, f.x + f.facing * 0.22 * dt));
-    }
-    if (elapsed >= 180 && elapsed <= 420 && !f.hitDone) {
-      const facingOk = (opp.x - f.x) * f.facing > 0;
-      if (facingOk && dist(f, opp) < char.range + 60) {
-        f.hitDone = true;
-        applyDamage(w, opp, char.specialDamage, f.x);
-        spawnFx(w, { type: "bite", x: f.x + f.facing * 60, y: 250, life: 320 });
-      }
-    }
-    return;
-  }
-
-  if (type === "dive") {
-    const p = elapsed / (char.dashTime || 760);
-    f.y = Math.sin(Math.min(p, 1) * Math.PI) * 130 * (1 - p * 0.45);
-    f.x = Math.min(
-      WORLD_W - EDGE,
-      Math.max(EDGE, f.x + f.facing * (char.dashSpeed || 0.8) * dt)
-    );
-    if (elapsed > 20) {
-      spawnFx(w, { type: "feather", x: f.x, y: f.y + 200, life: 260 });
-    }
-    if (!f.hitDone && dist(f, opp) < 110) {
-      f.hitDone = true;
-      applyDamage(w, opp, char.specialDamage, f.x);
-    }
-    return;
-  }
-
-  // charge (cheetah / elephant / rhino)
-  f.x = Math.min(
-    WORLD_W - EDGE,
-    Math.max(EDGE, f.x + f.facing * (char.dashSpeed || 0.9) * dt)
-  );
-  spawnFx(w, { type: "streak", x: f.x - f.facing * 40, y: 90, life: 240 });
-  if (!f.hitDone && dist(f, opp) < 120) {
-    f.hitDone = true;
-    applyDamage(w, opp, char.specialDamage, f.x);
-  }
-}
-
-function stepFighter(w, f, opp, char, input, dt) {
-  if (f.state === "ko") return;
-
-  if (f.cd > 0) f.cd = Math.max(0, f.cd - dt);
-
-  if (f.state === "special") {
-    const total =
-      char.specialType === "projectile"
-        ? 760
-        : char.specialType === "shockwave"
-          ? 820
-          : char.specialType === "slam"
-            ? 720
-            : char.specialType === "bite"
-              ? 580
-              : char.dashTime || 620;
-    const elapsed = total - f.stateT;
-    runSpecial(w, f, opp, char, dt, elapsed);
-    f.stateT -= dt;
-    if (f.stateT <= 0) {
-      f.state = "idle";
-      f.y = 0;
-    }
-    return;
-  }
-
-  if (f.state === "attack") {
-    const elapsed = ATTACK_TIME - f.stateT;
-    if (!f.hitDone && elapsed >= ATTACK_HIT[0] && elapsed <= ATTACK_HIT[1]) {
-      const facingOk = (opp.x - f.x) * f.facing > 0;
-      if (facingOk && dist(f, opp) < char.range) {
-        f.hitDone = true;
-        applyDamage(w, opp, char.attack, f.x);
-      }
-    }
-    f.stateT -= dt;
-    if (f.stateT <= 0) f.state = "idle";
-    return;
-  }
-
-  if (f.state === "hurt") {
-    f.stateT -= dt;
-    if (f.stateT <= 0) f.state = "idle";
-    return;
-  }
-
-  // free to act
-  f.facing = opp.x >= f.x ? 1 : -1;
-
-  if (input.special && f.cd <= 0) {
-    startSpecial(w, f, char);
-    return;
-  }
-  if (input.attack) {
-    f.state = "attack";
-    f.stateT = ATTACK_TIME;
-    f.hitDone = false;
-    spawnFx(w, { type: "slash", x: f.x + f.facing * 70, y: 235, dir: f.facing, life: 240 });
-    return;
-  }
-  if (input.block) {
-    f.state = "block";
-    return;
-  }
-
-  let moved = 0;
-  if (input.left) moved -= 1;
-  if (input.right) moved += 1;
-  if (moved !== 0) {
-    f.x = Math.min(WORLD_W - EDGE, Math.max(EDGE, f.x + moved * char.speed * dt));
-    f.state = "walk";
-  } else {
-    f.state = "idle";
-  }
-}
-
-function stepFx(w, dt) {
-  for (const e of w.fx) {
-    e.t += dt;
-    if (e.type === "fire") {
-      e.x += e.dir * e.speed * dt;
-      const target = e.owner === "p1" ? w.p2 : w.p1;
-      if (!e.spent && Math.abs(target.x - e.x) < 78) {
-        e.spent = true;
-        applyDamage(w, target, e.damage, e.x);
-      }
-      if (e.x < 0 || e.x > WORLD_W) e.t = e.life;
-    }
-    if (e.type === "roar" && !e.spent) {
-      const target = e.owner === "p1" ? w.p2 : w.p1;
-      const reach = (e.t / e.life) * e.radius;
-      const towardTarget = (target.x - e.x) * e.dir > 0;
-      if (towardTarget && Math.abs(target.x - e.x) < reach) {
-        e.spent = true;
-        applyDamage(w, target, e.damage, e.x);
-      }
-    }
-  }
-  w.fx = w.fx.filter((e) => e.t < e.life);
-  if (w.fx.length > 40) w.fx = w.fx.slice(-40);
-}
-
-/** Simple opponent AI: paces, pokes, blocks and saves its special. */
-function aiInput(w, f, opp, char, dt) {
-  const ai = w.ai;
-  const gap = dist(f, opp);
-  ai.t -= dt;
-
-  if (ai.t <= 0) {
-    const r = Math.random();
-    ai.fired = false;
-    if (gap > 300) {
-      ai.act = r < 0.6 ? "approach" : r < 0.78 ? "special" : "wait";
-      ai.t = 420 + Math.random() * 420;
-    } else if (gap > 150) {
-      ai.act =
-        r < 0.4 ? "approach" : r < 0.56 ? "retreat" : r < 0.72 ? "special" : r < 0.88 ? "block" : "wait";
-      ai.t = 340 + Math.random() * 420;
-    } else {
-      ai.act =
-        r < 0.38 ? "attack" : r < 0.53 ? "special" : r < 0.74 ? "block" : r < 0.9 ? "retreat" : "approach";
-      ai.t = 300 + Math.random() * 400;
-    }
-    if (ai.act === "special" && f.cd > 0) ai.act = gap > 200 ? "approach" : "attack";
-  }
-
-  const toward = opp.x >= f.x ? 1 : -1;
-  const input = { left: false, right: false, attack: false, special: false, block: false };
-
-  switch (ai.act) {
-    case "approach":
-      if (gap > 90) {
-        input.left = toward < 0;
-        input.right = toward > 0;
-      }
-      break;
-    case "retreat":
-      input.left = toward > 0;
-      input.right = toward < 0;
-      break;
-    case "block":
-      input.block = true;
-      break;
-    case "attack":
-      if (!ai.fired && gap < char.range + 10) {
-        input.attack = true;
-        ai.fired = true;
-      }
-      break;
-    case "special":
-      if (!ai.fired) {
-        input.special = true;
-        ai.fired = true;
-      }
-      break;
-    default:
-      break;
-  }
-  return input;
-}
-
-function snapshot(w) {
-  return {
-    p1: { ...w.p1 },
-    p2: { ...w.p2 },
-    fx: w.fx.map((e) => ({ ...e })),
-    phase: w.phase,
-    phaseT: w.phaseT,
-    winner: w.winner,
-    shake: w.shake,
-  };
-}
-
-/* --------------------------------- drawing --------------------------------- */
-
-function Beast({ f, char }) {
-  const style = {
-    left: `${(f.x / WORLD_W) * 100}%`,
-    bottom: `calc(11% + ${f.y * 0.1}%)`,
-    "--dir": f.facing,
-    "--fur": char.fur,
-    "--fur2": char.fur2,
-    "--glow": char.glow,
-  };
-  return (
-    <div
-      className={`bbaBeast bbaBeast--${char.id} is-${f.state}`}
-      style={style}
-      aria-hidden="true"
-    >
-      <span className="bbaShadow" />
-      <span className="bbaTail" />
-      <span className="bbaWing" />
-      <span className="bbaLeg bbaLeg--back" />
-      <span className="bbaLeg bbaLeg--front" />
-      <span className="bbaTorso" />
-      <span className="bbaMane" />
-      <span className="bbaHead">
-        <span className="bbaEar" />
-        <span className="bbaEar bbaEar--two" />
-        <span className="bbaHorn" />
-        <span className="bbaSnout" />
-        <span className="bbaEye" />
-      </span>
-      <span className="bbaArm" />
-      <span className="bbaGuard" />
-    </div>
-  );
-}
-
-function Fx({ e }) {
-  const p = Math.min(1, e.t / e.life);
-  const style = {
-    left: `${(e.x / WORLD_W) * 100}%`,
-    bottom: `calc(11% + ${(e.y || 0) * 0.1}%)`,
-    "--p": p,
-    "--dir": e.dir || 1,
-    opacity: e.type === "roar" ? 1 - p : undefined,
-  };
-  return <span className={`bbaFx bbaFx--${e.type}`} style={style} aria-hidden="true" />;
-}
-
-function HealthPanel({ char, f, align, label }) {
-  const pct = (f.hp / MAX_HP) * 100;
-  const cdPct = char.cooldown ? ((char.cooldown - f.cd) / char.cooldown) * 100 : 100;
-  const ready = f.cd <= 0;
+function FighterHud({ char, f, align, tag, wins }) {
+  const hp = Math.max(0, (f.hp / MAX_HP) * 100);
+  const meter = (f.meter / MAX_METER) * 100;
+  const ready = f.meter >= MAX_METER;
   return (
     <div className={`bbaHud bbaHud--${align}`}>
       <div className="bbaHudTop">
         <strong>{char.name}</strong>
-        <span className="bbaHudTag">{label}</span>
+        <span className="bbaHudTag">{tag}</span>
+        <span className="bbaPips" aria-label={`${wins} rounds won`}>
+          {Array.from({ length: ROUNDS_TO_WIN }, (_, i) => (
+            <i key={i} className={i < wins ? "is-won" : ""} />
+          ))}
+        </span>
       </div>
-      <div className="bbaBar" role="img" aria-label={`${char.name} health ${Math.round(f.hp)} of 100`}>
-        <span className="bbaBarFill" style={{ width: `${pct}%` }} />
+      <div
+        className="bbaHp"
+        role="img"
+        aria-label={`${char.name} health ${Math.round(f.hp)} of ${MAX_HP}`}
+      >
+        <span className="bbaHpChip" style={{ width: `${hp}%` }} />
+        <span className="bbaHpFill" style={{ width: `${hp}%` }} />
         <em>{Math.round(f.hp)}</em>
       </div>
-      <div className={`bbaCd ${ready ? "is-ready" : ""}`}>
-        <span className="bbaCdFill" style={{ width: `${Math.min(100, cdPct)}%` }} />
-        <em>{ready ? `${char.specialName} ready` : `${(f.cd / 1000).toFixed(1)}s`}</em>
+      <div className={`bbaMeter ${ready ? "is-ready" : ""}`}>
+        <span className="bbaMeterFill" style={{ width: `${meter}%` }} />
+        <em>{ready ? `${char.special.name} ready` : "Special power"}</em>
       </div>
     </div>
   );
 }
 
-/* -------------------------------- component -------------------------------- */
+/* --------------------------------- arena --------------------------------- */
+
+const ArenaBackdrop = memo(function ArenaBackdrop({ theme }) {
+  return (
+    <div className={`bbaScene bbaScene--${theme}`} aria-hidden="true">
+      <span className="bbaSky" />
+      <span className="bbaSun" />
+      <span className="bbaFar bbaFar--1" />
+      <span className="bbaFar bbaFar--2" />
+      <span className="bbaFar bbaFar--3" />
+      <span className="bbaMid bbaMid--l" />
+      <span className="bbaMid bbaMid--r" />
+      <span className="bbaHaze" />
+      <span className="bbaFloor" />
+      <span className="bbaVignette" />
+    </div>
+  );
+});
+
+function Beast({ f, char, isPlayer }) {
+  const cls = [
+    "bbaBeast",
+    `bbaBeast--${char.id}`,
+    `is-${f.state}`,
+    f.combo > 1 ? `is-combo${Math.min(f.combo, 3)}` : "",
+    isPlayer ? "is-player" : "is-cpu",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div
+      className={cls}
+      style={{
+        left: `${(f.x / WORLD_W) * 100}%`,
+        bottom: `calc(9% + ${f.y * 0.055}%)`,
+        "--dir": f.facing,
+        "--accent": char.accent,
+      }}
+    >
+      <span className="bbaBeastShadow" style={{ "--lift": f.y }} />
+      <span className="bbaBeastGlow" />
+      <Art id={char.id} />
+    </div>
+  );
+}
+
+function Effect({ e }) {
+  const p = Math.min(1, e.t / e.life);
+  return (
+    <span
+      className={`bbaFx bbaFx--${e.type} ${e.variant ? `bbaFx--v${e.variant}` : ""}`}
+      style={{
+        left: `${(e.x / WORLD_W) * 100}%`,
+        bottom: `calc(9% + ${(e.y || 0) * 0.055}%)`,
+        "--p": p,
+        "--dir": e.dir || 1,
+        opacity: e.type === "roar" ? 1 - p * 0.9 : undefined,
+      }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function StatBar({ label, value }) {
+  return (
+    <span className="bbaStat">
+      <i>{label}</i>
+      <span className="bbaStatTrack">
+        <span style={{ width: `${value * 10}%` }} />
+      </span>
+      <b>{value}</b>
+    </span>
+  );
+}
+
+/* -------------------------------- component ------------------------------- */
 
 export default function BeastBattleArena() {
   const [screen, setScreen] = useState("select");
   const [playerId, setPlayerId] = useState("lion");
-  const [enemyId, setEnemyId] = useState("dragon");
+  const [enemyId, setEnemyId] = useState("tiger");
   const [view, setView] = useState(null);
+  const [muted, setMuted] = useState(false);
 
   const worldRef = useRef(null);
-  const keysRef = useRef({ left: false, right: false, attack: false, special: false, block: false });
+  const keysRef = useRef({ ...NO_INPUT });
   const rafRef = useRef(0);
   const lastRef = useRef(0);
+  const audioRef = useRef(null);
 
   const playerChar = byId(playerId);
   const enemyChar = byId(enemyId);
 
-  const beginFight = useCallback((pid, eid) => {
-    const player = byId(pid);
-    const pool = ROSTER.filter((c) => c.id !== pid);
-    const foe = eid ? byId(eid) : pool[Math.floor(Math.random() * pool.length)];
-    setPlayerId(player.id);
-    setEnemyId(foe.id);
-    keysRef.current = { left: false, right: false, attack: false, special: false, block: false };
-    worldRef.current = makeWorld(player, foe);
-    setView(snapshot(worldRef.current));
-    setScreen("fight");
+  // lazily built once; no AudioContext exists until unlock() runs in a gesture
+  if (audioRef.current == null) audioRef.current = createBattleAudio();
+
+  /* audio can only be created inside a real user gesture */
+  const wake = useCallback(() => {
+    audioRef.current?.unlock();
   }, []);
 
-  // main loop
+  const beginMatch = useCallback(
+    (pid, eid) => {
+      wake();
+      const foePool = ROSTER.filter((c) => c.id !== pid);
+      const foe = eid ? byId(eid) : foePool[Math.floor(Math.random() * foePool.length)];
+      setPlayerId(pid);
+      setEnemyId(foe.id);
+      keysRef.current = { ...NO_INPUT };
+      worldRef.current = makeWorld(pid, foe.id);
+      setView(snapshot(worldRef.current));
+      setScreen("fight");
+      audioRef.current?.play("ui");
+    },
+    [wake]
+  );
+
+  /* ------------------------------- game loop ------------------------------- */
   useEffect(() => {
     if (screen !== "fight") return undefined;
     const w = worldRef.current;
     if (!w) return undefined;
+
+    const audio = audioRef.current;
+    audio?.startMusic();
     lastRef.current = 0;
 
     const frame = (time) => {
@@ -625,68 +194,42 @@ export default function BeastBattleArena() {
       const dt = Math.min(34, time - prev);
       lastRef.current = time;
 
-      if (w.phase === "intro") {
-        w.phaseT -= dt;
-        if (w.phaseT <= 0) {
-          w.phase = "fight";
-          w.phaseT = 900; // "FIGHT!" banner hold
-        }
-      } else if (w.phase === "fight") {
-        if (w.phaseT > 0) w.phaseT -= dt;
+      const keys = keysRef.current;
+      const input = { ...keys };
+      // attack and special are edge triggered so a held key is one action
+      if (keys.special) keys.special = false;
 
-        const keys = keysRef.current;
-        const p1Input = {
-          left: keys.left,
-          right: keys.right,
-          attack: keys.attack,
-          special: keys.special,
-          block: keys.block,
-        };
-        if (keys.attack) keys.attack = false;
-        if (keys.special) keys.special = false;
+      stepWorld(w, input, dt);
+      drainEvents(w).forEach((name) => audio?.play(name));
 
-        const p2Input = aiInput(w, w.p2, w.p1, enemyChar, dt);
-
-        stepFighter(w, w.p1, w.p2, playerChar, p1Input, dt);
-        stepFighter(w, w.p2, w.p1, enemyChar, p2Input, dt);
-
-        // keep the fighters from standing inside each other
-        const overlap = 96 - dist(w.p1, w.p2);
-        if (overlap > 0) {
-          const push = overlap / 2;
-          const dir = w.p1.x <= w.p2.x ? 1 : -1;
-          w.p1.x = Math.min(WORLD_W - EDGE, Math.max(EDGE, w.p1.x - dir * push));
-          w.p2.x = Math.min(WORLD_W - EDGE, Math.max(EDGE, w.p2.x + dir * push));
-        }
-
-        if (w.p1.hp <= 0 || w.p2.hp <= 0) {
-          const loser = w.p1.hp <= 0 ? w.p1 : w.p2;
-          const champ = w.p1.hp <= 0 ? w.p2 : w.p1;
-          loser.state = "ko";
-          champ.state = "idle";
-          w.winner = champ.side;
-          w.phase = "ko";
-          w.phaseT = KO_TIME;
-          w.shake = 16;
-        }
-      } else if (w.phase === "ko") {
-        w.phaseT -= dt;
-        if (w.phaseT <= 0) {
-          setScreen("over");
-        }
+      if (w.phase === "matchEnd") {
+        setView(snapshot(w));
+        setScreen("over");
+        return;
       }
-
-      stepFx(w, dt);
-      if (w.shake > 0) w.shake = Math.max(0, w.shake - dt * 0.05);
       setView(snapshot(w));
       rafRef.current = requestAnimationFrame(frame);
     };
 
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [screen, playerChar, enemyChar]);
+  }, [screen]);
 
-  // keyboard controls
+  /* music follows the screen; everything stops on unmount */
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (screen !== "fight") audio?.stopMusic();
+    return undefined;
+  }, [screen]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      audio?.dispose();
+    };
+  }, []);
+
+  /* keyboard */
   useEffect(() => {
     if (screen !== "fight") return undefined;
     const map = {
@@ -696,17 +239,18 @@ export default function BeastBattleArena() {
       s: "special",
       d: "block",
     };
+    const resolve = (ev) => map[ev.key] || map[ev.key?.toLowerCase?.()];
     const down = (ev) => {
-      const key = map[ev.key] || map[ev.key.toLowerCase?.()];
+      const key = resolve(ev);
       if (!key) return;
       ev.preventDefault();
       keysRef.current[key] = true;
     };
     const up = (ev) => {
-      const key = map[ev.key] || map[ev.key.toLowerCase?.()];
+      const key = resolve(ev);
       if (!key) return;
       ev.preventDefault();
-      if (key === "left" || key === "right" || key === "block") keysRef.current[key] = false;
+      if (key !== "special") keysRef.current[key] = false;
     };
     window.addEventListener("keydown", down, { passive: false });
     window.addEventListener("keyup", up, { passive: false });
@@ -716,6 +260,14 @@ export default function BeastBattleArena() {
     };
   }, [screen]);
 
+  const toggleMute = () => {
+    wake();
+    setMuted((m) => {
+      audioRef.current?.setMuted(!m);
+      return !m;
+    });
+  };
+
   const hold = (key, value) => () => {
     keysRef.current[key] = value;
   };
@@ -723,8 +275,8 @@ export default function BeastBattleArena() {
     keysRef.current[key] = true;
   };
 
-  const touchButton = (key, label, mode) => {
-    const props =
+  const pad = (key, label, mode, hint) => {
+    const handlers =
       mode === "hold"
         ? {
             onPointerDown: hold(key, true),
@@ -734,23 +286,31 @@ export default function BeastBattleArena() {
           }
         : { onPointerDown: tap(key) };
     return (
-      <button type="button" className={`bbaPad bbaPad--${key}`} key={key} {...props}>
+      <button type="button" className={`bbaPad bbaPad--${key}`} key={key} {...handlers}>
         {label}
+        {hint && <i>{hint}</i>}
       </button>
     );
   };
 
-  /* ------------------------------ select screen ------------------------------ */
+  const MuteButton = (
+    <button type="button" className="bbaMute" onClick={toggleMute} aria-pressed={muted}>
+      <span aria-hidden="true">{muted ? "🔇" : "🔊"}</span>
+      {muted ? "Sound off" : "Sound on"}
+    </button>
+  );
+
+  /* ------------------------------ select screen ----------------------------- */
   if (screen === "select") {
     return (
       <div className="bba">
         <div className="bbaSelect">
           <div className="bbaSelectHead">
-            <p className="bbaEyebrow">Choose your beast</p>
-            <h3>Eight fighters. One arena.</h3>
-            <p className="bbaSelectSub">
-              Every beast has its own speed, normal attack and special move with a cooldown.
-            </p>
+            <div>
+              <p className="bbaEyebrow">Choose your fighter</p>
+              <h3>Ten beasts. Best of three.</h3>
+            </div>
+            {MuteButton}
           </div>
 
           <div className="bbaRoster">
@@ -758,53 +318,45 @@ export default function BeastBattleArena() {
               <button
                 type="button"
                 key={c.id}
-                className={`bbaCard ${c.id === playerId ? "is-picked" : ""}`}
-                style={{ "--fur": c.fur, "--fur2": c.fur2, "--glow": c.glow }}
-                onClick={() => setPlayerId(c.id)}
+                className={`bbaPick ${c.id === playerId ? "is-picked" : ""}`}
+                style={{ "--accent": c.accent, "--coat": c.coat }}
+                onClick={() => {
+                  wake();
+                  setPlayerId(c.id);
+                  audioRef.current?.play("ui");
+                }}
                 aria-pressed={c.id === playerId}
               >
-                <span className="bbaCardArt">
-                  <span className={`bbaBeast bbaBeast--${c.id} is-idle bbaBeast--mini`}>
-                    <span className="bbaTail" />
-                    <span className="bbaWing" />
-                    <span className="bbaLeg bbaLeg--back" />
-                    <span className="bbaLeg bbaLeg--front" />
-                    <span className="bbaTorso" />
-                    <span className="bbaMane" />
-                    <span className="bbaHead">
-                      <span className="bbaEar" />
-                      <span className="bbaEar bbaEar--two" />
-                      <span className="bbaHorn" />
-                      <span className="bbaSnout" />
-                      <span className="bbaEye" />
-                    </span>
-                    <span className="bbaArm" />
-                  </span>
+                <span className="bbaPickArt">
+                  <Art id={c.id} />
                 </span>
-                <span className="bbaCardName">{c.name}</span>
-                <span className="bbaCardTitle">{c.title}</span>
-                <span className="bbaCardStats">
-                  <span>Speed<em>{Math.round(c.speed * 22)}</em></span>
-                  <span>Attack<em>{c.attack}</em></span>
-                  <span>Special<em>{c.specialDamage}</em></span>
-                </span>
+                <span className="bbaPickName">{c.name}</span>
+                <span className="bbaPickStyle">{c.style}</span>
               </button>
             ))}
           </div>
 
-          <div className="bbaSelectFoot">
-            <div className="bbaPickInfo">
-              <strong>{playerChar.name}</strong>
-              <p>{playerChar.blurb}</p>
-              <p className="bbaMoves">
-                <span>Normal · {playerChar.attackName}</span>
-                <span>Special · {playerChar.specialName}</span>
-                <span>Cooldown · {(playerChar.cooldown / 1000).toFixed(1)}s</span>
-              </p>
+          <div className="bbaBrief">
+            <div className="bbaBriefArt">
+              <Art id={playerChar.id} />
             </div>
-            <button type="button" className="bbaPrimary" onClick={() => beginFight(playerId, null)}>
-              Enter the arena
-            </button>
+            <div className="bbaBriefText">
+              <p className="bbaEyebrow">{playerChar.title}</p>
+              <h4>{playerChar.name}</h4>
+              <p className="bbaBriefBlurb">{playerChar.blurb}</p>
+              <div className="bbaStats">
+                <StatBar label="Power" value={playerChar.stats.power} />
+                <StatBar label="Speed" value={playerChar.stats.speed} />
+                <StatBar label="Reach" value={playerChar.stats.reach} />
+              </div>
+              <div className="bbaAbility">
+                <strong>{playerChar.special.name}</strong>
+                <span>{playerChar.special.desc}</span>
+              </div>
+              <button type="button" className="bbaPrimary" onClick={() => beginMatch(playerId, null)}>
+                Enter the arena
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -814,105 +366,127 @@ export default function BeastBattleArena() {
   const v = view;
   if (!v) return <div className="bba" />;
 
-  const statusText =
-    v.phase === "intro"
-      ? "Ready…"
-      : v.phase === "ko"
-        ? "K.O.!"
-        : v.phaseT > 0
-          ? "Fight!"
-          : "Round 1";
-
-  /* ------------------------------ winner screen ------------------------------ */
+  /* ------------------------------ winner screen ----------------------------- */
   if (screen === "over") {
-    const playerWon = v.winner === "p1";
+    const playerWon = v.matchWinner === "p1";
+    const champ = playerWon ? playerChar : enemyChar;
     return (
       <div className="bba">
-        <div className="bbaOverScreen">
+        <div className={`bbaOver ${playerWon ? "is-win" : "is-loss"}`}>
+          <div className="bbaOverArt">
+            <span className="bbaOverBeam" aria-hidden="true" />
+            <Art id={champ.id} />
+          </div>
           <p className="bbaEyebrow">{playerWon ? "Victory" : "Defeat"}</p>
-          <h3>{playerWon ? `${playerChar.name} wins the round` : `${enemyChar.name} wins the round`}</h3>
-          <p className="bbaOverSub">
-            {playerChar.name} {Math.round(v.p1.hp)} HP · {enemyChar.name} {Math.round(v.p2.hp)} HP
+          <h3>
+            {champ.name} wins the match
+          </h3>
+          <p className="bbaOverScore">
+            Rounds {v.wins.p1} – {v.wins.p2} · {playerChar.name} vs {enemyChar.name}
           </p>
           <div className="bbaOverActions">
-            <button type="button" className="bbaPrimary" onClick={() => beginFight(playerId, enemyId)}>
-              Restart fight
+            <button type="button" className="bbaPrimary" onClick={() => beginMatch(playerId, enemyId)}>
+              Play again
             </button>
-            <button type="button" className="bbaGhost" onClick={() => setScreen("select")}>
-              Character select
+            <button
+              type="button"
+              className="bbaGhost"
+              onClick={() => {
+                wake();
+                audioRef.current?.play("ui");
+                setScreen("select");
+              }}
+            >
+              Change fighter
             </button>
+            {MuteButton}
           </div>
         </div>
       </div>
     );
   }
 
-  /* ------------------------------- fight screen ------------------------------ */
+  /* ------------------------------- fight screen ----------------------------- */
+  const showShout = v.phase === "fight" && v.phaseT > 0;
+  const roundWinnerChar = v.roundWinner === "p1" ? playerChar : enemyChar;
+
   return (
     <div className="bba">
-      <div className="bbaTopBar">
-        <HealthPanel char={playerChar} f={v.p1} align="left" label="You" />
-        <div className="bbaRound">
-          <span className={`bbaStatus ${v.phase === "ko" ? "is-ko" : ""}`}>{statusText}</span>
-          <span className="bbaVs">VS</span>
+      <div className="bbaTop">
+        <FighterHud char={playerChar} f={v.p1} align="left" tag="You" wins={v.wins.p1} />
+        <div className="bbaRoundBox">
+          <span className={`bbaClock ${v.roundClock <= 10000 ? "is-low" : ""}`}>
+            {Math.ceil(Math.max(0, v.roundClock) / 1000)}
+          </span>
+          <span className="bbaRoundName">{roundLabel(v.round)}</span>
+          <span className="bbaArenaName">{arenaName(v.arena)}</span>
         </div>
-        <HealthPanel char={enemyChar} f={v.p2} align="right" label="CPU" />
+        <FighterHud char={enemyChar} f={v.p2} align="right" tag="CPU" wins={v.wins.p2} />
       </div>
 
-      <div
-        className="bbaStage"
-        style={{ "--shake": v.shake }}
-      >
-        <div className="bbaSky" aria-hidden="true">
-          <span className="bbaMoon" />
-          <span className="bbaPeak bbaPeak--1" />
-          <span className="bbaPeak bbaPeak--2" />
-          <span className="bbaPeak bbaPeak--3" />
-          <span className="bbaPillar bbaPillar--l" />
-          <span className="bbaPillar bbaPillar--r" />
-          <span className="bbaEmber bbaEmber--1" />
-          <span className="bbaEmber bbaEmber--2" />
-          <span className="bbaEmber bbaEmber--3" />
-          <span className="bbaEmber bbaEmber--4" />
-        </div>
-        <div className="bbaFloor" aria-hidden="true" />
+      <div className="bbaStage" style={{ "--shake": v.shake }}>
+        <ArenaBackdrop theme={v.arena} />
 
-        <Beast f={v.p1} char={playerChar} />
+        <Beast f={v.p1} char={playerChar} isPlayer />
         <Beast f={v.p2} char={enemyChar} />
         {v.fx.map((e) => (
-          <Fx e={e} key={e.id} />
+          <Effect e={e} key={e.id} />
         ))}
 
         {v.phase === "intro" && (
           <div className="bbaBanner">
-            <span>{playerChar.name}</span>
-            <em>vs</em>
-            <span>{enemyChar.name}</span>
+            <span className="bbaBannerRound">{roundLabel(v.round)}</span>
+            <span className="bbaBannerVs">
+              {playerChar.name} <em>vs</em> {enemyChar.name}
+            </span>
           </div>
         )}
-        {v.phase === "fight" && v.phaseT > 0 && <div className="bbaShout">FIGHT!</div>}
-        {v.phase === "ko" && <div className="bbaShout bbaShout--ko">K.O.</div>}
+        {showShout && <div className="bbaShout">FIGHT!</div>}
+        {v.phase === "roundEnd" && (
+          <div className="bbaBanner bbaBanner--result">
+            <span className="bbaShout bbaShout--ko">{v.endReason === "time" ? "TIME!" : "K.O."}</span>
+            <span className="bbaBannerRound">
+              {v.roundWinner
+                ? `${roundWinnerChar.name} wins ${roundLabel(v.round).toLowerCase()}`
+                : "Round drawn"}
+            </span>
+            <span className="bbaBannerVs">
+              {v.wins.p1} – {v.wins.p2}
+            </span>
+          </div>
+        )}
+
+        <button type="button" className="bbaMute bbaMute--stage" onClick={toggleMute} aria-pressed={muted}>
+          <span aria-hidden="true">{muted ? "🔇" : "🔊"}</span>
+        </button>
       </div>
 
       <div className="bbaControls">
         <div className="bbaPadGroup">
-          {touchButton("left", "◀ LEFT", "hold")}
-          {touchButton("right", "RIGHT ▶", "hold")}
+          {pad("left", "◀", "hold", "LEFT")}
+          {pad("right", "▶", "hold", "RIGHT")}
         </div>
         <div className="bbaPadGroup bbaPadGroup--actions">
-          {touchButton("attack", "ATTACK", "tap")}
-          {touchButton("special", "SPECIAL", "tap")}
-          {touchButton("block", "BLOCK", "hold")}
+          {pad("attack", "ATTACK", "tap", "A")}
+          {pad("special", "SPECIAL", "tap", "S")}
+          {pad("block", "BLOCK", "hold", "D")}
         </div>
       </div>
 
       <div className="bbaFootRow">
         <p className="bbaKeys">
-          Keyboard: <kbd>←</kbd> <kbd>→</kbd> move · <kbd>A</kbd> attack · <kbd>S</kbd> special ·{" "}
+          <kbd>←</kbd> <kbd>→</kbd> move · <kbd>A</kbd> attack · <kbd>S</kbd> special ·{" "}
           <kbd>D</kbd> block
         </p>
-        <button type="button" className="bbaGhost bbaGhost--sm" onClick={() => setScreen("select")}>
-          Character select
+        <button
+          type="button"
+          className="bbaGhost bbaGhost--sm"
+          onClick={() => {
+            audioRef.current?.play("ui");
+            setScreen("select");
+          }}
+        >
+          Change fighter
         </button>
       </div>
     </div>

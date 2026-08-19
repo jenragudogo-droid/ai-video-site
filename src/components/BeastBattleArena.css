@@ -1,41 +1,42 @@
 /* ------------------------------------------------------------------ *
- * Beast Battle Arena — all artwork is original CSS geometry.
- * Colours per fighter arrive as --fur / --fur2 / --glow custom props.
+ * Beast Battle Arena — presentation layer.
+ * Arena backdrops, fighter animation states and battle effects are all
+ * CSS; the fighters themselves are SVG (see AnimalArt.jsx).
  * ------------------------------------------------------------------ */
 
 .bba {
   --bba-line: rgba(255, 255, 255, 0.12);
   --bba-panel: #101014;
+  --bba-gold: #f4b965;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   color: #f6f2e9;
   font-family: "DM Sans", Arial, sans-serif;
   user-select: none;
   -webkit-user-select: none;
 }
-
 .bba button { cursor: pointer; font: inherit; }
 
 .bbaEyebrow {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   text-transform: uppercase;
-  letter-spacing: 0.23em;
-  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  font-size: 0.64rem;
   font-weight: 700;
   color: #c8a8ea;
 }
 
 .bbaPrimary {
-  padding: 15px 26px;
+  padding: 15px 28px;
   border: 0;
   border-radius: 999px;
-  background: #f6f2e9;
-  color: #0b0910;
+  background: linear-gradient(120deg, #ffe0a8, #f4b965);
+  color: #26170a;
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.bbaPrimary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(244, 185, 101, 0.22); }
+.bbaPrimary:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(244, 185, 101, 0.28); }
 
 .bbaGhost {
   padding: 14px 24px;
@@ -47,113 +48,146 @@
   font-size: 0.82rem;
   transition: background 0.2s ease, color 0.2s ease;
 }
-.bbaGhost:hover { background: rgba(255, 255, 255, 0.9); color: #111; }
+.bbaGhost:hover { background: rgba(255, 255, 255, 0.92); color: #111; }
 .bbaGhost--sm { padding: 9px 16px; font-size: 0.72rem; }
 
-/* ------------------------------ select screen ------------------------------ */
+.bbaMute {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(10, 10, 14, 0.7);
+  color: #ddd;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.bbaMute--stage {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 8;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+/* ------------------------------ select screen ----------------------------- */
 
 .bbaSelect {
-  padding: clamp(20px, 3vw, 34px);
+  padding: clamp(18px, 3vw, 32px);
   border: 1px solid var(--bba-line);
-  border-radius: 10px;
-  background:
-    radial-gradient(circle at 50% -10%, rgba(126, 58, 190, 0.28), transparent 55%),
-    #0b0b0f;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% -20%, rgba(126, 58, 190, 0.3), transparent 58%), #0b0b0f;
 }
+.bbaSelectHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .bbaSelectHead h3 {
-  margin: 0 0 10px;
-  color: #f6f2e9;
+  margin: 0;
   font-size: clamp(1.5rem, 3vw, 2.2rem);
   letter-spacing: -0.03em;
   font-weight: 600;
 }
-.bbaSelectSub { margin: 0; color: #9d99a3; font-size: 0.88rem; line-height: 1.6; }
 
 .bbaRoster {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 26px 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px 0;
 }
-
-.bbaCard {
-  position: relative;
+.bbaPick {
   display: grid;
-  gap: 4px;
-  padding: 12px 12px 14px;
+  gap: 2px;
+  padding: 10px 8px 12px;
   border: 1px solid var(--bba-line);
-  border-radius: 9px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.3)), #101014;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.34)), #101014;
   color: #f6f2e9;
   text-align: center;
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.bbaCard:hover { transform: translateY(-4px); border-color: rgba(255, 255, 255, 0.28); }
-.bbaCard.is-picked {
-  border-color: var(--glow);
-  box-shadow: 0 0 0 1px var(--glow), 0 14px 36px rgba(0, 0, 0, 0.5);
+.bbaPick:hover { transform: translateY(-4px); border-color: rgba(255, 255, 255, 0.3); }
+.bbaPick.is-picked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 16px 38px rgba(0, 0, 0, 0.5);
 }
-.bbaCardArt {
-  position: relative;
+.bbaPickArt {
   display: block;
-  height: 96px;
+  height: 84px;
   margin-bottom: 6px;
-  border-radius: 7px;
+  border-radius: 8px;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 78%, color-mix(in srgb, var(--fur) 32%, transparent), #0a0a0d 68%);
+  background: radial-gradient(circle at 50% 82%, color-mix(in srgb, var(--coat) 38%, transparent), #0a0a0d 70%);
 }
-.bbaCardName { font-weight: 700; font-size: 0.95rem; letter-spacing: -0.02em; }
-.bbaCardTitle {
+.bbaPickArt .beastSvg { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55)); }
+.bbaPickName { font-weight: 700; font-size: 0.94rem; letter-spacing: -0.02em; }
+.bbaPickStyle {
   color: #8e8a95;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.54rem;
+  letter-spacing: 0.12em;
+  font-size: 0.52rem;
 }
-.bbaCardStats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: #7c7883;
-  font-size: 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-.bbaCardStats span { display: grid; gap: 2px; }
-.bbaCardStats em { color: var(--glow); font-style: normal; font-size: 0.8rem; letter-spacing: 0; }
 
-.bbaSelectFoot {
-  display: flex;
+.bbaBrief {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(16px, 3vw, 34px);
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
   padding-top: 20px;
   border-top: 1px solid var(--bba-line);
 }
-.bbaPickInfo strong { display: block; font-size: 1.1rem; margin-bottom: 6px; }
-.bbaPickInfo p { margin: 0; color: #9d99a3; font-size: 0.84rem; line-height: 1.6; }
-.bbaMoves { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px !important; }
-.bbaMoves span {
-  padding: 5px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+.bbaBriefArt {
+  height: clamp(150px, 22vw, 220px);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 78%, rgba(244, 185, 101, 0.16), transparent 62%),
+    linear-gradient(180deg, #14101c, #0a0a0d);
+  border: 1px solid var(--bba-line);
+}
+.bbaBriefArt .beastSvg { filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.6)); }
+.bbaBriefText h4 { margin: 0 0 8px; font-size: 1.6rem; letter-spacing: -0.03em; font-weight: 600; }
+.bbaBriefBlurb { margin: 0 0 16px; color: #9d99a3; font-size: 0.88rem; line-height: 1.6; }
+
+.bbaStats { display: grid; gap: 7px; margin-bottom: 16px; }
+.bbaStat { display: grid; grid-template-columns: 52px 1fr 22px; align-items: center; gap: 10px; }
+.bbaStat i {
+  font-style: normal;
+  color: #8e8a95;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.54rem;
+}
+.bbaStatTrack {
+  height: 7px;
   border-radius: 999px;
-  color: #cfcbd4;
-  font-size: 0.66rem;
+  background: #1c1c24;
+  overflow: hidden;
 }
+.bbaStatTrack span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f4b965, #ff8f5e);
+}
+.bbaStat b { font-size: 0.74rem; color: #ddd8e1; text-align: right; }
 
-/* ---------------------------------- HUD ---------------------------------- */
-
-.bbaTopBar {
+.bbaAbility {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: start;
-  gap: 14px;
+  gap: 4px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(244, 185, 101, 0.28);
+  border-radius: 9px;
+  background: rgba(244, 185, 101, 0.07);
 }
-.bbaHud { display: grid; gap: 6px; }
+.bbaAbility strong { font-size: 0.9rem; color: var(--bba-gold); }
+.bbaAbility span { color: #a9a5b0; font-size: 0.78rem; line-height: 1.5; }
+
+/* ---------------------------------- HUD ----------------------------------- */
+
+.bbaTop { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 12px; }
+.bbaHud { display: grid; gap: 5px; min-width: 0; }
 .bbaHud--right { justify-items: end; }
-.bbaHudTop { display: flex; align-items: center; gap: 9px; font-size: 0.86rem; }
+.bbaHudTop { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; }
 .bbaHud--right .bbaHudTop { flex-direction: row-reverse; }
 .bbaHudTag {
   padding: 3px 8px;
@@ -161,26 +195,39 @@
   border-radius: 999px;
   color: #a9a5b0;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.5rem;
+  letter-spacing: 0.12em;
+  font-size: 0.48rem;
 }
-.bbaBar {
+.bbaPips { display: inline-flex; gap: 4px; }
+.bbaPips i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+.bbaPips i.is-won { background: var(--bba-gold); box-shadow: 0 0 10px rgba(244, 185, 101, 0.8); }
+
+.bbaHp {
   position: relative;
   width: 100%;
-  height: 17px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  height: 19px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 4px;
-  background: #17171d;
+  background: #16161d;
   overflow: hidden;
 }
-.bbaBarFill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(90deg, #f4b965, #e0544b);
-  transition: width 0.16s linear;
+.bbaHpFill,
+.bbaHpChip { position: absolute; inset: 0 auto 0 0; height: 100%; }
+.bbaHpFill {
+  background: linear-gradient(90deg, #6ee06e, #f2d14b 55%, #e0544b);
+  transition: width 0.18s ease-out;
 }
-.bbaHud--right .bbaBarFill { inset: 0 0 0 auto; }
-.bbaBar em {
+/* the chip bar trails behind so you can see how much was just taken */
+.bbaHpChip { background: #ff5a4a; opacity: 0.55; transition: width 0.55s ease-out 0.22s; }
+.bbaHud--right .bbaHpFill,
+.bbaHud--right .bbaHpChip { inset: 0 0 0 auto; }
+.bbaHp em {
   position: absolute;
   inset: 0;
   display: grid;
@@ -189,57 +236,85 @@
   font-size: 0.6rem;
   font-weight: 700;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
-.bbaCd {
+
+.bbaMeter {
   position: relative;
   width: 100%;
-  height: 17px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  height: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 3px;
   background: #131319;
   overflow: hidden;
 }
-.bbaCdFill {
+.bbaMeterFill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, #6b3fb8, #a877ff);
-  transition: width 0.16s linear;
+  background: linear-gradient(90deg, #4b7bd6, #9b6bff);
+  transition: width 0.2s ease-out;
 }
-.bbaHud--right .bbaCdFill { inset: 0 0 0 auto; }
-.bbaCd em {
+.bbaHud--right .bbaMeterFill { inset: 0 0 0 auto; }
+.bbaMeter em {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   font-style: normal;
-  font-size: 0.54rem;
+  font-size: 0.5rem;
+  letter-spacing: 0.09em;
   line-height: 1;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: #d6d2dc;
+  color: #cdc9d4;
 }
-.bbaCd.is-ready { border-color: rgba(244, 185, 101, 0.5); }
-.bbaCd.is-ready .bbaCdFill { background: linear-gradient(90deg, #f4b965, #ffe2a8); }
-.bbaCd.is-ready em { color: #1a1409; font-weight: 700; }
+.bbaMeter.is-ready { border-color: rgba(255, 214, 120, 0.7); }
+.bbaMeter.is-ready .bbaMeterFill {
+  background: linear-gradient(90deg, #ffd36e, #fff0c4);
+  animation: bbaMeterPulse 0.9s ease-in-out infinite;
+}
+.bbaMeter.is-ready em { color: #2a1c05; font-weight: 700; }
+@keyframes bbaMeterPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
 
-.bbaRound { display: grid; justify-items: center; gap: 4px; padding-top: 2px; }
-.bbaStatus {
-  padding: 6px 14px;
+.bbaRoundBox { display: grid; justify-items: center; gap: 3px; padding-top: 2px; }
+.bbaRoundName {
+  padding: 6px 15px;
   border: 1px solid rgba(244, 185, 101, 0.4);
   border-radius: 999px;
-  color: #f4b965;
+  color: var(--bba-gold);
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   font-size: 0.6rem;
   font-weight: 700;
   white-space: nowrap;
 }
-.bbaStatus.is-ko { color: #ff7d6b; border-color: rgba(255, 125, 107, 0.5); }
-.bbaVs { color: #6e6a75; font-size: 0.6rem; letter-spacing: 0.2em; }
+.bbaVs { color: #6e6a75; font-size: 0.58rem; letter-spacing: 0.2em; }
+.bbaClock {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #f6f2e9;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+.bbaClock.is-low { color: #ff7d6b; animation: bbaClockWarn 1s ease-in-out infinite; }
+@keyframes bbaClockWarn {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.bbaArenaName {
+  color: #55525c;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.46rem;
+  white-space: nowrap;
+}
 
-/* --------------------------------- stage --------------------------------- */
+/* --------------------------------- stage ---------------------------------- */
 
 .bbaStage {
   position: relative;
@@ -247,698 +322,711 @@
   aspect-ratio: 16 / 9;
   max-height: 58vh;
   border: 1px solid var(--bba-line);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 92%, rgba(148, 74, 200, 0.22), transparent 55%),
-    linear-gradient(180deg, #0a0713 0%, #140d1e 45%, #1b1119 72%, #0b0a0d 100%);
-  transform: translateX(calc(var(--shake, 0) * 0.4px));
+  background: #07060b;
+  transform: translate3d(calc(var(--shake, 0) * 0.5px), calc(var(--shake, 0) * 0.2px), 0);
 }
 
-.bbaSky { position: absolute; inset: 0; overflow: hidden; }
-.bbaMoon {
-  position: absolute;
-  left: 42%;
-  top: 7%;
-  width: 11%;
+.bbaScene { position: absolute; inset: 0; }
+.bbaScene > span { position: absolute; display: block; }
+.bbaSky { inset: 0; }
+.bbaSun {
+  left: 50%;
+  top: 9%;
+  width: 12%;
   aspect-ratio: 1;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 36%, #fff6dd, #f0d9a4 18%, #d8b072 55%, #7b5f38 100%);
-  box-shadow: 0 0 80px rgba(255, 214, 145, 0.35), 0 0 200px rgba(178, 106, 255, 0.2);
-  opacity: 0.9;
 }
-.bbaPeak {
-  position: absolute;
-  bottom: 11%;
-  border-radius: 50% 50% 0 0 / 90% 90% 0 0;
-  background: linear-gradient(180deg, #241a33, #120c1a);
-  opacity: 0.95;
+.bbaFar { bottom: 9%; border-radius: 50% 50% 0 0 / 88% 88% 0 0; }
+.bbaFar--1 { left: -8%; width: 46%; height: 40%; }
+.bbaFar--2 { right: -10%; width: 52%; height: 48%; }
+.bbaFar--3 { left: 26%; width: 44%; height: 31%; }
+.bbaMid { bottom: 9%; width: 7%; height: 34%; }
+.bbaMid--l { left: 6%; }
+.bbaMid--r { right: 6%; }
+.bbaHaze {
+  inset: auto 0 9% 0;
+  height: 26%;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.45));
 }
-.bbaPeak--1 { left: -6%; width: 44%; height: 44%; }
-.bbaPeak--2 { right: -8%; width: 48%; height: 52%; background: linear-gradient(180deg, #1d1530, #0f0a17); }
-.bbaPeak--3 { left: 28%; width: 40%; height: 34%; background: linear-gradient(180deg, #2b1f3d, #150e20); }
-.bbaPillar {
-  position: absolute;
-  bottom: 11%;
-  width: 5.5%;
-  height: 40%;
-  background: linear-gradient(180deg, #2e2436, #171021);
-  border-top: 3px solid rgba(244, 185, 101, 0.25);
-  box-shadow: inset 0 0 26px rgba(0, 0, 0, 0.7);
-}
-.bbaPillar--l { left: 7%; }
-.bbaPillar--r { right: 7%; }
-.bbaEmber {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #ffb469;
-  box-shadow: 0 0 10px #ff9c3d;
-  opacity: 0.7;
-  animation: bbaEmberRise 7s linear infinite;
-}
-.bbaEmber--1 { left: 18%; bottom: 10%; animation-delay: -1s; }
-.bbaEmber--2 { left: 42%; bottom: 12%; animation-delay: -3.4s; }
-.bbaEmber--3 { left: 66%; bottom: 9%; animation-delay: -5s; }
-.bbaEmber--4 { left: 84%; bottom: 13%; animation-delay: -6.2s; }
-@keyframes bbaEmberRise {
-  0% { transform: translateY(0) scale(1); opacity: 0; }
-  15% { opacity: 0.8; }
-  100% { transform: translateY(-260px) translateX(20px) scale(0.3); opacity: 0; }
-}
-
-.bbaFloor {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 11%;
-  background: linear-gradient(180deg, #3a2b26 0%, #241a19 40%, #120d0f 100%);
-  border-top: 2px solid rgba(244, 185, 101, 0.28);
-  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.6);
-}
+.bbaFloor { inset: auto 0 0 0; height: 9%; }
 .bbaFloor::after {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.35;
-  background: repeating-linear-gradient(90deg, transparent 0 44px, rgba(0, 0, 0, 0.55) 44px 46px);
+  opacity: 0.3;
+  background: repeating-linear-gradient(90deg, transparent 0 46px, rgba(0, 0, 0, 0.5) 46px 48px);
+}
+/* keeps the fighters readable against every backdrop */
+.bbaVignette {
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 72%, transparent 40%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent 30%);
 }
 
-/* --------------------------- fighter construction --------------------------- */
+/* jungle */
+.bbaScene--jungle .bbaSky { background: linear-gradient(180deg, #123024 0%, #1c4433 45%, #0d2119 100%); }
+.bbaScene--jungle .bbaSun { background: radial-gradient(circle at 40% 40%, #eaf7c8, #86b95a 55%, transparent 72%); opacity: 0.5; }
+.bbaScene--jungle .bbaFar { background: linear-gradient(180deg, #14392a, #0a2019); }
+.bbaScene--jungle .bbaFar--2 { background: linear-gradient(180deg, #103024, #081b14); }
+.bbaScene--jungle .bbaMid {
+  background: linear-gradient(180deg, #29513a, #142a1f);
+  border-radius: 4px;
+  box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.6);
+}
+.bbaScene--jungle .bbaMid::after {
+  content: "";
+  position: absolute;
+  left: -180%;
+  top: -18%;
+  width: 460%;
+  height: 40%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #2f6642, #14301f 70%);
+  opacity: 0.9;
+}
+.bbaScene--jungle .bbaFloor { background: linear-gradient(180deg, #33452c, #16200f 60%, #0a0e07); border-top: 2px solid rgba(154, 214, 130, 0.28); }
+
+/* rocky canyon */
+.bbaScene--canyon .bbaSky { background: linear-gradient(180deg, #331a1e 0%, #7a3a2a 52%, #c4713a 100%); }
+.bbaScene--canyon .bbaSun { background: radial-gradient(circle at 45% 45%, #ffe8b0, #ff9b45 60%, transparent 74%); opacity: 0.85; top: 26%; }
+.bbaScene--canyon .bbaFar { background: linear-gradient(180deg, #6b3626, #35190f); border-radius: 3px 6px 0 0; }
+.bbaScene--canyon .bbaFar--2 { background: linear-gradient(180deg, #5a2c1f, #2a130b); }
+.bbaScene--canyon .bbaFar--3 { background: linear-gradient(180deg, #7c422c, #3a1c11); }
+.bbaScene--canyon .bbaMid { background: linear-gradient(180deg, #59291b, #24100a); border-radius: 6px 6px 0 0; }
+.bbaScene--canyon .bbaFloor { background: linear-gradient(180deg, #7a4526, #3a1f11 55%, #170c07); border-top: 2px solid rgba(255, 176, 106, 0.3); }
+
+/* savannah */
+.bbaScene--savannah .bbaSky { background: linear-gradient(180deg, #3a2a45 0%, #b5643a 45%, #f0a95c 78%, #f6cf8b 100%); }
+.bbaScene--savannah .bbaSun { background: radial-gradient(circle at 45% 45%, #fff4cf, #ffb555 58%, transparent 72%); top: 34%; width: 16%; }
+.bbaScene--savannah .bbaFar { background: linear-gradient(180deg, #5a3a25, #2c1a10); opacity: 0.9; }
+.bbaScene--savannah .bbaMid {
+  width: 2.4%;
+  height: 26%;
+  background: #2a1a10;
+}
+.bbaScene--savannah .bbaMid::after {
+  content: "";
+  position: absolute;
+  left: -420%;
+  top: -22%;
+  width: 940%;
+  height: 34%;
+  border-radius: 50% 50% 40% 40%;
+  background: #2a1a10;
+}
+.bbaScene--savannah .bbaFloor { background: linear-gradient(180deg, #c08b45, #6b4a22 55%, #2a1c0d); border-top: 2px solid rgba(255, 214, 140, 0.4); }
+
+/* night arena */
+.bbaScene--night .bbaSky { background: linear-gradient(180deg, #060613 0%, #131033 48%, #241a3d 100%); }
+.bbaScene--night .bbaSun {
+  background: radial-gradient(circle at 38% 36%, #fff8e4, #dcc79a 55%, #8a7a58 100%);
+  box-shadow: 0 0 70px rgba(226, 214, 178, 0.4);
+}
+.bbaScene--night .bbaSky::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 40% 0;
+  opacity: 0.75;
+  background:
+    radial-gradient(1.5px 1.5px at 12% 22%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 28% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 46% 26%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 62% 10%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 78% 24%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 88% 14%, #fff, transparent);
+}
+.bbaScene--night .bbaFar { background: linear-gradient(180deg, #241c3f, #100c21); }
+.bbaScene--night .bbaMid {
+  background: linear-gradient(180deg, #2e2445, #150f24);
+  border-top: 3px solid rgba(244, 185, 101, 0.3);
+  box-shadow: inset 0 0 26px rgba(0, 0, 0, 0.7);
+}
+.bbaScene--night .bbaFloor { background: linear-gradient(180deg, #3a2b3e, #1b1420 55%, #0b0810); border-top: 2px solid rgba(200, 168, 234, 0.35); }
+
+/* --------------------------------- fighters -------------------------------- */
+
+.beastSvg { width: 100%; height: 100%; display: block; overflow: visible; }
 
 .bbaBeast {
   position: absolute;
-  height: 40%;
+  height: 33%;
   aspect-ratio: 1.5;
   transform: translateX(-50%) scaleX(var(--dir, 1));
   transform-origin: 50% 100%;
-  transition: transform 0.08s linear;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
+  transition: filter 0.15s ease;
 }
-.bbaBeast > span { position: absolute; display: block; }
-
-.bbaShadow {
-  left: 6%;
-  bottom: -4%;
-  width: 88%;
-  height: 9%;
+.bbaBeastShadow {
+  position: absolute;
+  left: 12%;
+  bottom: -3%;
+  width: 76%;
+  height: 7%;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  filter: blur(5px);
+  transform: scale(calc(1 - var(--lift, 0) * 0.002));
+  opacity: calc(1 - var(--lift, 0) * 0.002);
 }
-
-.bbaTorso {
-  left: 8%;
-  bottom: 24%;
-  width: 66%;
-  height: 44%;
-  border-radius: 46% 42% 38% 44% / 52% 54% 46% 48%;
-  background: linear-gradient(160deg, var(--fur) 20%, var(--fur2) 100%);
-  box-shadow: inset -6px -8px 18px rgba(0, 0, 0, 0.4), 0 0 24px color-mix(in srgb, var(--glow) 22%, transparent);
-}
-
-.bbaHead {
-  left: 58%;
-  bottom: 48%;
-  width: 38%;
-  height: 40%;
-  border-radius: 48% 52% 40% 46% / 52% 50% 46% 48%;
-  background: linear-gradient(150deg, var(--fur) 30%, var(--fur2) 100%);
-  box-shadow: inset -4px -5px 12px rgba(0, 0, 0, 0.35);
-}
-.bbaHead > span { position: absolute; display: block; }
-
-.bbaSnout {
-  right: -16%;
-  bottom: 12%;
-  width: 46%;
-  height: 42%;
-  border-radius: 36% 60% 54% 30%;
-  background: linear-gradient(180deg, var(--fur), var(--fur2));
-  box-shadow: inset -3px -3px 8px rgba(0, 0, 0, 0.35);
-}
-.bbaEye {
-  right: 26%;
-  top: 26%;
-  width: 15%;
-  aspect-ratio: 1;
+.bbaBeastGlow {
+  position: absolute;
+  inset: -12%;
   border-radius: 50%;
-  background: #14100f;
-  box-shadow: 0 0 8px var(--glow), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-}
-.bbaEar {
-  left: 8%;
-  top: -18%;
-  width: 26%;
-  height: 30%;
-  border-radius: 50% 50% 20% 20%;
-  background: var(--fur2);
-}
-.bbaEar--two { left: 42%; top: -22%; }
-.bbaHorn { display: none; }
-.bbaMane { display: none; }
-.bbaWing { display: none; }
-
-.bbaTail {
-  left: -14%;
-  bottom: 42%;
-  width: 30%;
-  height: 12%;
-  border-radius: 60% 20% 20% 60%;
-  background: linear-gradient(90deg, var(--fur2), var(--fur));
-  transform-origin: 100% 50%;
-  animation: bbaTailSway 2.4s ease-in-out infinite;
-}
-@keyframes bbaTailSway {
-  0%, 100% { transform: rotate(-8deg); }
-  50% { transform: rotate(12deg); }
-}
-
-.bbaLeg {
-  bottom: 0;
-  width: 15%;
-  height: 30%;
-  border-radius: 30% 30% 24% 24%;
-  background: linear-gradient(180deg, var(--fur), var(--fur2));
-}
-.bbaLeg--back { left: 14%; filter: brightness(0.75); }
-.bbaLeg--front { left: 52%; }
-
-.bbaArm {
-  left: 56%;
-  bottom: 30%;
-  width: 30%;
-  height: 13%;
-  border-radius: 40% 55% 55% 40%;
-  background: linear-gradient(90deg, var(--fur2), var(--fur));
-  transform-origin: 8% 50%;
-  transform: rotate(6deg);
-  transition: transform 0.09s ease;
-}
-
-.bbaGuard {
-  left: 62%;
-  bottom: 22%;
-  width: 34%;
-  height: 62%;
-  border-radius: 12% 50% 50% 12%;
-  border: 2px solid rgba(160, 210, 255, 0.75);
-  background: linear-gradient(90deg, rgba(120, 180, 255, 0.1), rgba(150, 205, 255, 0.32));
-  box-shadow: 0 0 22px rgba(130, 190, 255, 0.5);
   opacity: 0;
-  transform: scale(0.85);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent), transparent 62%);
+  transition: opacity 0.2s ease;
 }
 
-/* ------------------------------ per-fighter art ------------------------------ */
-
-/* Lion — full mane ring behind the head */
-.bbaBeast--lion .bbaMane {
-  display: block;
-  left: 50%;
-  bottom: 42%;
-  width: 54%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--fur2) 42%, var(--glow) 44%, var(--fur2) 100%);
-  box-shadow: 0 0 26px rgba(255, 190, 90, 0.35);
+/* animation handles inside the SVG */
+.bBody, .bHead, .bTail, .bWing, .bLegFront, .bLegBack, .bLegFrontFar, .bLegBackFar, .bMane, .bClaws, .bFangs {
+  transform-box: fill-box;
 }
-.bbaBeast--lion .bbaTail { width: 34%; }
+.bHead { transform-origin: 20% 70%; }
+.bLegFront, .bLegFrontFar { transform-origin: 50% 8%; }
+.bLegBack, .bLegBackFar { transform-origin: 50% 10%; }
+.bTail { transform-origin: 100% 60%; }
+.bWing { transform-origin: 88% 88%; }
+.bFangs { opacity: 0; transition: opacity 0.12s ease; }
+.bClaws { transition: transform 0.12s ease; }
 
-/* Dragon — spined wing and long snout */
-.bbaBeast--dragon .bbaWing {
-  display: block;
-  left: 12%;
-  bottom: 46%;
-  width: 52%;
-  height: 46%;
-  border-radius: 70% 20% 60% 12%;
-  background: linear-gradient(140deg, #a97cff, var(--fur2));
-  box-shadow: inset 0 -6px 14px rgba(0, 0, 0, 0.4);
-  transform-origin: 90% 90%;
-  animation: bbaWingBeat 1.6s ease-in-out infinite;
+/* idle: slow breathing, drifting tail */
+.bbaBeast .bBody { animation: bbaBreathe 3.1s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.bbaBeast .bTail { animation: bbaTailIdle 2.7s ease-in-out infinite; }
+.bbaBeast--eagle .bWing { animation: bbaWingIdle 2.4s ease-in-out infinite; }
+@keyframes bbaBreathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 1.022); }
 }
-.bbaBeast--dragon .bbaSnout { width: 58%; right: -26%; height: 34%; border-radius: 30% 65% 50% 24%; }
-.bbaBeast--dragon .bbaEar { border-radius: 60% 10% 40% 10%; background: var(--glow); height: 24%; }
-@keyframes bbaWingBeat {
-  0%, 100% { transform: rotate(-6deg) scaleY(1); }
-  50% { transform: rotate(-20deg) scaleY(1.1); }
+@keyframes bbaTailIdle {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(8deg); }
+}
+@keyframes bbaWingIdle {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(-9deg); }
 }
 
-/* Gorilla — broad chest, low head, long arms */
-.bbaBeast--gorilla .bbaTorso { width: 74%; height: 52%; bottom: 22%; border-radius: 44% 46% 36% 38% / 50%; }
-.bbaBeast--gorilla .bbaHead { bottom: 54%; width: 32%; height: 32%; left: 60%; }
-.bbaBeast--gorilla .bbaSnout { width: 38%; bottom: 4%; }
-.bbaBeast--gorilla .bbaArm { width: 34%; height: 16%; bottom: 24%; }
-.bbaBeast--gorilla .bbaTail { display: none; }
-.bbaBeast--gorilla .bbaEar { width: 20%; top: 4%; left: -8%; border-radius: 50%; }
-.bbaBeast--gorilla .bbaEar--two { left: 54%; }
-
-/* Cheetah — slim body, spotted coat */
-.bbaBeast--cheetah .bbaTorso {
-  height: 34%;
-  bottom: 28%;
-  background:
-    radial-gradient(circle at 30% 40%, var(--fur2) 12%, transparent 13%),
-    radial-gradient(circle at 55% 62%, var(--fur2) 10%, transparent 11%),
-    radial-gradient(circle at 72% 34%, var(--fur2) 11%, transparent 12%),
-    linear-gradient(160deg, var(--fur) 20%, var(--fur2) 100%);
-}
-.bbaBeast--cheetah .bbaLeg { height: 34%; width: 11%; }
-.bbaBeast--cheetah .bbaTail { width: 38%; height: 8%; left: -20%; }
-
-/* Elephant — trunk, tusk, big ear */
-.bbaBeast--elephant .bbaTorso { width: 70%; height: 50%; }
-.bbaBeast--elephant .bbaSnout {
-  width: 30%;
-  height: 74%;
-  right: -18%;
-  bottom: -58%;
-  border-radius: 40% 40% 60% 22%;
-  background: linear-gradient(180deg, var(--fur), var(--fur2));
-}
-.bbaBeast--elephant .bbaEar {
-  left: -22%;
-  top: 8%;
-  width: 48%;
-  height: 62%;
-  border-radius: 60% 30% 40% 60%;
-  background: var(--fur2);
-}
-.bbaBeast--elephant .bbaEar--two { display: none; }
-.bbaBeast--elephant .bbaHorn {
-  display: block;
-  right: -4%;
-  bottom: -14%;
-  width: 26%;
-  height: 8%;
-  border-radius: 40% 60% 60% 40%;
-  background: #f0ead9;
-  transform: rotate(14deg);
-}
-.bbaBeast--elephant .bbaTail { width: 22%; height: 7%; }
-
-/* Crocodile — long low jaw, ridged back */
-.bbaBeast--crocodile .bbaTorso {
-  height: 30%;
-  bottom: 20%;
-  width: 72%;
-  border-radius: 30% 34% 26% 30% / 46%;
-}
-.bbaBeast--crocodile .bbaHead { bottom: 26%; height: 26%; width: 40%; border-radius: 30% 34% 24% 30%; }
-.bbaBeast--crocodile .bbaSnout {
-  width: 74%;
-  height: 46%;
-  right: -50%;
-  bottom: 6%;
-  border-radius: 16% 40% 34% 14%;
-  background: linear-gradient(180deg, var(--fur), var(--fur2));
-}
-.bbaBeast--crocodile .bbaEar { width: 16%; height: 18%; top: -12%; border-radius: 50%; }
-.bbaBeast--crocodile .bbaLeg { height: 20%; }
-.bbaBeast--crocodile .bbaTail { width: 40%; height: 10%; left: -24%; bottom: 26%; border-radius: 70% 10% 10% 70%; }
-.bbaBeast--crocodile .bbaMane {
-  display: block;
-  left: 12%;
-  bottom: 60%;
-  width: 58%;
-  height: 10%;
-  border-radius: 0;
-  background: repeating-linear-gradient(90deg, var(--glow) 0 5px, transparent 5px 13px);
-  clip-path: polygon(0 100%, 6% 0, 12% 100%, 22% 8%, 30% 100%, 42% 6%, 50% 100%, 62% 10%, 70% 100%, 82% 4%, 90% 100%);
-}
-
-/* Eagle — big wing, hooked beak, pale head */
-.bbaBeast--eagle .bbaTorso { width: 58%; height: 40%; }
-.bbaBeast--eagle .bbaHead { background: linear-gradient(150deg, #f2efe6, #c9c3b4); }
-.bbaBeast--eagle .bbaSnout {
-  width: 40%;
-  height: 30%;
-  right: -22%;
-  bottom: 16%;
-  border-radius: 10% 70% 60% 10%;
-  background: linear-gradient(180deg, #ffcf5f, #d99720);
-}
-.bbaBeast--eagle .bbaEar { display: none; }
-.bbaBeast--eagle .bbaWing {
-  display: block;
-  left: 4%;
-  bottom: 40%;
-  width: 62%;
-  height: 52%;
-  border-radius: 82% 12% 70% 8%;
-  background: linear-gradient(150deg, var(--fur), var(--fur2) 78%);
-  box-shadow: inset 0 -8px 16px rgba(0, 0, 0, 0.42);
-  transform-origin: 88% 92%;
-  animation: bbaWingBeat 1.1s ease-in-out infinite;
-}
-.bbaBeast--eagle .bbaTail { width: 26%; height: 14%; border-radius: 70% 6% 6% 70%; }
-.bbaBeast--eagle .bbaLeg { height: 22%; background: linear-gradient(180deg, #ffcf5f, #b8801d); }
-
-/* Rhino — armour plates and the horn */
-.bbaBeast--rhino .bbaTorso { width: 72%; height: 48%; border-radius: 40% 38% 32% 36% / 50%; }
-.bbaBeast--rhino .bbaHorn {
-  display: block;
-  right: -30%;
-  top: 26%;
-  width: 34%;
-  height: 30%;
-  background: linear-gradient(180deg, #f4efe2, #b9ae95);
-  clip-path: polygon(0 100%, 100% 34%, 26% 100%);
-  transform: rotate(-6deg);
-}
-.bbaBeast--rhino .bbaSnout { width: 50%; right: -22%; bottom: 2%; }
-.bbaBeast--rhino .bbaEar { width: 18%; height: 22%; top: -10%; }
-.bbaBeast--rhino .bbaMane {
-  display: block;
-  left: 10%;
-  bottom: 56%;
-  width: 56%;
-  height: 12%;
-  border-radius: 40% 40% 10% 10%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent);
-}
-.bbaBeast--rhino .bbaTail { width: 20%; height: 7%; }
-
-/* --------------------------------- states --------------------------------- */
-
-.bbaBeast.is-walk .bbaLeg--front { animation: bbaStepA 0.34s linear infinite; }
-.bbaBeast.is-walk .bbaLeg--back { animation: bbaStepB 0.34s linear infinite; }
-@keyframes bbaStepA {
-  0%, 100% { transform: translateX(0) rotate(0deg); }
-  50% { transform: translateX(14%) rotate(9deg); }
-}
-@keyframes bbaStepB {
-  0%, 100% { transform: translateX(10%) rotate(6deg); }
-  50% { transform: translateX(-6%) rotate(-6deg); }
-}
-.bbaBeast.is-walk { animation: bbaBob 0.34s ease-in-out infinite; }
-@keyframes bbaBob {
+/* walking */
+.bbaBeast.is-walk { animation: bbaStride 0.42s ease-in-out infinite; }
+.bbaBeast.is-walk .bLegFront { animation: bbaLegA 0.42s linear infinite; }
+.bbaBeast.is-walk .bLegBack { animation: bbaLegB 0.42s linear infinite; }
+.bbaBeast.is-walk .bLegFrontFar { animation: bbaLegB 0.42s linear infinite; }
+.bbaBeast.is-walk .bLegBackFar { animation: bbaLegA 0.42s linear infinite; }
+.bbaBeast.is-walk .bTail { animation: bbaTailIdle 0.7s ease-in-out infinite; }
+@keyframes bbaStride {
   0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(0); }
-  50% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(-3%); }
+  50% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(-1.6%); }
+}
+@keyframes bbaLegA {
+  0%, 100% { transform: rotate(15deg); }
+  50% { transform: rotate(-15deg); }
+}
+@keyframes bbaLegB {
+  0%, 100% { transform: rotate(-15deg); }
+  50% { transform: rotate(15deg); }
 }
 
-.bbaBeast.is-attack .bbaArm { transform: rotate(-58deg) scaleX(1.22); }
-.bbaBeast.is-attack .bbaHead { transform: translateX(6%) rotate(-6deg); }
-.bbaBeast.is-attack { animation: bbaLunge 0.36s ease-out; }
+/* attacking */
+.bbaBeast.is-attack { animation: bbaLunge 0.32s ease-out; }
+.bbaBeast.is-attack .bHead { animation: bbaHeadThrust 0.32s ease-out; }
+.bbaBeast.is-attack .bLegFront { animation: bbaSwipe 0.32s ease-out; }
+.bbaBeast.is-attack .bFangs { opacity: 1; }
+.bbaBeast.is-attack .bClaws { transform: scale(1.5); }
+.bbaBeast.is-combo2 { animation-duration: 0.24s; }
+.bbaBeast.is-combo3 { animation-duration: 0.2s; }
 @keyframes bbaLunge {
   0% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0); }
-  35% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(9%); }
+  30% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(7%) scaleY(0.98); }
   100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0); }
 }
+@keyframes bbaHeadThrust {
+  0%, 100% { transform: rotate(0deg) translateX(0); }
+  35% { transform: rotate(-9deg) translateX(6%); }
+}
+@keyframes bbaSwipe {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-52deg) translateY(-8%); }
+  60% { transform: rotate(14deg); }
+}
 
-.bbaBeast.is-block .bbaGuard { opacity: 1; transform: scale(1); }
-.bbaBeast.is-block { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(-4%) rotate(-3deg); }
+/* blocking */
+.bbaBeast.is-block {
+  transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(-3%) scaleY(0.94);
+}
+.bbaBeast.is-block::after {
+  content: "";
+  position: absolute;
+  right: -6%;
+  top: 8%;
+  width: 42%;
+  height: 84%;
+  border-radius: 46% 50% 50% 46%;
+  border: 2px solid rgba(150, 205, 255, 0.8);
+  background: linear-gradient(90deg, rgba(120, 180, 255, 0.08), rgba(150, 205, 255, 0.3));
+  box-shadow: 0 0 24px rgba(130, 190, 255, 0.55);
+  animation: bbaGuardIn 0.16s ease-out;
+}
+@keyframes bbaGuardIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
 
-.bbaBeast.is-hurt { animation: bbaHurt 0.25s ease-out; }
-.bbaBeast.is-hurt .bbaTorso,
-.bbaBeast.is-hurt .bbaHead { filter: brightness(1.35) saturate(1.9) hue-rotate(-18deg); box-shadow: 0 0 24px rgba(255, 90, 70, 0.55), inset -6px -8px 18px rgba(0, 0, 0, 0.4); }
-@keyframes bbaHurt {
+/* taking a hit */
+.bbaBeast.is-hurt { animation: bbaRecoil 0.24s ease-out; }
+.bbaBeast.is-hurt .bBody,
+.bbaBeast.is-hurt .bHead { filter: brightness(1.5) saturate(1.7) hue-rotate(-15deg); }
+@keyframes bbaRecoil {
   0% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0) rotate(0deg); }
-  40% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(-8%) rotate(-9deg); }
+  40% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(-7%) rotate(-7deg); }
   100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0) rotate(0deg); }
 }
 
+/* knocked out */
 .bbaBeast.is-ko {
-  transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-78deg) translateY(14%);
-  filter: grayscale(0.55) brightness(0.7);
-  transition: transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1), filter 0.5s ease;
+  transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-74deg) translateY(16%);
+  filter: grayscale(0.5) brightness(0.65);
+  transition: transform 0.55s cubic-bezier(0.3, 1.3, 0.5, 1), filter 0.5s ease;
 }
-.bbaBeast.is-ko .bbaTail,
-.bbaBeast.is-ko .bbaWing { animation: none; }
+.bbaBeast.is-ko .bBody,
+.bbaBeast.is-ko .bTail,
+.bbaBeast.is-ko .bWing { animation: none; }
 
-/* special poses */
-.bbaBeast.is-special .bbaHead { transform: translateX(10%) scale(1.06); }
-.bbaBeast--lion.is-special { animation: bbaRoarPose 0.82s ease-out; }
+/* specials */
+.bbaBeast.is-special .bbaBeastGlow { opacity: 1; animation: bbaAuraPulse 0.4s ease-in-out infinite; }
+.bbaBeast.is-special { filter: drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 70%, transparent)); }
+.bbaBeast.is-special .bFangs { opacity: 1; }
+@keyframes bbaAuraPulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.06); }
+}
+.bbaBeast--lion.is-special { animation: bbaRoarPose 0.9s ease-out; }
+.bbaBeast--lion.is-special .bHead { animation: bbaRoarHead 0.9s ease-out; }
+.bbaBeast--lion.is-special .bMane { animation: bbaManeFlare 0.9s ease-out; transform-box: fill-box; transform-origin: 60% 50%; }
 @keyframes bbaRoarPose {
-  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) scale(1); }
-  30% { transform: translateX(-50%) scaleX(var(--dir, 1)) scale(1.12) translateY(-4%); }
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(0deg); }
+  30% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-9deg) translateY(-6%); }
 }
-.bbaBeast--dragon.is-special .bbaWing { animation: bbaWingBeat 0.28s ease-in-out infinite; }
-.bbaBeast--dragon.is-special { animation: bbaRoarPose 0.76s ease-out; }
-.bbaBeast--gorilla.is-special { animation: bbaSlamPose 0.72s ease-in; }
-@keyframes bbaSlamPose {
-  0% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(0); }
-  40% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(-26%); }
-  62% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(0) scaleY(0.86); }
-  100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateY(0) scaleY(1); }
+@keyframes bbaRoarHead {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(-22deg) scale(1.08); }
 }
-.bbaBeast--cheetah.is-special { filter: drop-shadow(0 0 18px var(--glow)); }
-.bbaBeast--cheetah.is-special .bbaLeg { animation: bbaStepA 0.09s linear infinite; }
-.bbaBeast--elephant.is-special,
-.bbaBeast--rhino.is-special { animation: bbaChargePose 0.62s ease-out; }
-@keyframes bbaChargePose {
+@keyframes bbaManeFlare {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.16); }
+}
+.bbaBeast--tiger.is-special { animation: bbaFrenzy 0.26s linear infinite; }
+.bbaBeast--tiger.is-special .bLegFront { animation: bbaSwipe 0.16s linear infinite; }
+@keyframes bbaFrenzy {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0); }
+  50% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(4%); }
+}
+.bbaBeast--gorilla.is-special .bArm { animation: bbaSlamArm 0.88s ease-in; }
+.bbaBeast--gorilla.is-special { animation: bbaSlamBody 0.88s ease-in; }
+@keyframes bbaSlamArm {
+  0% { transform: rotate(0deg); }
+  40% { transform: rotate(-58deg); }
+  55% { transform: rotate(22deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes bbaSlamBody {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1); }
+  45% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1.06) rotate(-6deg); }
+  62% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(0.88) rotate(4deg); }
+}
+.bbaBeast--wolf.is-special { animation: bbaRush 0.6s ease-out; }
+@keyframes bbaRush {
+  0% { transform: translateX(-50%) scaleX(var(--dir, 1)) skewX(0deg); }
+  40% { transform: translateX(-50%) scaleX(var(--dir, 1)) skewX(-12deg) scaleY(0.92) translateY(3%); }
+  100% { transform: translateX(-50%) scaleX(var(--dir, 1)) skewX(0deg); }
+}
+.bbaBeast--eagle.is-special .bWing { animation: bbaWingBeat 0.16s ease-in-out infinite; }
+.bbaBeast--eagle.is-special { animation: bbaDivePose 0.9s ease-in-out; }
+@keyframes bbaWingBeat {
+  0%, 100% { transform: rotate(-4deg) scaleY(1); }
+  50% { transform: rotate(-26deg) scaleY(1.12); }
+}
+@keyframes bbaDivePose {
   0% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(0deg); }
-  50% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(6deg) translateX(6%); }
+  45% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-16deg); }
+  75% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(22deg); }
   100% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(0deg); }
 }
-.bbaBeast--eagle.is-special .bbaWing { animation: bbaWingBeat 0.2s ease-in-out infinite; }
-.bbaBeast--crocodile.is-special .bbaSnout { animation: bbaJaw 0.55s ease-in-out; }
-@keyframes bbaJaw {
-  0%, 100% { transform: rotate(0deg); }
-  35% { transform: rotate(-22deg) translateY(-10%); }
-}
 
-/* mini portraits on the select cards */
-.bbaBeast--mini {
-  position: absolute;
-  left: 50%;
-  bottom: 14%;
-  height: 62%;
-  transform: translateX(-50%);
-}
-.bbaBeast--mini .bbaShadow { display: none; }
+/* select-screen portraits sit still in their frames */
+.bbaPickArt .bbaBeast, .bbaBriefArt .bbaBeast { position: static; }
 
-/* ----------------------------------- FX ----------------------------------- */
+/* ---------------------------------- effects -------------------------------- */
 
-.bbaFx {
-  position: absolute;
-  display: block;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: 4;
-}
+.bbaFx { position: absolute; display: block; transform: translateX(-50%); pointer-events: none; z-index: 5; }
 
-.bbaFx--fire {
-  width: 16%;
-  height: 13%;
-  transform: translateX(-50%) scaleX(var(--dir, 1));
-  border-radius: 50% 60% 55% 45%;
+.bbaFx--clawSlash {
+  width: 13%;
+  height: 26%;
+  transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-18deg);
   background:
-    radial-gradient(circle at 20% 50%, #fff3c4 6%, transparent 40%),
-    linear-gradient(90deg, #ffe27a, #ff9a2e 42%, #f0501f 78%, rgba(200, 40, 20, 0.25));
-  filter: blur(0.6px) drop-shadow(0 0 18px rgba(255, 140, 50, 0.85));
-  animation: bbaFlicker 0.14s steps(2) infinite;
+    linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.95) 47%, transparent 52%),
+    linear-gradient(105deg, transparent 56%, rgba(255, 240, 220, 0.85) 61%, transparent 66%),
+    linear-gradient(105deg, transparent 70%, rgba(255, 255, 255, 0.75) 75%, transparent 80%);
+  filter: drop-shadow(0 0 8px rgba(255, 230, 190, 0.85));
+  animation: bbaSlashOut 0.28s ease-out forwards;
 }
-@keyframes bbaFlicker {
-  0% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1); }
-  100% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1.18); }
+.bbaFx--clawSlash.bbaFx--v1 { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(14deg); }
+.bbaFx--clawSlash.bbaFx--v2 { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-2deg) scale(1.15); }
+@keyframes bbaSlashOut {
+  0% { opacity: 0; clip-path: inset(0 100% 0 0); }
+  35% { opacity: 1; clip-path: inset(0 0 0 0); }
+  100% { opacity: 0; clip-path: inset(0 0 0 0); }
+}
+
+.bbaFx--impact, .bbaFx--bigImpact {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  animation: bbaPop 0.38s ease-out forwards;
+}
+.bbaFx--impact {
+  width: 9%;
+  background: radial-gradient(circle, #fff8dc 14%, #ffc266 38%, rgba(255, 140, 60, 0.4) 58%, transparent 72%);
+}
+.bbaFx--bigImpact {
+  width: 15%;
+  background: radial-gradient(circle, #ffffff 12%, #ffdf8a 32%, rgba(255, 130, 70, 0.55) 55%, transparent 74%);
+  filter: drop-shadow(0 0 16px rgba(255, 180, 90, 0.9));
+}
+.bbaFx--guard {
+  width: 8%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #eaf6ff 16%, #8ec5ff 42%, transparent 68%);
+  animation: bbaPop 0.28s ease-out forwards;
+}
+@keyframes bbaPop {
+  0% { transform: translateX(-50%) scale(0.3); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1.6); opacity: 0; }
 }
 
 .bbaFx--roar {
-  width: 6%;
+  width: 5%;
   aspect-ratio: 1;
   border-radius: 50%;
-  border: 3px solid rgba(255, 214, 140, 0.9);
-  box-shadow: 0 0 26px rgba(255, 190, 90, 0.6), inset 0 0 20px rgba(255, 200, 120, 0.4);
-  transform: translateX(-50%) scale(calc(0.4 + var(--p, 0) * 7));
+  border: 3px solid rgba(255, 216, 150, 0.95);
+  box-shadow: 0 0 30px rgba(255, 190, 90, 0.7), inset 0 0 24px rgba(255, 205, 130, 0.5);
+  transform: translateX(-50%) scale(calc(0.4 + var(--p, 0) * 9)) scaleY(0.86);
 }
 
-.bbaFx--smash {
-  width: 42%;
-  height: 26%;
+.bbaFx--quake {
+  width: 46%;
+  height: 30%;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 88%, #fff4d6 4%, rgba(255, 205, 130, 0.9) 16%, rgba(214, 150, 78, 0.5) 42%, transparent 68%);
-  box-shadow: 0 0 40px rgba(255, 190, 110, 0.5);
-  animation: bbaSmash 0.56s ease-out forwards;
+  background: radial-gradient(circle at 50% 90%, #fff2d2 5%, rgba(255, 200, 130, 0.85) 18%, rgba(190, 130, 70, 0.4) 44%, transparent 70%);
+  filter: drop-shadow(0 0 22px rgba(255, 180, 100, 0.7));
+  animation: bbaQuake 0.62s ease-out forwards;
 }
-.bbaFx--smash::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 86%;
-  height: 16%;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: linear-gradient(90deg, transparent, rgba(255, 224, 170, 0.9), transparent);
-}
-@keyframes bbaSmash {
+@keyframes bbaQuake {
   0% { transform: translateX(-50%) scale(0.2); opacity: 1; }
-  100% { transform: translateX(-50%) scale(1.5); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1.7); opacity: 0; }
 }
 
-.bbaFx--bite {
-  width: 12%;
-  height: 14%;
-  background:
-    linear-gradient(180deg, #fff 0 45%, transparent 45%),
-    linear-gradient(0deg, #fff 0 45%, transparent 45%);
-  clip-path: polygon(0 0, 100% 20%, 100% 80%, 0 100%, 18% 50%);
-  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.6));
-  animation: bbaBite 0.32s ease-out forwards;
+.bbaFx--dust, .bbaFx--step {
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 80%, rgba(226, 205, 170, 0.7), rgba(180, 155, 120, 0.24) 55%, transparent 74%);
+  animation: bbaDust 0.55s ease-out forwards;
 }
-@keyframes bbaBite {
-  0% { transform: translateX(-50%) scaleY(1.4); opacity: 1; }
-  100% { transform: translateX(-50%) scaleY(0.2); opacity: 0; }
+.bbaFx--dust { width: 18%; height: 12%; }
+.bbaFx--step { width: 9%; height: 6%; opacity: 0.6; animation-duration: 0.32s; }
+@keyframes bbaDust {
+  0% { transform: translateX(-50%) scale(0.3) translateY(0); opacity: 0.9; }
+  100% { transform: translateX(-50%) scale(1.5) translateY(-30%); opacity: 0; }
 }
 
-.bbaFx--streak {
-  width: 14%;
-  height: 3%;
+.bbaFx--dashTrail {
+  width: 16%;
+  height: 4%;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75));
+  transform: translateX(-50%) scaleX(var(--dir, 1));
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7));
   animation: bbaFade 0.24s linear forwards;
 }
 .bbaFx--feather {
-  width: 2%;
-  height: 4%;
+  width: 2.4%;
+  height: 4.5%;
   border-radius: 60% 10% 60% 10%;
-  background: rgba(255, 240, 214, 0.8);
-  animation: bbaFeather 0.26s ease-out forwards;
+  background: rgba(255, 240, 214, 0.85);
+  animation: bbaFeather 0.42s ease-out forwards;
 }
 @keyframes bbaFeather {
   0% { transform: translateX(-50%) translateY(0) rotate(0deg); opacity: 0.9; }
-  100% { transform: translateX(-50%) translateY(26px) rotate(80deg); opacity: 0; }
+  100% { transform: translateX(-50%) translateY(34px) rotate(90deg); opacity: 0; }
+}
+.bbaFx--charge {
+  width: 14%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 240, 200, 0.85), transparent 66%);
+  animation: bbaCharge 0.42s ease-out forwards;
+}
+@keyframes bbaCharge {
+  0% { transform: translateX(-50%) scale(1.8); opacity: 0; }
+  60% { transform: translateX(-50%) scale(0.6); opacity: 0.95; }
+  100% { transform: translateX(-50%) scale(0.3); opacity: 0; }
+}
+@keyframes bbaFade { from { opacity: 1; } to { opacity: 0; } }
+
+
+/* dragon: rears back, then throws its head forward with the breath */
+.bbaBeast--dragon.is-special { animation: bbaBreathPose 0.88s ease-out; }
+.bbaBeast--dragon.is-special .bHead { animation: bbaBreathHead 0.88s ease-out; }
+.bbaBeast--dragon.is-special .bWing { animation: bbaWingBeat 0.24s ease-in-out infinite; }
+.bbaBeast--dragon .bEmber { animation: bbaEmberIdle 2.2s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+.bbaBeast--dragon.is-special .bEmber { animation: bbaEmberFlare 0.88s ease-out; }
+@keyframes bbaBreathPose {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0); }
+  25% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(-6%) rotate(-5deg); }
+  48% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(5%) rotate(3deg); }
+}
+@keyframes bbaBreathHead {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-20deg); }
+  50% { transform: rotate(12deg) scale(1.06); }
+}
+@keyframes bbaEmberIdle {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50% { opacity: 0.95; transform: scale(1.12); }
+}
+@keyframes bbaEmberFlare {
+  0% { opacity: 0.6; transform: scale(0.8); }
+  45% { opacity: 1; transform: scale(2.4); }
+  100% { opacity: 0.6; transform: scale(1); }
 }
 
-.bbaFx--slash {
-  width: 10%;
-  height: 18%;
-  border-right: 3px solid rgba(255, 255, 255, 0.85);
-  border-radius: 50%;
+/* cheetah: pure motion blur */
+.bbaBeast--cheetah.is-special { animation: bbaBlur 0.18s linear infinite; }
+.bbaBeast--cheetah.is-special .bLegFront,
+.bbaBeast--cheetah.is-special .bLegBack { animation: bbaLegA 0.1s linear infinite; }
+@keyframes bbaBlur {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0) scaleY(0.97); opacity: 1; }
+  50% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(3%) scaleY(0.97); opacity: 0.75; }
+}
+
+/* elephant: rears the foreleg and stamps */
+.bbaBeast--elephant.is-special { animation: bbaStompBody 0.84s ease-in; }
+.bbaBeast--elephant.is-special .bLegFront { animation: bbaStompLeg 0.84s ease-in; }
+@keyframes bbaStompBody {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(0deg); }
+  32% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(-9deg) translateY(-4%); }
+  46% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(2deg) scaleY(0.94); }
+}
+@keyframes bbaStompLeg {
+  0%, 100% { transform: rotate(0deg); }
+  32% { transform: rotate(-46deg) translateY(-10%); }
+  46% { transform: rotate(16deg); }
+}
+
+/* crocodile: the jaws lunge */
+.bbaBeast--crocodile.is-special { animation: bbaLungePose 0.64s ease-out; }
+.bbaBeast--crocodile.is-special .bHead { animation: bbaJawSnap 0.64s ease-out; }
+@keyframes bbaLungePose {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(0); }
+  40% { transform: translateX(-50%) scaleX(var(--dir, 1)) translateX(9%) scaleY(0.95); }
+}
+@keyframes bbaJawSnap {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-24deg); }
+  55% { transform: rotate(6deg); }
+}
+
+/* rhino: horn down, head lowered, armour lit */
+.bbaBeast--rhino.is-special { animation: bbaGorePose 0.78s ease-out; }
+.bbaBeast--rhino.is-special .bHead { animation: bbaHornDown 0.78s ease-out; }
+@keyframes bbaGorePose {
+  0% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(0deg); }
+  30% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(7deg) scaleY(0.96); }
+  100% { transform: translateX(-50%) scaleX(var(--dir, 1)) rotate(0deg); }
+}
+@keyframes bbaHornDown {
+  0%, 100% { transform: rotate(0deg); }
+  40% { transform: rotate(16deg) translateY(4%); }
+}
+
+/* ------------------------- effects for the new specials ------------------ */
+
+.bbaFx--fire {
+  width: 20%;
+  height: 15%;
   transform: translateX(-50%) scaleX(var(--dir, 1));
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
-  animation: bbaFade 0.24s ease-out forwards;
+  border-radius: 55% 60% 55% 50%;
+  background:
+    radial-gradient(circle at 18% 50%, #fff6cf 8%, transparent 42%),
+    linear-gradient(90deg, #ffe887, #ff9c2e 40%, #f4531d 74%, rgba(190, 40, 20, 0.2));
+  filter: blur(0.5px) drop-shadow(0 0 20px rgba(255, 140, 50, 0.9));
+  animation: bbaFlicker 0.11s steps(2) infinite;
+}
+@keyframes bbaFlicker {
+  0% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1) skewX(0deg); }
+  100% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1.16) skewX(-4deg); }
 }
 
-.bbaFx--impact {
-  width: 9%;
-  aspect-ratio: 1;
-  background: radial-gradient(circle, #fff6d8 12%, #ffb45e 34%, rgba(255, 120, 60, 0.35) 55%, transparent 70%);
-  border-radius: 50%;
-  animation: bbaPop 0.32s ease-out forwards;
+.bbaFx--groundWave {
+  width: 16%;
+  height: 13%;
+  transform: translateX(-50%) scaleX(var(--dir, 1));
+  border-radius: 50% 50% 20% 20%;
+  background: linear-gradient(180deg, rgba(255, 226, 168, 0.9), rgba(190, 140, 80, 0.5) 60%, transparent);
+  box-shadow: 0 0 26px rgba(255, 200, 130, 0.65);
+  animation: bbaWaveRoll 0.28s ease-in-out infinite;
 }
-.bbaFx--guard {
-  width: 7%;
-  aspect-ratio: 1;
-  background: radial-gradient(circle, #eaf6ff 15%, #8ec5ff 40%, transparent 68%);
-  border-radius: 50%;
-  animation: bbaPop 0.26s ease-out forwards;
-}
-@keyframes bbaPop {
-  0% { transform: translateX(-50%) scale(0.35); opacity: 1; }
-  100% { transform: translateX(-50%) scale(1.5); opacity: 0; }
-}
-@keyframes bbaFade {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes bbaWaveRoll {
+  0%, 100% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1); }
+  50% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1.3); }
 }
 
-/* -------------------------------- overlays -------------------------------- */
+.bbaFx--bite {
+  width: 14%;
+  height: 17%;
+  transform: translateX(-50%) scaleX(var(--dir, 1));
+  background:
+    linear-gradient(180deg, #fffdf5 0 42%, transparent 42%),
+    linear-gradient(0deg, #fffdf5 0 42%, transparent 42%);
+  clip-path: polygon(0 0, 100% 22%, 100% 78%, 0 100%, 20% 50%);
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.7));
+  animation: bbaBiteSnap 0.34s ease-out forwards;
+}
+@keyframes bbaBiteSnap {
+  0% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(1.5); opacity: 1; }
+  100% { transform: translateX(-50%) scaleX(var(--dir, 1)) scaleY(0.15); opacity: 0; }
+}
+
+/* armour shimmer while the rhino is charging */
+.bbaBeast--rhino.is-special .bBody { filter: brightness(1.25) saturate(0.7); }
+
+/* --------------------------------- banners --------------------------------- */
 
 .bbaBanner {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  z-index: 7;
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 6px;
+  gap: 8px;
   background: rgba(6, 5, 9, 0.55);
   backdrop-filter: blur(2px);
   text-align: center;
+  padding: 12px;
 }
-.bbaBanner span {
-  font-size: clamp(1.4rem, 4vw, 2.6rem);
+.bbaBannerRound {
+  font-size: clamp(1.4rem, 4.2vw, 2.8rem);
   font-weight: 700;
   letter-spacing: -0.03em;
-  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.85);
+  animation: bbaBannerIn 0.4s ease-out;
 }
-.bbaBanner em {
-  color: #f4b965;
-  font-family: Georgia, serif;
-  font-size: clamp(1rem, 2.4vw, 1.6rem);
+.bbaBannerVs { color: #cfcbd4; font-size: clamp(0.8rem, 2vw, 1.05rem); }
+.bbaBannerVs em { color: var(--bba-gold); font-family: Georgia, serif; }
+@keyframes bbaBannerIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
 }
 .bbaShout {
   position: absolute;
   left: 50%;
-  top: 34%;
-  z-index: 6;
+  top: 30%;
+  z-index: 7;
   transform: translateX(-50%);
-  color: #f4b965;
+  color: var(--bba-gold);
   font-size: clamp(2rem, 7vw, 4.4rem);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-shadow: 0 0 30px rgba(244, 185, 101, 0.6), 0 6px 20px rgba(0, 0, 0, 0.7);
-  animation: bbaShout 0.9s ease-out forwards;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 34px rgba(244, 185, 101, 0.7), 0 6px 20px rgba(0, 0, 0, 0.8);
+  animation: bbaShout 0.85s ease-out forwards;
 }
-.bbaShout--ko { color: #ff7d6b; text-shadow: 0 0 34px rgba(255, 90, 70, 0.6); }
+.bbaBanner--result .bbaShout { position: static; transform: none; animation: bbaBannerIn 0.35s ease-out; }
+.bbaShout--ko { color: #ff7d6b; text-shadow: 0 0 34px rgba(255, 90, 70, 0.65); }
 @keyframes bbaShout {
-  0% { transform: translateX(-50%) scale(1.7); opacity: 0; }
-  22% { transform: translateX(-50%) scale(1); opacity: 1; }
+  0% { transform: translateX(-50%) scale(1.8); opacity: 0; }
+  20% { transform: translateX(-50%) scale(1); opacity: 1; }
   75% { opacity: 1; }
-  100% { transform: translateX(-50%) scale(1.05); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1.06); opacity: 0; }
 }
 
-.bbaOverScreen {
+/* ------------------------------- winner screen ----------------------------- */
+
+.bbaOver {
+  position: relative;
   display: grid;
   justify-items: center;
-  gap: 12px;
-  padding: clamp(40px, 8vw, 90px) 24px;
+  gap: 10px;
+  padding: clamp(24px, 5vw, 52px) 20px clamp(28px, 5vw, 46px);
   border: 1px solid var(--bba-line);
-  border-radius: 10px;
+  border-radius: 12px;
   text-align: center;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(126, 58, 190, 0.3), transparent 60%),
-    #0b0b0f;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 0%, rgba(126, 58, 190, 0.32), transparent 62%), #0b0b0f;
 }
-.bbaOverScreen h3 {
-  margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.6rem);
-  letter-spacing: -0.035em;
-  font-weight: 600;
+.bbaOver.is-win { background: radial-gradient(circle at 50% 0%, rgba(244, 185, 101, 0.26), transparent 62%), #0b0b0f; }
+.bbaOverArt { position: relative; width: min(440px, 86%); height: clamp(170px, 30vw, 270px); }
+.bbaOverBeam {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 150%;
+  height: 150%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at 50% 88%, rgba(255, 214, 140, 0.32), transparent 62%);
 }
-.bbaOverSub { margin: 0; color: #9d99a3; font-size: 0.86rem; }
-.bbaOverActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 14px; }
+.bbaOverArt .beastSvg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.65));
+  animation: bbaChampion 2.6s ease-in-out infinite;
+}
+@keyframes bbaChampion {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-5px) scale(1.02); }
+}
+.bbaOver h3 { margin: 0; font-size: clamp(1.5rem, 4vw, 2.5rem); letter-spacing: -0.035em; font-weight: 600; }
+.bbaOverScore { margin: 0; color: #9d99a3; font-size: 0.84rem; }
+.bbaOverActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 14px; }
 
-/* -------------------------------- controls -------------------------------- */
+/* --------------------------------- controls -------------------------------- */
 
-.bbaControls {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.bbaPadGroup { display: flex; gap: 10px; }
+.bbaControls { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bbaPadGroup { display: flex; gap: 9px; }
 .bbaPadGroup--actions { margin-left: auto; }
 .bbaPad {
-  min-width: 96px;
-  min-height: 56px;
-  padding: 14px 18px;
+  position: relative;
+  min-width: 92px;
+  min-height: 58px;
+  padding: 12px 16px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  background: linear-gradient(180deg, #191922, #101015);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #1b1b24, #101015);
   color: #eee;
   font-weight: 700;
   font-size: 0.74rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   touch-action: none;
   transition: transform 0.1s ease, background 0.15s ease;
 }
-.bbaPad:active { transform: scale(0.95); background: #2a2a36; }
+.bbaPad i {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  color: #7c7883;
+}
+.bbaPad:active { transform: scale(0.94); background: #2b2b38; }
 .bbaPad--attack { border-color: rgba(244, 185, 101, 0.5); color: #ffd79a; }
 .bbaPad--special { border-color: rgba(168, 119, 255, 0.55); color: #d5bcff; }
 .bbaPad--block { border-color: rgba(140, 195, 255, 0.45); color: #b6dcff; }
 
-.bbaFootRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
+.bbaFootRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .bbaKeys { margin: 0; color: #7c7883; font-size: 0.72rem; }
 .bbaKeys kbd {
   display: inline-block;
@@ -953,36 +1041,50 @@
   text-align: center;
 }
 
-/* ------------------------------- responsive ------------------------------- */
+/* -------------------------------- responsive ------------------------------- */
 
 @media (max-width: 900px) {
   .bbaRoster { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .bbaSelectFoot { flex-direction: column; align-items: stretch; }
-  .bbaSelectFoot .bbaPrimary { width: 100%; }
-  .bbaStage { aspect-ratio: 16 / 10; max-height: 46vh; }
+  .bbaBrief { grid-template-columns: 1fr; }
+  .bbaBriefArt { height: 170px; }
+  .bbaStage { aspect-ratio: 16 / 10; max-height: 44vh; }
+  .bbaBeast { height: 31%; }
 }
 
 @media (max-width: 640px) {
-  .bbaRoster { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-  .bbaCardArt { height: 78px; }
-  .bbaStage { aspect-ratio: 4 / 3; max-height: 40vh; }
-  .bbaTopBar { grid-template-columns: 1fr; gap: 8px; }
-  .bbaRound { order: -1; }
+  .bba { gap: 9px; }
+  .bbaSelect { padding: 14px; }
+  .bbaRoster { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .bbaPickArt { height: 70px; }
+  .bbaSelectHead { flex-direction: column; gap: 10px; }
+  .bbaStage { aspect-ratio: 4 / 3; max-height: 40vh; border-radius: 10px; }
+  .bbaBeast { height: 26%; }
+  .bbaTop { grid-template-columns: 1fr; gap: 7px; }
+  .bbaRoundBox { order: -1; flex-direction: row; }
   .bbaHud--right { justify-items: stretch; }
   .bbaHud--right .bbaHudTop { flex-direction: row; }
-  .bbaHud--right .bbaBarFill,
-  .bbaHud--right .bbaCdFill { inset: 0 auto 0 0; }
-  .bbaControls { gap: 8px; }
+  .bbaHud--right .bbaHpFill,
+  .bbaHud--right .bbaHpChip,
+  .bbaHud--right .bbaMeterFill { inset: 0 auto 0 0; }
+  .bbaHp { height: 17px; }
+  .bbaControls { gap: 7px; }
   .bbaPadGroup { flex: 1; }
   .bbaPadGroup--actions { margin-left: 0; }
-  .bbaPad { flex: 1; min-width: 0; min-height: 62px; padding: 12px 6px; font-size: 0.64rem; }
+  .bbaPad { flex: 1; min-width: 0; min-height: 64px; padding: 10px 4px; font-size: 0.64rem; }
   .bbaKeys { display: none; }
   .bbaFootRow { justify-content: center; }
   .bbaFootRow .bbaGhost--sm { width: 100%; text-align: center; }
+  .bbaOverActions { width: 100%; }
+  .bbaOverActions > * { flex: 1 1 auto; }
+}
+
+@media (max-width: 380px) {
+  .bbaPad { min-height: 58px; font-size: 0.58rem; }
+  .bbaPickArt { height: 62px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bbaEmber,
-  .bbaTail,
-  .bbaWing { animation: none !important; }
+  .bbaBeast, .bbaBeast * { animation: none !important; }
+  .bbaFx { animation-duration: 0.01ms !important; }
+  .bbaOverArt .beastSvg { animation: none !important; }
 }

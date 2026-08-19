@@ -165,12 +165,14 @@ function App() {
               <div className="cardContent">
                 <h3>Beast Battle Arena</h3>
                 <p>
-                  Eight beasts, one arena. Choose your fighter, learn its special
-                  move and take down the AI opponent in a one-on-one duel.
+                  Ten beasts, from the lion and the gorilla to a fire-breathing
+                  dragon. Build the special power meter and win two rounds to
+                  take the match.
                 </p>
                 <div className="gameTags">
-                  <span>8 fighters</span>
-                  <span>Special moves</span>
+                  <span>10 fighters</span>
+                  <span>Best of 3</span>
+                  <span>Sound + music</span>
                   <span>Touch + keyboard</span>
                 </div>
                 <button type="button" onClick={() => setGameOpen((open) => !open)}>
