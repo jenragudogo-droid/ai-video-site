@@ -1,9 +1,16 @@
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import "./App.css";
-// Beast Battle Arena and Kianimation Football League are unlisted for now.
-// Their source still lives in src/components/ — re-import them here, restore
-// their cards in the games grid and their mounts below to bring them back.
-import BusSimulator from "./components/BusSimulator";
+// Beast Battle Arena, Kianimation Football League and Metro City Bus are
+// unlisted for now. Their source still lives in src/components/ — re-import
+// them here, restore their cards in the games grid and their mounts below to
+// bring them back. Metro City Bus is `./components/BusSimulator`, and its
+// models are already in public/models.
+
+/* Endless Rush is a whole game — renderer, world generator, audio — and
+   it adds about 26 kB gzipped to the bundle. Nobody needs any of that
+   until they press Play, so it is fetched on demand: the landing page
+   stays exactly as light as it was before the game existed. */
+const EndlessRush = lazy(() => import("./components/EndlessRush"));
 
 const videos = [
   {
@@ -80,7 +87,7 @@ function VideoCard({ video }) {
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [busOpen, setBusOpen] = useState(false);
+  const [rushOpen, setRushOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -153,50 +160,69 @@ function App() {
               <p className="eyebrow">Play games</p>
               <h2>Step into the arena</h2>
             </div>
-            <p>Playable browser games built around the creatures of AI Story World. No download, no sign up—just pick a fighter and go.</p>
+            <p>Playable browser games built around the creatures of AI Story World. No download, no sign up—just pick a game and go.</p>
           </div>
 
           <div className="gameGrid">
             <article className="gameCard">
-              <div className="gameArt gameArt--street" aria-hidden="true">
-                <span className="streetSky" />
-                <span className="streetSun" />
-                <span className="streetBlock streetBlock--l" />
-                <span className="streetBlock streetBlock--r" />
-                <span className="streetRoad" />
-                <span className="streetDash streetDash--1" />
-                <span className="streetDash streetDash--2" />
-                <span className="streetDash streetDash--3" />
-                <span className="streetBus">
-                  <span className="streetBusGlass" />
-                  <span className="streetBusLamp streetBusLamp--l" />
-                  <span className="streetBusLamp streetBusLamp--r" />
+              <div className="gameArt gameArt--rush" aria-hidden="true">
+                <span className="rushSky" />
+                <span className="rushSun" />
+                <span className="rushTower rushTower--l1" />
+                <span className="rushTower rushTower--l2" />
+                <span className="rushTower rushTower--r1" />
+                <span className="rushTower rushTower--r2" />
+                <span className="rushRoad" />
+                <span className="rushKerb" />
+                <span className="rushDash rushDash--l1" />
+                <span className="rushDash rushDash--l2" />
+                <span className="rushDash rushDash--l3" />
+                <span className="rushDash rushDash--r1" />
+                <span className="rushDash rushDash--r2" />
+                <span className="rushDash rushDash--r3" />
+                <span className="rushCoin rushCoin--1" />
+                <span className="rushCoin rushCoin--2" />
+                <span className="rushCoin rushCoin--3" />
+                <span className="rushShadow" />
+                <span className="rushRunner">
+                  <span className="rushHead" />
+                  <span className="rushArm" />
+                  <span className="rushLeg rushLeg--l" />
+                  <span className="rushLeg rushLeg--r" />
                 </span>
-                <span className="episodeLabel">Game 03</span>
+                <span className="episodeLabel">Game 04</span>
               </div>
               <div className="cardContent">
-                <h3>Metro City Bus</h3>
+                <h3>Kianimation Endless Rush</h3>
                 <p>
-                  Drive a full-size city bus through a living 3D town. Run the
-                  route, pull up level with the kerb, watch the lights and keep
-                  your passengers comfortable.
+                  Sprint through five worlds that never stop coming —
+                  downtown, the market district, the greenbelt, a mountain
+                  pass and the night city. Dodge, jump, slide, and throw a
+                  punch when the street gets crowded. Spend your coins on a
+                  bicycle, a hoverboard or winged jet shoes, then grab a
+                  jetpack and take the run up onto the rooftops.
                 </p>
                 <div className="gameTags">
-                  <span>3D cockpit</span>
-                  <span>8 stops</span>
-                  <span>Live traffic</span>
-                  <span>Touch + keyboard</span>
+                  <span>Endless runner</span>
+                  <span>4 characters</span>
+                  <span>Character shop</span>
+                  <span>Jetpack + rooftops</span>
+                  <span>Arcade combat</span>
+                  <span>Power-ups</span>
+                  <span>Swipe + keyboard</span>
                 </div>
-                <button type="button" onClick={() => setBusOpen((open) => !open)}>
-                  {busOpen ? "Close game" : "Play now"}
+                <button type="button" onClick={() => setRushOpen((open) => !open)}>
+                  {rushOpen ? "Close game" : "Play now"}
                 </button>
               </div>
             </article>
           </div>
 
-          {busOpen && (
+          {rushOpen && (
             <div className="gameStageWrap">
-              <BusSimulator />
+              <Suspense fallback={<div className="gameLoading">Loading Endless Rush…</div>}>
+                <EndlessRush />
+              </Suspense>
             </div>
           )}
         </section>

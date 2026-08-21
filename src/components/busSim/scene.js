@@ -7,16 +7,33 @@
  * ------------------------------------------------------------------ */
 
 import {
-  drawSky, drawClouds, drawRoads, drawBuildings, drawProps, drawStops,
-  drawCar, drawPed, drawTrafficLight, drawBus, drawShadow, BUS, LAYER_GUIDE,
+  drawSky, drawClouds, drawTerrain, drawRoads, drawScenery, drawStreetProps,
+  drawStops, drawCar, drawPed, drawTrafficLight, drawBus, drawShadow,
+  skyFor, BUS, LAYER_GUIDE,
 } from "./render.js";
-import { BLOCK, GRID, ROAD_HALF, CITY_SPAN, clamp, lerp } from "./city.js";
+import {
+  GRID, LX, LZ, REGION, CELL_REGION,
+  roadHeightAt, groundHeightAt, vClass, hClass, clamp, lerp,
+} from "./city.js";
+import { stopCrowd, pedLook } from "./people.js";
 
 export const VIEWS = ["cockpit", "chase", "top"];
 
 /* ------------------------------- camera ------------------------------- */
 
-const camState = { x: 0, z: 0, yaw: 0, init: false };
+const OPENNESS = {
+  city: 0.6, town: 0.72, suburb: 0.78, airport: 0.9,
+  country: 1, forest: 0.8, mountain: 1, coast: 1,
+};
+
+const camState = { x: 0, z: 0, y: 0, yaw: 0, init: false };
+
+/* Reused every frame: the people the model layer is offered, and the
+   scratch the stop queue is laid out into. */
+const folk = [];
+const crowd = [];
+/* Only reached if a passenger model failed to load and the boxes stand in. */
+const SKIN_FALLBACK = ["#8d5524", "#c68642", "#5c3a21"];
 
 export function resetCamera() { camState.init = false; }
 
@@ -25,6 +42,7 @@ export function placeCamera(r, state, view, dt, shakeSeed) {
   const s = Math.sin(bus.yaw), c = Math.cos(bus.yaw);
   const shake = bus.shake;
   const jitter = shake > 0.01 ? shake * 0.35 : 0;
+  const pitchLean = bus.pitch || 0;
 
   if (view === "cockpit") {
     // driver sits front-left (Ghana drives on the right)
@@ -32,40 +50,58 @@ export function placeCamera(r, state, view, dt, shakeSeed) {
     const side = -0.78;
     r.cam.x = bus.x + s * fwd + c * side;
     r.cam.z = bus.z + c * fwd - s * side;
-    r.cam.y = 2.28 + Math.sin(shakeSeed * 37) * jitter * 0.4;
+    r.cam.y = bus.y + 2.28 + fwd * Math.sin(pitchLean) + Math.sin(shakeSeed * 37) * jitter * 0.4;
     r.cam.yaw = bus.yaw + Math.sin(shakeSeed * 23) * jitter * 0.03;
-    r.cam.pitch = -0.055 + Math.sin(shakeSeed * 41) * jitter * 0.02;
+    r.cam.pitch = -0.055 + pitchLean * 0.85 + Math.sin(shakeSeed * 41) * jitter * 0.02;
     r.cam.fov = 1.18;
-    r.cam.roll = -bus.lateralG * 0.035 * Math.sign(bus.steerAngle || 1);
+    // the driver leans with the body, so the horizon tips with it
+    r.cam.roll = (bus.roll || 0) * 0.8;
   } else if (view === "chase") {
     const back = 15.5, up = 6.6;
     const tx = bus.x - s * back;
     const tz = bus.z - c * back;
-    const k = 1 - Math.pow(0.0009, dt);
+    // never let a hill behind the bus swallow the camera
+    const ty = Math.max(bus.y + up, groundHeightAt(tx, tz) + 3.4);
+    /* Three separate lags. The old camera used one very short constant for
+       everything, which bolted it to the bus: it snapped round with every
+       steering input instead of swinging, and that stiffness was reading
+       as the *bus* moving unnaturally rather than the camera. */
+    const kPos = 1 - Math.pow(0.02, dt);      // ~0.26s, follows the body
+    const kUp = 1 - Math.pow(0.05, dt);       // ~0.33s, soaks up crests
+    const kYaw = 1 - Math.pow(0.11, dt);      // ~0.45s, swings round corners
     if (!camState.init) {
       camState.init = true;
-      camState.x = tx; camState.z = tz; camState.yaw = bus.yaw;
+      camState.x = tx; camState.z = tz; camState.y = ty; camState.yaw = bus.yaw;
     } else {
-      camState.x = lerp(camState.x, tx, k);
-      camState.z = lerp(camState.z, tz, k);
-      let dy = bus.yaw - camState.yaw;
+      camState.x = lerp(camState.x, tx, kPos);
+      camState.z = lerp(camState.z, tz, kPos);
+      camState.y = lerp(camState.y, ty, kUp);
+      /* Aim at a point in front of the bus instead of copying its heading.
+         A real chase shot pivots to keep the vehicle framed, so the camera
+         leads into a corner and trails out of it by itself. */
+      const want = Math.atan2(
+        bus.x + s * 9 - camState.x,
+        bus.z + c * 9 - camState.z,
+      );
+      let dy = want - camState.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
-      camState.yaw += dy * k;
+      camState.yaw += dy * kYaw;
     }
     r.cam.x = camState.x;
     r.cam.z = camState.z;
-    r.cam.y = up + jitter * 0.3;
+    r.cam.y = camState.y + jitter * 0.3;
     r.cam.yaw = camState.yaw;
-    r.cam.pitch = -0.19;
+    // look slightly down the hill the bus is on rather than at the sky
+    r.cam.pitch = clamp(-0.19 + pitchLean * 0.5, -0.5, 0.06);
     r.cam.fov = 1.12;
-    r.cam.roll = 0;
+    r.cam.roll = (bus.roll || 0) * 0.35;
   } else {
-    // high enough to clear the tallest roofs, otherwise walls splay out
-    // over the streets and the map becomes unreadable
+    // high enough to clear the tallest roofs and ridges, otherwise walls
+    // splay out over the streets and the map becomes unreadable
     r.cam.x = bus.x - s * 6;
     r.cam.z = bus.z - c * 6;
-    r.cam.y = 74;
+    r.cam.y = bus.y + 86;
     r.cam.yaw = bus.yaw;
     r.cam.pitch = -1.02;
     r.cam.fov = 1.14;
@@ -82,20 +118,21 @@ function drawGuide(r, state, t) {
     const [x, z] = g[i];
     if (!r.visible(x, z, 4)) continue;
     const d = r.depthOf(x, z);
-    if (d > 130) continue;
+    if (d > 150) continue;
     const [nx, nz] = g[i + 1];
     const dx = nx - x, dz = nz - z;
     const len = Math.hypot(dx, dz) || 1;
     const ux = dx / len, uz = dz / len;
     const px = uz, pz = -ux;                     // perpendicular
+    const y = roadHeightAt(x, z) + 0.07;
     const wave = (Math.sin(t * 3 - i * 0.55) + 1) / 2;
-    const alpha = (0.2 + wave * 0.5) * clamp(1 - d / 130, 0, 1);
+    const alpha = (0.2 + wave * 0.5) * clamp(1 - d / 150, 0, 1);
     const half = 1.5, back = 1.9, tip = 1.9;
     r.quad(
-      [x + ux * tip, 0.035, z + uz * tip],
-      [x + px * half - ux * back * 0.1, 0.035, z + pz * half - uz * back * 0.1],
-      [x - ux * back * 0.55, 0.035, z - uz * back * 0.55],
-      [x - px * half - ux * back * 0.1, 0.035, z - pz * half - uz * back * 0.1],
+      [x + ux * tip, y, z + uz * tip],
+      [x + px * half - ux * back * 0.1, y, z + pz * half - uz * back * 0.1],
+      [x - ux * back * 0.55, y, z - uz * back * 0.55],
+      [x - px * half - ux * back * 0.1, y, z - pz * half - uz * back * 0.1],
       "#ffd24d", { alpha, layer: LAYER_GUIDE },
     );
   }
@@ -103,53 +140,136 @@ function drawGuide(r, state, t) {
 
 /* ------------------------------ the world ------------------------------ */
 
-export function drawWorld(ctx, r, state, view, t) {
+export function drawWorld(ctx, r, state, view, t, vehicles, quality = 1) {
   const { city, bus } = state;
   const W = r.width, H = r.height;
+  const reg = REGION[state.region];
+  const tunnel = state.tunnel || 0;
+  const q = clamp(quality, 0.6, 1);
+  const low = !!(vehicles && vehicles.lowQuality) || q < 0.86;
 
-  r.setFog(state.dusk ? "#3a3a4d" : "#b9cbdd");
-  drawSky(ctx, r, W, H, state.dusk);
-  drawClouds(ctx, r, W, t, state.dusk);
+  /* Downtown you cannot see 300m in any direction anyway — the buildings
+     are in the way — so the city buys its frame rate back by not drawing
+     what the skyline already hides. Open country keeps the long view. */
+  r.setDrawDist((low ? 250 : 320) * (OPENNESS[reg.key] || 1) * q);
+  const sky = skyFor(state.dusk);
+  r.setFog(state.dusk ? sky.fog : blendFog(sky.fog, reg.key));
+  drawSky(ctx, r, W, H, state.dusk, reg.ground);
+  if (tunnel < 0.9) drawClouds(ctx, r, W, t, state.dusk);
 
   r.beginFrame();
+  drawTerrain(r, low);
   drawRoads(r);
   drawGuide(r, state, t);
   drawStops(r, city.stops, state.activeStopId, t);
-  drawBuildings(r, city.buildings);
-  drawProps(r, city.props, state.dusk);
+  drawScenery(r, city, state.dusk);
+  drawStreetProps(r, city, state.dusk);
 
   for (let i = 0; i < city.lights.length; i += 1) {
     const l = city.lights[i];
     if (r.visible(l.x, l.z, 16)) drawTrafficLight(r, l, t);
   }
 
+  /* Everybody the glTF layer might draw, gathered in one list: the queue
+     at the stop ahead first, since that is what the player pulls up to and
+     looks straight at, then whoever is walking nearby. */
+  folk.length = 0;
+  const stop = state.activeStopId >= 0 ? city.stops[state.activeStopId] : null;
+  if (stop && r.visible(stop.shelterX, stop.shelterZ, 16)) {
+    stopCrowd(stop, stop.waiting.length, crowd);
+    for (let i = 0; i < crowd.length; i += 1) folk.push(crowd[i]);
+  }
+  /* Any other stop close enough to read also gets its queue. An empty
+     shelter passed at 40m says nobody in this city catches the bus. */
+  for (let i = 0; i < city.stops.length; i += 1) {
+    const s = city.stops[i];
+    if (s === stop || s.served) continue;
+    if (r.depthOf(s.shelterX, s.shelterZ) > 90) continue;
+    if (!r.visible(s.shelterX, s.shelterZ, 16)) continue;
+    stopCrowd(s, Math.min(4, s.waiting.length), crowd);
+    for (let k = 0; k < crowd.length; k += 1) folk.push(crowd[k]);
+  }
+  const crowdCount = folk.length;
+  for (let i = 0; i < state.peds.length; i += 1) {
+    const p = state.peds[i];
+    if (!r.visible(p.x, p.z, 3)) continue;
+    const look = pedLook(p);
+    folk.push({
+      x: p.x, y: p.y || 0, z: p.z, yaw: p.yaw,
+      kind: look.kind, shirt: look.shirt, trous: look.trous,
+      scale: look.scale, lean: look.lean, ped: p,
+    });
+  }
+
+  /* One three.js pass covers the bus, the nearby traffic and the nearby
+     people. Whatever it could not fit falls back to the procedural shapes,
+     so distant vehicles still appear and nothing vanishes if a model fails
+     to load. */
+  const shot = vehicles && vehicles.ready
+    ? vehicles.render({
+        bus, cars: state.cars, folk, cam: r.cam, aspect: W / H,
+        dusk: state.dusk || tunnel > 0.35, drawBus: view !== "cockpit", W, H,
+      })
+    : null;
+  const modelled = shot ? shot.drawn : null;
+  const modelledFolk = shot ? shot.folk : null;
+
   for (let i = 0; i < state.cars.length; i += 1) {
     const c = state.cars[i];
     if (!r.visible(c.x, c.z, 5)) continue;
-    drawShadow(r, c.x, c.z, c.w * 1.15, c.l * 1.1, c.yaw, 0.24);
-    drawCar(r, c);
+    drawShadow(r, c.x, c.z, c.w * 1.15, c.l * 1.1, c.yaw, 0.24, c.y);
+    if (!modelled || !modelled.has(i)) drawCar(r, c);
   }
-  for (let i = 0; i < state.peds.length; i += 1) drawPed(r, state.peds[i]);
-
-  // waiting passengers at the active stop
-  const stop = state.activeStopId >= 0 ? city.stops[state.activeStopId] : null;
-  if (stop && r.visible(stop.shelterX, stop.shelterZ, 12)) {
-    const n = Math.min(6, stop.waiting.length);
-    for (let i = 0; i < n; i += 1) {
-      const off = (i - (n - 1) / 2) * 1.05;
-      const px = stop.shelterX + (stop.vertical ? 0.6 : off);
-      const pz = stop.shelterZ + (stop.vertical ? off : 0.6);
+  for (let i = 0; i < folk.length; i += 1) {
+    if (modelledFolk && modelledFolk.has(i)) {
+      // a contact shadow, or a modelled figure looks pasted onto the pavement
+      const f = folk[i];
+      drawShadow(r, f.x, f.z, 0.58, 0.44, f.yaw, 0.2, f.y);
+      continue;
+    }
+    const f = folk[i];
+    if (f.ped) drawPed(r, f.ped);
+    else if (i < crowdCount) {
       drawPed(r, {
-        x: px, z: pz, yaw: stop.heading + Math.PI, phase: t * 2 + i,
-        shirt: ["#e05b4a", "#3f7fd0", "#f2c14e", "#5cae72", "#b06cc4", "#2f9fb5"][i % 6],
-        trouser: "#2f3640", skin: ["#8d5524", "#c68642", "#5c3a21"][i % 3],
+        x: f.x, y: f.y, z: f.z, yaw: f.yaw, phase: t * 2 + i,
+        shirt: f.shirt, trouser: f.trous, skin: SKIN_FALLBACK[i % SKIN_FALLBACK.length],
       });
     }
   }
 
+  const busModelled = !!(shot && vehicles.busReady);
   if (view !== "cockpit") {
-    drawShadow(r, bus.x, bus.z, BUS.wid * 1.25, BUS.len * 1.05, bus.yaw, 0.34);
-    drawBus(r, bus, t);
+    /* A hard slab of a shadow read fine under the old box bus; beside the
+       glTF model it needs to be a tighter, lighter contact patch, layered
+       to fake a soft edge. */
+    if (busModelled) {
+      drawShadow(r, bus.x, bus.z, BUS.wid * 1.18, BUS.len * 0.99, bus.yaw, 0.17, bus.y);
+      drawShadow(r, bus.x, bus.z, BUS.wid * 0.86, BUS.len * 0.93, bus.yaw, 0.16, bus.y);
+    } else {
+      drawShadow(r, bus.x, bus.z, BUS.wid * 1.25, BUS.len * 1.05, bus.yaw, 0.34, bus.y);
+      drawBus(r, bus, t);
+    }
+  }
+
+  /* The vehicle layer arrives as a few depth-banded slices. Each one takes
+     its own slot in the painter's order, so a car behind a building is
+     painted before that building and stays hidden, while a car in front of
+     it paints after. Compositing them all at one depth is what used to make
+     traffic show through walls and appear to slide about as the bus moved. */
+  const sprites = [];
+  if (shot) {
+    /* Source rect must be each slice canvas's own pixel size, not the CSS
+       size: above 1x device pixel ratio the backing store is larger, and
+       using the CSS size would blit only its top-left corner. */
+    for (let i = 0; i < shot.slices.length; i += 1) {
+      const s = shot.slices[i];
+      sprites.push({
+        depth: isFinite(s.depth) ? s.depth : r.depthOf(bus.x, bus.z),
+        draw: (c) => c.drawImage(
+          s.canvas, 0, 0, s.srcW, s.srcH, s.rx, s.ry, s.bufW, s.bufH,
+        ),
+      });
+    }
   }
 
   ctx.save();
@@ -158,7 +278,7 @@ export function drawWorld(ctx, r, state, view, t) {
     ctx.rotate(r.cam.roll);
     ctx.translate(-W / 2, -H / 2);
   }
-  r.paint(ctx);
+  r.paint(ctx, sprites);
   ctx.restore();
 
   if (state.dusk) {
@@ -170,19 +290,45 @@ export function drawWorld(ctx, r, state, view, t) {
     ctx.fillStyle = "#8288b4";
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
-
-    // headlights wash the road back in
-    const hy = r.horizonY();
-    const g = ctx.createRadialGradient(W / 2, H * 0.78, 8, W / 2, H * 0.78, H * 0.8);
-    g.addColorStop(0, "rgba(255,244,208,0.30)");
-    g.addColorStop(0.45, "rgba(255,240,200,0.11)");
-    g.addColorStop(1, "rgba(255,240,200,0)");
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = g;
-    ctx.fillRect(0, Math.max(0, hy - 20), W, H);
-    ctx.restore();
+    headlightWash(ctx, r, W, H);
   }
+
+  if (tunnel > 0.01) {
+    // inside the bore: dim everything, then wash the road back in
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    const k = 1 - tunnel * 0.62;
+    ctx.fillStyle = `rgb(${Math.round(255 * k)},${Math.round(250 * k)},${Math.round(238 * k)})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    if (!state.dusk) headlightWash(ctx, r, W, H, tunnel);
+  }
+}
+
+function headlightWash(ctx, r, W, H, strength = 1) {
+  const hy = r.horizonY();
+  const g = ctx.createRadialGradient(W / 2, H * 0.78, 8, W / 2, H * 0.78, H * 0.8);
+  g.addColorStop(0, `rgba(255,244,208,${0.30 * strength})`);
+  g.addColorStop(0.45, `rgba(255,240,200,${0.11 * strength})`);
+  g.addColorStop(1, "rgba(255,240,200,0)");
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = g;
+  ctx.fillRect(0, Math.max(0, hy - 20), W, H);
+  ctx.restore();
+}
+
+/* Each region hazes a little differently — sea air on the coast, a cooler
+   haze up in the hills. */
+const FOG_TINT = {
+  coast: "#cfdce4",
+  mountain: "#c3cdd6",
+  forest: "#b8c8c2",
+  country: "#c4d0cd",
+  airport: "#c2cedb",
+};
+function blendFog(base, key) {
+  return FOG_TINT[key] || base;
 }
 
 /* ------------------------------- cockpit ------------------------------- */
@@ -311,14 +457,14 @@ export function roundRect(ctx, x, y, w, h, r) {
 export function drawStopMarker(ctx, r, state, W, H) {
   if (state.activeStopId < 0) return;
   const s = state.city.stops[state.activeStopId];
-  const p = r.project(s.shelterX, 6.4, s.shelterZ);
+  const p = r.project(s.shelterX, s.shelterY + 6.4, s.shelterZ);
   const dist = Math.hypot(state.bus.x - s.x, state.bus.z - s.z);
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   if (p && p.x > -60 && p.x < W + 60) {
-    const scale = clamp(1 - p.d / 260, 0.42, 1);
+    const scale = clamp(1 - p.d / 300, 0.42, 1);
     const y = clamp(p.y, 60, H - 160);
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = "rgba(12,16,22,0.72)";
@@ -359,15 +505,24 @@ export function drawStopMarker(ctx, r, state, W, H) {
 
 /* -------------------------------- minimap -------------------------------- */
 
+/* The whole world at once: at roughly a kilometre and a half across it
+   still reads at 150px, and it is the only place the player can see the
+   shape of the route across the regions. */
+const MAP_COL = {
+  city: "#5c6270", suburb: "#4f6349", town: "#5e6247", country: "#5d6a3c",
+  forest: "#33512f", mountain: "#5a564c", coast: "#6b6650", airport: "#54595c",
+};
+
 export function drawMinimap(ctx, state, x, y, size) {
   const { city, bus } = state;
-  const pad = 6;
+  const pad = 5;
   const inner = size - pad * 2;
-  const scale = inner / (CITY_SPAN + BLOCK * 0.5);
-  const ox = x + pad + BLOCK * 0.25 * scale;
-  const oy = y + pad + BLOCK * 0.25 * scale;
+  const span = Math.max(LX[GRID], LZ[GRID]);
+  const scale = inner / span;
+  const ox = x + pad + (inner - LX[GRID] * scale) / 2;
+  const oy = y + pad + (inner - LZ[GRID] * scale) / 2;
   const px = (wx) => ox + wx * scale;
-  const py = (wz) => oy + (CITY_SPAN - wz) * scale;
+  const py = (wz) => oy + (LZ[GRID] - wz) * scale;
 
   ctx.save();
   ctx.fillStyle = "rgba(9,13,18,0.82)";
@@ -380,42 +535,80 @@ export function drawMinimap(ctx, state, x, y, size) {
   roundRect(ctx, x, y, size, size, 12);
   ctx.clip();
 
-  ctx.strokeStyle = "rgba(150,168,186,0.36)";
-  ctx.lineWidth = Math.max(1.6, ROAD_HALF * 2 * scale);
+  // region blocks
+  for (let i = 0; i < GRID; i += 1) {
+    for (let j = 0; j < GRID; j += 1) {
+      ctx.fillStyle = MAP_COL[REGION[CELL_REGION[i * GRID + j]].key];
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(
+        px(LX[i]), py(LZ[j + 1]),
+        (LX[i + 1] - LX[i]) * scale + 0.6, (LZ[j + 1] - LZ[j]) * scale + 0.6,
+      );
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // sea to the west
+  ctx.fillStyle = "rgba(38,95,124,0.85)";
+  ctx.fillRect(x, y, px(LX[0]) - x, size);
+
+  // roads
+  ctx.strokeStyle = "rgba(186,198,210,0.4)";
+  ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 0; i <= GRID; i += 1) {
-    ctx.moveTo(px(i * BLOCK), py(0)); ctx.lineTo(px(i * BLOCK), py(CITY_SPAN));
-    ctx.moveTo(px(0), py(i * BLOCK)); ctx.lineTo(px(CITY_SPAN), py(i * BLOCK));
+    ctx.moveTo(px(LX[i]), py(LZ[0])); ctx.lineTo(px(LX[i]), py(LZ[GRID]));
+  }
+  for (let j = 0; j <= GRID; j += 1) {
+    ctx.moveTo(px(LX[0]), py(LZ[j])); ctx.lineTo(px(LX[GRID]), py(LZ[j]));
+  }
+  ctx.stroke();
+
+  // highways stand out
+  ctx.strokeStyle = "rgba(240,214,120,0.7)";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  for (let i = 0; i <= GRID; i += 1) {
+    if (vClass(i).name !== "highway") continue;
+    ctx.moveTo(px(LX[i]), py(LZ[0])); ctx.lineTo(px(LX[i]), py(LZ[GRID]));
+  }
+  for (let j = 0; j <= GRID; j += 1) {
+    if (hClass(j).name !== "highway") continue;
+    ctx.moveTo(px(LX[0]), py(LZ[j])); ctx.lineTo(px(LX[GRID]), py(LZ[j]));
   }
   ctx.stroke();
 
   // route line
   if (state.guide && state.guide.length > 1) {
-    ctx.strokeStyle = "rgba(245,197,24,0.85)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(245,197,24,0.9)";
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(px(bus.x), py(bus.z));
     for (const [gx, gz] of state.guide) ctx.lineTo(px(gx), py(gz));
     ctx.stroke();
   }
 
-  // traffic
-  ctx.fillStyle = "rgba(220,228,238,0.55)";
-  for (const c of state.cars) ctx.fillRect(px(c.x) - 1, py(c.z) - 1, 2.4, 2.4);
+  // remaining stops, joined in route order
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  city.stops.forEach((s, i) => {
+    if (i === 0) ctx.moveTo(px(s.x), py(s.z)); else ctx.lineTo(px(s.x), py(s.z));
+  });
+  ctx.stroke();
 
-  // stops
   for (const s of city.stops) {
     const active = s.id === state.activeStopId;
     const done = s.served;
     ctx.beginPath();
-    ctx.arc(px(s.x), py(s.z), active ? 4.6 : 3, 0, Math.PI * 2);
-    ctx.fillStyle = active ? "#ffd84d" : done ? "rgba(80,200,120,0.8)" : "rgba(255,255,255,0.42)";
+    ctx.arc(px(s.x), py(s.z), active ? 4.2 : 2.6, 0, Math.PI * 2);
+    ctx.fillStyle = active ? "#ffd84d" : done ? "rgba(80,200,120,0.85)" : "rgba(255,255,255,0.5)";
     ctx.fill();
     if (active) {
       ctx.strokeStyle = "rgba(255,216,77,0.5)";
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(px(s.x), py(s.z), 8 + Math.sin(state.t * 4) * 2, 0, Math.PI * 2);
+      ctx.arc(px(s.x), py(s.z), 7 + Math.sin(state.t * 4) * 2, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -426,7 +619,7 @@ export function drawMinimap(ctx, state, x, y, size) {
   ctx.rotate(-bus.yaw);
   ctx.fillStyle = "#4ea3ff";
   ctx.beginPath();
-  ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(0, 3.4); ctx.lineTo(-5, 6);
+  ctx.moveTo(0, -6.5); ctx.lineTo(4.5, 5.5); ctx.lineTo(0, 3); ctx.lineTo(-4.5, 5.5);
   ctx.closePath(); ctx.fill();
   ctx.restore();
 

@@ -45,6 +45,23 @@ const KEY_MAP = {
   KeyV: "switch",
 };
 
+/* media queries and the vendor prefixed fullscreen API, guarded so the
+   module still imports in a non browser environment */
+const matches = (query) =>
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(query).matches
+    : false;
+
+const listen = (mq, fn) => (mq.addEventListener ? mq.addEventListener("change", fn) : mq.addListener(fn));
+const unlisten = (mq, fn) => (mq.removeEventListener ? mq.removeEventListener("change", fn) : mq.removeListener(fn));
+
+const fullscreenElement = () =>
+  (typeof document === "undefined" ? null : document.fullscreenElement || document.webkitFullscreenElement);
+
+const fullscreenSupported = () =>
+  typeof document !== "undefined"
+  && !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+
 const shortName = (name) => {
   const parts = name.split(" ");
   return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : name;
@@ -272,7 +289,7 @@ function SquadEditor({ club, setup, onChange, onInspect, side }) {
 
 /* ------------------------------- match HUD ------------------------------ */
 
-const MatchHud = memo(function MatchHud({ hud, home, away, onPause, onSubs }) {
+const MatchHud = memo(function MatchHud({ hud, home, away, onPause, onSubs, onFullscreen, fullscreen, canFullscreen }) {
   const c = hud.controlled;
   const stamina = c ? c.stamina : 100;
   return (
@@ -292,6 +309,16 @@ const MatchHud = memo(function MatchHud({ hud, home, away, onPause, onSubs }) {
           <em>{hud.half === 1 ? "1st half" : hud.half === 2 ? "2nd half" : hud.half === 3 ? "ET 1" : "ET 2"}</em>
         </div>
         <div className="kflHudButtons">
+          {canFullscreen && (
+            <button
+              type="button"
+              className="kflIconBtn"
+              onClick={onFullscreen}
+              aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+            >
+              {fullscreen ? "⤡" : "⤢"}
+            </button>
+          )}
           <button type="button" className="kflIconBtn" onClick={onSubs} aria-label="Substitutions">⇄</button>
           <button type="button" className="kflIconBtn" onClick={onPause} aria-label="Pause">II</button>
         </div>
@@ -630,9 +657,14 @@ export default function KianimationFootball() {
   const [volumes, setVolumes] = useState({ master: 0.9, sfx: 0.75, music: 0.35, crowd: 0.5, commentary: 1 });
   const [speechOn, setSpeechOn] = useState(true);
   const [tickerLine, setTickerLine] = useState("");
-  const [portrait, setPortrait] = useState(false);
+  const [portrait, setPortrait] = useState(() => matches("(orientation: portrait)"));
+  const [touchDevice, setTouchDevice] = useState(() => matches("(hover: none) and (pointer: coarse)"));
+  const [fullscreen, setFullscreen] = useState(false);
+  const [rotateDismissed, setRotateDismissed] = useState(false);
   const [speechSupported] = useState(() => typeof window !== "undefined" && "speechSynthesis" in window);
+  const [canFullscreen] = useState(fullscreenSupported);
 
+  const rootRef = useRef(null);
   const canvasRef = useRef(null);
   const worldRef = useRef(null);
   const rendererRef = useRef(null);
@@ -649,6 +681,85 @@ export default function KianimationFootball() {
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  /* A phone or tablet held sideways (or any fullscreen session) gets the
+     immersive layout: the pitch fills the screen and the pads sit in the
+     margins either side of it. */
+  const inMatch = screen === "match";
+  const immersive = inMatch && (fullscreen || (touchDevice && !portrait));
+  const showRotateNotice = inMatch && touchDevice && portrait && !fullscreen;
+
+  /* --------------------- orientation and fullscreen --------------------- */
+
+  useEffect(() => {
+    const orientationQuery = window.matchMedia("(orientation: portrait)");
+    const touchQuery = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const syncTouch = () => setTouchDevice(touchQuery.matches);
+    const syncOrientation = () => {
+      setPortrait(orientationQuery.matches);
+      /* re-read the pointer type too: some browsers only settle it once
+         the device has finished rotating */
+      syncTouch();
+    };
+
+    syncOrientation();
+    syncTouch();
+    listen(orientationQuery, syncOrientation);
+    listen(touchQuery, syncTouch);
+    /* Belt and braces: not every browser fires the media query change on a
+       rotation, but they all fire resize, and some versions of iOS only
+       report the new orientation a beat after the event. */
+    const late = () => {
+      syncOrientation();
+      setTimeout(syncOrientation, 150);
+    };
+    window.addEventListener("orientationchange", late);
+    window.addEventListener("resize", syncOrientation);
+    window.visualViewport?.addEventListener("resize", syncOrientation);
+
+    return () => {
+      unlisten(orientationQuery, syncOrientation);
+      unlisten(touchQuery, syncTouch);
+      window.removeEventListener("orientationchange", late);
+      window.removeEventListener("resize", syncOrientation);
+      window.visualViewport?.removeEventListener("resize", syncOrientation);
+    };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(!!fullscreenElement());
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
+
+  /* Switching between the inline and immersive layouts resizes the canvas
+     box without necessarily resizing the window, so re-measure it. */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => rendererRef.current?.resize());
+    return () => cancelAnimationFrame(id);
+  }, [immersive, fullscreen]);
+
+  /* stop the page behind the game from scrolling while it fills the screen */
+  useEffect(() => {
+    if (!immersive) return undefined;
+    document.body.classList.add("kflLockScroll");
+    return () => document.body.classList.remove("kflLockScroll");
+  }, [immersive]);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    /* Safari on iPhone refuses element fullscreen outright — the landscape
+       layout is the fallback there, so a refusal is not an error. */
+    const request = fullscreenElement()
+      ? (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)
+      : (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+    if (request && typeof request.catch === "function") request.catch(() => {});
+  }, []);
 
   /* ------------------------------ setup flow ---------------------------- */
 
@@ -708,6 +819,7 @@ export default function KianimationFootball() {
       userTakesPenalty: false,
     });
     setOverlay("none");
+    setRotateDismissed(false);
     setMatchKey((k) => k + 1);
     setScreen("match");
   }, [homeId, awayId, homeSetup, awaySetup, userSide, halfSeconds, difficulty, knockout, volumes, muted, speechOn, home.short, away.short]);
@@ -727,13 +839,11 @@ export default function KianimationFootball() {
     let hudAcc = 0;
     let excitementAcc = 0;
 
-    const onResize = () => {
-      renderer.resize();
-      setPortrait(window.innerHeight > window.innerWidth && window.innerWidth < 820);
-    };
+    const onResize = () => renderer.resize();
     onResize();
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
     /* the stage also changes size when the page around it reflows, so
        watch the canvas itself rather than only the window */
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
@@ -783,6 +893,7 @@ export default function KianimationFootball() {
       observer?.disconnect();
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
     };
   }, [screen, matchKey]);
 
@@ -909,6 +1020,7 @@ export default function KianimationFootball() {
   const quitToSetup = () => {
     audioRef.current?.stopCrowd();
     audioRef.current?.cancelSpeech();
+    if (fullscreenElement()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
     setOverlay("none");
     setScreen("setup");
   };
@@ -925,6 +1037,13 @@ export default function KianimationFootball() {
           </div>
           <span className="kflBadge">11 v 11</span>
         </header>
+
+        {touchDevice && portrait && (
+          <p className="kflRotateInline">
+            <span aria-hidden="true">⟳</span>
+            Rotate your phone for the best gameplay — sideways, the pitch fills the screen.
+          </p>
+        )}
 
         <div className="kflModes">
           {MODES.map((m) => (
@@ -1018,6 +1137,13 @@ export default function KianimationFootball() {
           <button type="button" className="kflGhost kflGhost--sm" onClick={() => setScreen("setup")}>← Back</button>
         </header>
 
+        {touchDevice && portrait && (
+          <p className="kflRotateInline">
+            <span aria-hidden="true">⟳</span>
+            Pick your team here, then rotate your phone for the best gameplay.
+          </p>
+        )}
+
         <SquadEditor
           club={club}
           setup={setup}
@@ -1044,7 +1170,10 @@ export default function KianimationFootball() {
   const ballWithUser = hud?.ballWithUser ?? false;
 
   return (
-    <div className="kfl kfl--match">
+    <div
+      ref={rootRef}
+      className={`kfl kfl--match${immersive ? " is-immersive" : ""}${portrait ? " is-portrait" : ""}`}
+    >
       <div className="kflStage">
         <canvas ref={canvasRef} className="kflCanvas" />
 
@@ -1055,6 +1184,9 @@ export default function KianimationFootball() {
             away={away}
             onPause={() => setOverlay("pause")}
             onSubs={() => setOverlay("subs")}
+            onFullscreen={toggleFullscreen}
+            fullscreen={fullscreen}
+            canFullscreen={canFullscreen}
           />
         )}
 
@@ -1086,8 +1218,31 @@ export default function KianimationFootball() {
           onShootEnd={releaseShot}
         />
 
-        {portrait && (
-          <div className="kflRotate">Rotate your device for a wider view of the pitch</div>
+        {showRotateNotice && !rotateDismissed && (
+          <div className="kflRotateCard" role="status">
+            <span className="kflRotateIcon" aria-hidden="true">⟳</span>
+            <strong>Rotate your phone for the best gameplay</strong>
+            <p>Sideways, the pitch fills the screen with the controls under your thumbs.</p>
+            <div className="kflRotateActions">
+              <button type="button" className="kflGhost kflGhost--sm" onClick={() => setRotateDismissed(true)}>
+                Play in portrait
+              </button>
+              {canFullscreen && (
+                <button type="button" className="kflGhost kflGhost--sm" onClick={toggleFullscreen}>
+                  Full screen
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {showRotateNotice && rotateDismissed && (
+          <button
+            type="button"
+            className="kflRotate"
+            onClick={() => setRotateDismissed(false)}
+          >
+            <span aria-hidden="true">⟳</span> Rotate your phone for the best gameplay
+          </button>
         )}
       </div>
 
@@ -1100,6 +1255,11 @@ export default function KianimationFootball() {
               <button type="button" className="kflGhost" onClick={() => setOverlay("subs")}>Substitutions</button>
               <button type="button" className="kflGhost" onClick={() => setOverlay("stats")}>Match stats</button>
               <button type="button" className="kflGhost" onClick={() => setOverlay("audio")}>Sound</button>
+              {canFullscreen && (
+                <button type="button" className="kflGhost" onClick={toggleFullscreen}>
+                  {fullscreen ? "Exit full screen" : "Full screen"}
+                </button>
+              )}
               <button type="button" className="kflGhost" onClick={() => setOverlay("help")}>Controls</button>
               <button type="button" className="kflGhost" onClick={quitToSetup}>Quit match</button>
             </div>

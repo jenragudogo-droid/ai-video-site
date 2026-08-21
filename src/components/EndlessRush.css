@@ -1,0 +1,558 @@
+/* ------------------------------------------------------------------ *
+ * Kianimation Endless Rush — shell, overlays and cards.
+ * The score, coins, distance, power-up pills and zone banner are all
+ * painted on the canvas; everything in this file is chrome around it.
+ * ------------------------------------------------------------------ */
+
+.krush {
+  --krush-gold: #f4b965;
+  --krush-violet: #9e62ff;
+  --krush-ink: #07070a;
+  --krush-panel: rgba(11, 13, 19, 0.92);
+  --krush-line: rgba(255, 255, 255, 0.12);
+  --krush-text: #f6f2e9;
+  --krush-dim: rgba(246, 242, 233, 0.62);
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 360px;
+  max-height: min(76vh, 760px);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0a0d14;
+  border: 1px solid var(--krush-line);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+  color: var(--krush-text);
+  font-family: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Only a live run swallows touch gestures. On the menu, the pause card
+   and the results card the page scrolls normally, which matters a lot
+   when the game is one section of a long page on a phone. */
+.krush.is-live { touch-action: none; }
+
+.krush.is-full {
+  border-radius: 0;
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.krushCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.krushGestures {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  touch-action: none;
+}
+
+/* ------------------------------ quick bar ------------------------------ */
+
+.krushQuick {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 5;
+}
+
+.krushQuick button {
+  min-width: 40px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--krush-line);
+  background: rgba(9, 12, 18, 0.72);
+  color: var(--krush-text);
+  font: 600 13px/1 inherit;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.krushQuick button:hover {
+  background: rgba(26, 32, 44, 0.9);
+  border-color: rgba(244, 185, 101, 0.5);
+}
+
+/* ------------------------------- overlays ------------------------------- */
+
+.krushOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vw, 28px);
+  background: radial-gradient(circle at 50% 40%, rgba(6, 8, 14, 0.55), rgba(4, 5, 9, 0.86));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.krushCard {
+  width: min(560px, 100%);
+  padding: clamp(18px, 3vw, 30px);
+  border-radius: 16px;
+  border: 1px solid var(--krush-line);
+  background: var(--krush-panel);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.krushCard--slim { width: min(400px, 100%); text-align: center; }
+
+.krushEyebrow {
+  margin: 0 0 10px;
+  color: var(--krush-gold);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.krushCard h3 {
+  margin: 0 0 12px;
+  font-size: clamp(1.5rem, 3.4vw, 2.2rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+
+.krushLead {
+  margin: 0 0 20px;
+  color: var(--krush-dim);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.krushCause {
+  margin: -4px 0 18px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 106, 77, 0.28);
+  background: rgba(255, 106, 77, 0.1);
+  color: #ffc0ae;
+  font-size: 0.8rem;
+}
+
+/* -------------------------------- stats -------------------------------- */
+
+.krushStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 14px 0;
+  border-top: 1px solid var(--krush-line);
+  border-bottom: 1px solid var(--krush-line);
+}
+
+.krushStats div { display: grid; gap: 3px; min-width: 0; }
+.krushStats strong { font-size: 1.05rem; letter-spacing: -0.02em; }
+.krushStats span { color: var(--krush-dim); font-size: 0.62rem; letter-spacing: 0.05em; }
+
+.krushScore {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(120deg, rgba(244, 185, 101, 0.16), rgba(158, 98, 255, 0.12));
+  border: 1px solid rgba(244, 185, 101, 0.3);
+}
+
+.krushScore span { color: var(--krush-dim); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.krushScore strong { font-size: clamp(1.7rem, 5vw, 2.5rem); letter-spacing: -0.04em; color: var(--krush-gold); }
+
+.krushTally {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 18px;
+}
+
+.krushTally li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.78rem;
+}
+
+.krushTally span { color: var(--krush-dim); }
+.krushTally b { font-weight: 600; }
+
+/* ------------------------------- actions ------------------------------- */
+
+.krushActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.krushActions button {
+  flex: 1 1 auto;
+  min-width: 118px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: 600 0.82rem/1 inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.krushPrimary { background: var(--krush-gold); color: #16110a; }
+.krushPrimary:hover { transform: translateY(-1px); background: #ffcb80; }
+
+.krushGhost { background: rgba(255, 255, 255, 0.05); border-color: var(--krush-line); color: var(--krush-text); }
+.krushGhost:hover { background: rgba(255, 255, 255, 0.11); border-color: rgba(244, 185, 101, 0.45); }
+
+/* ------------------------------- controls ------------------------------- */
+
+.krushKeys {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 16px;
+}
+
+.krushKeys li { display: flex; align-items: center; gap: 10px; font-size: 0.76rem; color: var(--krush-dim); }
+
+.krushKeys kbd {
+  flex: 0 0 auto;
+  min-width: 74px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--krush-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--krush-text);
+  font: 600 0.68rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+
+.krushKeys--compact { margin-top: 16px; text-align: left; }
+
+.krushPowers {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--krush-line);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 18px;
+}
+
+.krushPowers li { display: flex; gap: 10px; align-items: flex-start; }
+
+.krushPowers b {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--krush-line);
+  font-size: 0.85rem;
+}
+
+.krushPowers div { display: grid; gap: 2px; min-width: 0; }
+.krushPowers strong { font-size: 0.78rem; }
+.krushPowers span { color: var(--krush-dim); font-size: 0.7rem; line-height: 1.45; }
+
+.krushToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--krush-line);
+}
+
+.krushToggles label { display: inline-flex; align-items: center; gap: 8px; font-size: 0.76rem; color: var(--krush-dim); cursor: pointer; }
+.krushToggles input { accent-color: var(--krush-gold); width: 15px; height: 15px; }
+
+/* ----------------------------- attack button ----------------------------- */
+
+/* Sits above the gesture layer, bottom-right, where a right thumb rests
+   in portrait. It stops the pointer event reaching `.krushGestures`, so a
+   jab is never also read as a tap-to-jump. Deliberately large: 76px is
+   comfortably past the 44px minimum and it is pressed under pressure. */
+
+.krushFight {
+  position: absolute;
+  right: clamp(12px, 3.5vw, 26px);
+  bottom: clamp(12px, 4vw, 26px);
+  z-index: 4;
+  width: clamp(64px, 17vw, 84px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 106, 77, 0.55);
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 140, 96, 0.42), rgba(140, 40, 24, 0.34) 62%),
+    rgba(12, 9, 10, 0.5);
+  color: #ffd9cb;
+  font: 700 0.7rem/1 inherit;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  touch-action: none;
+  transition: transform 0.09s ease, background 0.09s ease;
+}
+
+.krushFight:active {
+  transform: scale(0.93);
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 176, 130, 0.6), rgba(170, 56, 32, 0.44) 62%),
+    rgba(12, 9, 10, 0.5);
+}
+
+/* A mouse has a keyboard next to it; the on-screen button is for touch. */
+@media (hover: hover) and (pointer: fine) {
+  .krushFight { opacity: 0.42; width: 62px; font-size: 0.62rem; }
+  .krushFight:hover { opacity: 1; }
+}
+
+/* ---------------------------- selected character ---------------------------- */
+
+.krushPicked {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--krush-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.krushPicked:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(244, 185, 101, 0.45); }
+
+.krushPickedDot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.07);
+}
+
+.krushPickedText { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.krushPickedText strong { font-size: 0.84rem; }
+.krushPickedText em { color: var(--krush-dim); font-size: 0.7rem; font-style: normal; }
+.krushPickedGo { flex: 0 0 auto; color: var(--krush-gold); font-size: 0.72rem; font-weight: 600; }
+
+/* --------------------------------- shop --------------------------------- */
+
+.krushCard--shop { width: min(680px, 100%); }
+
+.krushShopHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.krushShopHead h3 { font-size: clamp(1.3rem, 3vw, 1.8rem); margin-bottom: 16px; }
+
+.krushBank {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 185, 101, 0.34);
+  background: rgba(244, 185, 101, 0.12);
+  font-size: 0.86rem;
+}
+
+.krushBank strong { color: var(--krush-gold); letter-spacing: -0.01em; }
+
+.krushCoin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #ffe6ac, #e2a049 62%, #b9762c);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.krushShopBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.krushPreview {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+/* The turntable. Its backdrop is a soft spotlight so a dark character
+   still reads against it, and the canvas keeps a fixed aspect so the
+   figure is never squashed while the card reflows. */
+.krushPreview canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  border: 1px solid var(--krush-line);
+  background:
+    radial-gradient(ellipse 62% 46% at 50% 78%, rgba(255, 255, 255, 0.09), transparent 70%),
+    linear-gradient(180deg, #10141d, #080a10);
+}
+
+.krushPreviewInfo { display: grid; gap: 7px; }
+.krushPreviewInfo strong { font-size: 0.92rem; letter-spacing: -0.01em; }
+.krushPreviewInfo p { margin: 0; color: var(--krush-dim); font-size: 0.75rem; line-height: 1.6; }
+
+.krushPreviewInfo ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.krushPreviewInfo li {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--krush-line);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.66rem;
+  color: var(--krush-dim);
+}
+
+.krushRoster { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; align-content: start; }
+
+.krushRosterItem {
+  --accent: var(--krush-gold);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--krush-line);
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.krushRosterItem:hover { background: rgba(255, 255, 255, 0.075); }
+.krushRosterItem.is-focus { border-color: var(--accent); background: rgba(255, 255, 255, 0.09); }
+.krushRosterItem.is-locked .krushRosterName strong { color: var(--krush-dim); }
+
+.krushRosterDot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.krushRosterItem.is-locked .krushRosterDot { background: rgba(255, 255, 255, 0.22); }
+
+.krushRosterName { display: grid; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.krushRosterName strong { font-size: 0.79rem; }
+.krushRosterName em { color: var(--krush-dim); font-size: 0.66rem; font-style: normal; }
+.krushRosterMark { flex: 0 0 auto; font-size: 0.76rem; color: var(--krush-gold); }
+
+.krushShopMsg {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(244, 185, 101, 0.28);
+  background: rgba(244, 185, 101, 0.1);
+  color: #ffdca8;
+  font-size: 0.76rem;
+}
+
+.krushActions button:disabled {
+  opacity: 0.42;
+  cursor: default;
+  transform: none;
+}
+
+.krushPrimary:disabled:hover { background: var(--krush-gold); transform: none; }
+
+/* ------------------------------ responsive ------------------------------ */
+
+@media (max-width: 760px) {
+  .krush {
+    aspect-ratio: 3 / 4;
+    min-height: 440px;
+    max-height: min(72vh, 640px);
+    border-radius: 14px;
+  }
+  .krushTally { grid-template-columns: 1fr; }
+  .krushStats { grid-template-columns: 1fr 1fr; }
+  .krushStats div:last-child { grid-column: 1 / -1; }
+  .krushActions button { min-width: 0; }
+
+  /* Portrait shop: preview on top, roster underneath, both full width.
+     The preview loses a little height so the buy button stays on screen
+     without scrolling on a short phone. */
+  .krushShopBody { grid-template-columns: 1fr; gap: 12px; }
+  .krushPreview canvas { aspect-ratio: 16 / 9; }
+  .krushPreviewInfo p { display: none; }
+  .krushShopHead h3 { margin-bottom: 12px; }
+}
+
+/* Landscape on a phone: the viewport is short, so the game takes the
+   full width and the cards stop trying to be tall. */
+@media (max-width: 900px) and (orientation: landscape) {
+  .krush {
+    aspect-ratio: auto;
+    height: min(82vh, 460px);
+    min-height: 240px;
+  }
+  .krushCard { padding: 14px 16px; }
+  .krushCard h3 { font-size: 1.25rem; margin-bottom: 8px; }
+  .krushLead { display: none; }
+  .krushStats { margin-bottom: 12px; padding: 9px 0; }
+  .krushPowers { display: none; }
+  .krushTally { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .krushTally li { padding: 4px 0; font-size: 0.72rem; }
+  .krushPreview canvas { aspect-ratio: 16 / 7; }
+  .krushPreviewInfo p { display: none; }
+  .krushPicked { margin-bottom: 10px; padding: 8px 12px; }
+  .krushPickedText em { display: none; }
+  /* Short viewport: keep the thumb button clear of the bottom edge but
+     smaller, since landscape leaves less vertical room. */
+  .krushFight { width: 58px; bottom: 10px; right: 10px; font-size: 0.6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .krushActions button { transition: none; }
+  .krushPrimary:hover { transform: none; }
+}

@@ -134,9 +134,12 @@ export function createRenderer(canvas) {
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     crowdPattern = ctx.createPattern(crowdTile, "repeat");
-    /* how much pitch is in frame during play */
+    /* How much pitch is in frame during play. The width sets the feel,
+       but a tall frame (a phone in portrait, or the immersive landscape
+       pitch) would otherwise show acres of empty stand, so the height
+       gets a say too and keeps the players a readable size. */
     const metres = w < 620 ? 44 : w < 1000 ? 56 : 68;
-    cam.play = w / metres;
+    cam.play = Math.max(w / metres, h / (70 * TILT));
     /* the whole ground, used for kickoffs and celebrations */
     cam.wide = Math.min(w / (PITCH.L + 26), h / ((PITCH.W + 34) * TILT));
     cam.target = cam.play;

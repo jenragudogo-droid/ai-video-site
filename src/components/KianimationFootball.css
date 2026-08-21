@@ -107,6 +107,13 @@
 .kflToggle button.is-on { background: var(--kfl-violet); border-color: var(--kfl-violet); color: #fff; }
 .kflMenuActions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
+.kflRotateInline {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 14px;
+  padding: 9px 13px; border-radius: 12px; font-size: 0.78rem; line-height: 1.4;
+  background: rgba(244, 185, 101, 0.1); border: 1px solid rgba(244, 185, 101, 0.35);
+}
+.kflRotateInline span { color: var(--kfl-gold); font-size: 1rem; }
+
 /* ------------------------------- squad --------------------------------- */
 
 .kflSquad { display: grid; gap: 14px; }
@@ -260,10 +267,42 @@
 .kflShootout em { font-style: normal; color: var(--kfl-gold); font-size: 0.7rem; }
 
 .kflRotate {
-  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-  padding: 8px 14px; border-radius: 999px; font-size: 0.72rem; color: var(--kfl-muted);
-  background: rgba(6, 8, 14, 0.8); border: 1px solid var(--kfl-line);
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  padding: 7px 13px; border-radius: 999px; font-size: 0.7rem; color: var(--kfl-ink);
+  background: rgba(6, 8, 14, 0.86); border: 1px solid var(--kfl-line); z-index: 12;
+  display: flex; align-items: center; gap: 7px;
+  white-space: nowrap; max-width: calc(100% - 16px);
 }
+.kflRotate span { color: var(--kfl-gold); }
+
+/* portrait advice: prominent, but it never blocks the match underneath */
+.kflRotateCard {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  width: min(320px, calc(100% - 20px)); z-index: 14; text-align: center;
+  display: grid; gap: 5px; justify-items: center;
+  padding: 11px 13px 10px; border-radius: 14px;
+  background: rgba(8, 9, 16, 0.92); border: 1px solid rgba(244, 185, 101, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.kflRotateCard strong { font-size: 0.85rem; line-height: 1.25; }
+.kflRotateCard p { margin: 0; font-size: 0.7rem; line-height: 1.35; color: var(--kfl-muted); }
+.kflRotateIcon {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 0.9rem; color: #12101c; background: var(--kfl-gold);
+  animation: kflRotateHint 2.4s ease-in-out infinite;
+}
+.kflRotateActions { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; margin-top: 1px; }
+/* a short stage keeps only the headline and the buttons */
+@media (max-height: 700px) {
+  .kflRotateCard p { display: none; }
+}
+@keyframes kflRotateHint {
+  0%, 55%, 100% { transform: rotate(0deg); }
+  70%, 90% { transform: rotate(90deg); }
+}
+
+/* the page behind the game must not scroll while it fills the screen */
+body.kflLockScroll { overflow: hidden !important; }
 
 /* ---------------------------- touch controls ---------------------------- */
 
@@ -393,15 +432,132 @@
   .kflControlRow span:last-child, .kflControlHead span:last-child { display: none; }
 }
 
-/* phones and tablets held sideways: give the pitch the whole screen.
-   Keyed on the pointer, not the width, because a large phone in
-   landscape is wider than a small laptop. */
-@media (hover: none) and (pointer: coarse) and (orientation: landscape) {
-  .kflStage { aspect-ratio: auto; height: 88vh; max-height: none; }
-  .kflHudPlayer { top: 54px; }
-}
+/* Portrait phones and tablets: a tall pitch that still leaves the page
+   readable and scrollable underneath. */
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
   .kflStage { aspect-ratio: 3 / 4; max-height: 66vh; }
+}
+
+/* ---------------------------------------------------------------------
+   Immersive mode — a phone or tablet held sideways, or any fullscreen
+   session. The game fills the viewport, the pads sit in margins either
+   side of the pitch, and the page behind it cannot scroll sideways.
+   --------------------------------------------------------------------- */
+
+.kfl--match.is-immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  /* no control columns unless the touch pads are on screen */
+  --kfl-padL: 0px;
+  --kfl-padR: 0px;
+  --kfl-safeL: env(safe-area-inset-left, 0px);
+  --kfl-safeR: env(safe-area-inset-right, 0px);
+  --kfl-safeB: env(safe-area-inset-bottom, 0px);
+}
+
+/* Control columns, sized so both thumbs reach without covering the pitch.
+   Gated on landscape as well as the pointer, so a portrait screen can never
+   end up with a squeezed pitch, even for a frame during a rotation. */
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) {
+  .kfl--match.is-immersive {
+    --kfl-pad: clamp(44px, 10vh, 60px);
+    --kfl-padL: clamp(102px, 15vw, 156px);
+    /* the cluster is 2.7 pads wide, so the column must never be narrower */
+    --kfl-padR: max(calc(var(--kfl-pad) * 2.7 + 12px), clamp(136px, 19vw, 196px));
+  }
+}
+
+.is-immersive .kflStage {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  max-height: none;
+  background:
+    radial-gradient(120% 90% at 0% 100%, rgba(123, 60, 255, 0.16), transparent 60%),
+    radial-gradient(120% 90% at 100% 100%, rgba(244, 185, 101, 0.13), transparent 60%),
+    #06070d;
+}
+
+/* The pitch keeps clear of both control columns. A canvas is a replaced
+   element, so left + right with width:auto would fall back to its
+   intrinsic size — the width has to be stated outright. */
+.is-immersive .kflCanvas {
+  left: calc(var(--kfl-padL) + var(--kfl-safeL));
+  right: auto;
+  width: calc(100% - var(--kfl-padL) - var(--kfl-padR) - var(--kfl-safeL) - var(--kfl-safeR));
+  height: 100%;
+}
+
+.is-immersive .kflStick {
+  left: calc(12px + var(--kfl-safeL));
+  bottom: calc(10px + var(--kfl-safeB));
+  width: clamp(88px, 21vh, 128px);
+  height: clamp(88px, 21vh, 128px);
+}
+.is-immersive .kflStickKnob {
+  width: 38%; height: 38%; margin: 0;
+  left: 31%; top: 31%;
+}
+
+.is-immersive .kflPadRight {
+  right: calc(6px + var(--kfl-safeR));
+  bottom: calc(6px + var(--kfl-safeB));
+  width: calc(var(--kfl-padR) - 10px);
+  height: min(82%, 200px);
+}
+/* a thumb sized diamond, laid out in pad widths so it can never grow
+   wider than the column it sits in */
+.is-immersive .kflPad {
+  width: var(--kfl-pad);
+  height: var(--kfl-pad);
+  font-size: clamp(0.48rem, 1.4vh, 0.6rem);
+}
+.is-immersive .kflPad--shoot { right: 0; bottom: 24%; }
+.is-immersive .kflPad--pass { right: calc(var(--kfl-pad) * 0.85); bottom: 0; }
+.is-immersive .kflPad--through { right: calc(var(--kfl-pad) * 1.7); bottom: 24%; }
+.is-immersive .kflPad--cross { right: calc(var(--kfl-pad) * 0.85); bottom: 48%; }
+.is-immersive .kflPad--sprint {
+  right: 0; bottom: 76%;
+  width: calc(var(--kfl-pad) * 1.05); height: clamp(30px, 6.5vh, 40px); border-radius: 999px;
+}
+.is-immersive .kflPad--tackle {
+  right: calc(var(--kfl-pad) * 1.15); bottom: 76%;
+  width: calc(var(--kfl-pad) * 1.2); height: clamp(30px, 6.5vh, 40px); border-radius: 999px;
+}
+
+/* the scoreboard, clock and player chip stay readable over the pitch */
+.is-immersive .kflHudTop {
+  padding: calc(6px + env(safe-area-inset-top, 0px)) calc(10px + var(--kfl-safeR)) 6px calc(10px + var(--kfl-safeL));
+}
+.is-immersive .kflHudPlayer {
+  top: calc(54px + env(safe-area-inset-top, 0px));
+  left: calc(8px + var(--kfl-safeL));
+  max-width: calc(var(--kfl-padL) - 12px);
+  flex-wrap: wrap;
+  row-gap: 4px;
+  border-radius: 12px;
+  padding: 5px 8px;
+  font-size: 0.68rem;
+}
+.is-immersive .kflHudPlayer .kflStamina { width: 100%; }
+.is-immersive .kflTicker {
+  left: calc(var(--kfl-padL) + var(--kfl-safeL) + 8px);
+  bottom: 8px; top: auto; max-width: 42%;
+}
+.is-immersive .kflShootout { right: calc(var(--kfl-padR) + var(--kfl-safeR) + 8px); }
+.is-immersive .kflModalBox { max-height: 92%; }
+
+/* short landscape screens: trim the chrome so the pitch keeps its height */
+@media (orientation: landscape) and (max-height: 430px) {
+  .is-immersive .kflHudPlayer { font-size: 0.62rem; padding: 4px 7px; }
+  .is-immersive .kflHudRole { display: none; }
+  .is-immersive .kflTicker { font-size: 0.68rem; padding: 5px 9px; }
+  .is-immersive .kflScoreBox strong { font-size: 0.92rem; }
+  .is-immersive .kflClock em { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

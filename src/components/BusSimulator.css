@@ -112,6 +112,8 @@
 
 .bsimPad:active { background: rgba(245, 197, 24, 0.35); }
 .bsimPad--gas { background: rgba(46, 160, 90, 0.32); }
+.bsimPad--horn { background: rgba(70, 120, 190, 0.34); font-size: 12px; letter-spacing: .04em; }
+.bsimPad--horn:active { background: rgba(245, 197, 24, 0.42); }
 .bsimPad--brake { background: rgba(190, 60, 48, 0.32); }
 
 .bsimChip {
@@ -428,4 +430,54 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bsimPrimary:hover { transform: none; }
+}
+
+/* ---------------- world regions + saved journey ---------------- */
+
+.bsimRegion {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 197, 24, 0.4);
+  background: rgba(9, 13, 18, 0.78);
+  color: var(--bsim-gold);
+  font: 700 11px/1 inherit;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+.bsimResume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 197, 24, 0.35);
+  background: rgba(245, 197, 24, 0.08);
+}
+.bsimResume > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.bsimResume strong { font-size: 14px; color: var(--bsim-text); }
+.bsimResume span { font-size: 12px; color: var(--bsim-dim); }
+.bsimResumeActions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.bsimSeg--wrap { max-width: 100%; }
+.bsimSeg--wrap button { padding: 7px 10px; font-size: 11px; }
+
+.bsimRouteLine {
+  margin: -4px 0 14px;
+  font-size: 12px;
+  color: var(--bsim-dim);
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .bsimRegion { display: none; }
+  .bsimResumeActions { width: 100%; }
+  .bsimResumeActions button { flex: 1; }
 }

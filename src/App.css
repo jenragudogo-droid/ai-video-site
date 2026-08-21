@@ -174,6 +174,8 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
 .gameTags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
 .gameTags span { padding: 5px 11px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #b6b2bc; font-size: .64rem; letter-spacing: .04em; }
 .gameCard .cardContent p { min-height: 66px; margin-bottom: 16px; }
+.gameLoading { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; min-height: 360px; max-height: min(76vh, 760px); border-radius: 18px; border: 1px solid var(--line); background: #0a0d14; color: var(--muted); font-size: .82rem; letter-spacing: .04em; }
+@media (max-width: 760px) { .gameLoading { aspect-ratio: 3 / 4; min-height: 440px; max-height: min(72vh, 640px); } }
 .gameStageWrap { max-width: 1240px; margin: 26px auto 0; padding: clamp(14px, 2vw, 22px); border: 1px solid var(--line); border-radius: 10px; background: #08080b; }
 
 @media (max-width: 900px) {
@@ -225,3 +227,58 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
 .streetBusLamp--l { left: 10%; }
 .streetBusLamp--r { right: 10%; }
 @media (prefers-reduced-motion: reduce) { .streetDash { animation: none; opacity: .5; } }
+
+/* Kianimation Endless Rush card artwork */
+.gameArt--rush { background: radial-gradient(circle at 50% 61%, rgba(158,98,255,.22), transparent 46%), linear-gradient(180deg, #0a0d18 0 60%, #221b31 60%, #0b0812 100%); }
+.rushSky { position: absolute; inset: 0 0 40% 0; background: linear-gradient(180deg, #131a34 0%, #34406e 42%, #7a5a72 74%, #e0a468 100%); }
+.rushSun { position: absolute; left: 50%; bottom: 41%; width: 62px; height: 62px; margin-left: -31px; border-radius: 50%; background: radial-gradient(circle, #fff0c8, #f0a95c 58%, rgba(240,169,92,0)); opacity: .8; }
+.rushTower { position: absolute; bottom: 39%; background: linear-gradient(180deg, #2b2340, #150f22); box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+.rushTower--l1 { left: 2%;  width: 17%; height: 46%; }
+.rushTower--l2 { left: 19%; width: 12%; height: 30%; }
+.rushTower--r1 { right: 2%;  width: 18%; height: 52%; }
+.rushTower--r2 { right: 20%; width: 11%; height: 27%; }
+.rushTower::after { content: ""; position: absolute; inset: 12% 22% auto; height: 7px; border-radius: 2px; background: rgba(244,185,101,.5); box-shadow: 0 16px 0 rgba(244,185,101,.28), 0 32px 0 rgba(158,98,255,.28); }
+.rushRoad { position: absolute; inset: auto 0 0 0; height: 61%; background: linear-gradient(180deg, #6a6f7d 0%, #4c515d 34%, #33373f 100%); clip-path: polygon(41% 0, 59% 0, 134% 100%, -34% 100%); }
+.rushKerb { position: absolute; inset: auto 0 0 0; height: 61%; background: rgba(244,185,101,.42); clip-path: polygon(40% 0, 41% 0, -34% 100%, -37% 100%, 59% 0, 60% 0, 137% 100%, 134% 100%); }
+.rushDash { position: absolute; border-radius: 3px; background: rgba(246,242,233,.92); transform: translateX(-50%); animation: rushLane 1.5s linear infinite; }
+.rushDash--l1 { animation-name: rushLaneL; animation-delay: 0s; }
+.rushDash--l2 { animation-name: rushLaneL; animation-delay: -.5s; }
+.rushDash--l3 { animation-name: rushLaneL; animation-delay: -1s; }
+.rushDash--r1 { animation-name: rushLaneR; animation-delay: -.25s; }
+.rushDash--r2 { animation-name: rushLaneR; animation-delay: -.75s; }
+.rushDash--r3 { animation-name: rushLaneR; animation-delay: -1.25s; }
+@keyframes rushLaneL {
+  0%   { bottom: 39%; left: 46%; width: 3px;  height: 4px;  opacity: 0; }
+  16%  { opacity: .95; }
+  100% { bottom: -6%; left: 14%; width: 10px; height: 30px; opacity: 0; }
+}
+@keyframes rushLaneR {
+  0%   { bottom: 39%; left: 54%; width: 3px;  height: 4px;  opacity: 0; }
+  16%  { opacity: .95; }
+  100% { bottom: -6%; left: 86%; width: 10px; height: 30px; opacity: 0; }
+}
+.rushCoin { position: absolute; border-radius: 50%; background: radial-gradient(circle at 38% 34%, #ffe9a8, #f2be44 58%, #b8862a); box-shadow: 0 0 14px rgba(244,185,101,.55); transform: translateX(-50%); animation: rushCoinRun 1.9s linear infinite; }
+.rushCoin--1 { animation-delay: 0s; }
+.rushCoin--2 { animation-delay: -.63s; }
+.rushCoin--3 { animation-delay: -1.26s; }
+@keyframes rushCoinRun {
+  0%   { bottom: 40%; left: 50%; width: 5px;  height: 5px;  opacity: 0; }
+  18%  { opacity: 1; }
+  100% { bottom: 6%;  left: 50%; width: 26px; height: 26px; opacity: 0; }
+}
+.rushRunner { position: absolute; left: 50%; bottom: 16%; width: 34px; height: 52px; margin-left: -17px; border-radius: 7px 7px 3px 3px; background: linear-gradient(180deg, #f2c169 0%, #e0a23f 62%, #3a4256 62%, #333b4d 100%); box-shadow: 0 14px 26px rgba(0,0,0,.55); animation: rushBob .34s ease-in-out infinite alternate; }
+.rushHead { position: absolute; left: 50%; top: -19px; width: 19px; height: 19px; margin-left: -9.5px; border-radius: 5px; background: linear-gradient(180deg, #241c1d 0%, #241c1d 34%, #b0714a 34%, #96603e 100%); }
+.rushArm { position: absolute; right: -13px; top: 8%; width: 20px; height: 4px; border-radius: 2px; background: #d8543f; transform: rotate(-22deg); transform-origin: left center; }
+.rushLeg { position: absolute; top: 100%; width: 10px; height: 16px; border-radius: 0 0 3px 3px; background: #2b3242; }
+.rushLeg--l { left: 3px; animation: rushStrideA .34s ease-in-out infinite alternate; }
+.rushLeg--r { right: 3px; animation: rushStrideB .34s ease-in-out infinite alternate; }
+@keyframes rushBob { from { transform: translateY(0); } to { transform: translateY(-4px); } }
+@keyframes rushStrideA { from { height: 17px; transform: rotate(-14deg); } to { height: 11px; transform: rotate(16deg); } }
+@keyframes rushStrideB { from { height: 11px; transform: rotate(16deg); } to { height: 17px; transform: rotate(-14deg); } }
+.rushShadow { position: absolute; left: 50%; bottom: 14%; width: 42px; height: 11px; margin-left: -21px; border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.65), rgba(0,0,0,0) 70%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rushDash, .rushCoin, .rushRunner, .rushLeg { animation: none; }
+  .rushDash { opacity: .5; }
+  .rushCoin { opacity: .8; bottom: 24%; width: 14px; height: 14px; }
+}

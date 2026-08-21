@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 public/videos/*.mp4
+
+# Full-resolution Meshy source; the optimised copy in public/models ships instead
+models-source/
+
+_to_delete/

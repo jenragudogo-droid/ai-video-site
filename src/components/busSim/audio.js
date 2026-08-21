@@ -26,6 +26,13 @@ export function createBusAudio() {
   let dieselGain = null;
   let ambientSrc = null;
   let ambientGain = null;
+  let hornGain = null;
+  let hornOscA = null;
+  let hornOscB = null;
+  let hornOscC = null;
+  let hornSub = null;
+  let hornAir = null;
+  let hornHeld = false;
   let ready = false;
 
   const volumes = { master: 0.85, sfx: 0.8, engine: 0.5, ambient: 0.3 };
@@ -58,7 +65,7 @@ export function createBusAudio() {
   /** Must run inside a real tap/click handler. */
   function unlock() {
     if (ctx) {
-      if (ctx.state === "suspended") ctx.resume();
+      try { if (ctx.state === "suspended") ctx.resume(); } catch { /* not resumable */ }
       return true;
     }
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -89,6 +96,7 @@ export function createBusAudio() {
     noiseBuffer = makeNoise();
     startEngine();
     startAmbient();
+    startHorn();
     ready = true;
     return true;
   }
@@ -142,6 +150,104 @@ export function createBusAudio() {
     dieselFilter.connect(dieselGain);
     dieselGain.connect(engineBus);
     dieselSrc.start();
+  }
+
+  /**
+   * A city bus horn, not a car beep: two detuned saw voices a minor third
+   * apart for the two-tone air-horn character, a sine an octave down for
+   * the weight you feel rather than hear, and a whisper of filtered noise
+   * for air rush. It runs continuously at silence and is opened and closed
+   * by one gain envelope, so holding the horn is genuinely sustained and
+   * releasing it tails off instead of clicking.
+   */
+  function startHorn() {
+    hornGain = ctx.createGain();
+    hornGain.gain.value = 0.0001;
+    hornGain.connect(sfxBus);
+
+    // a little body resonance so it reads as a horn bell, not a synth tone
+    const body = ctx.createBiquadFilter();
+    body.type = "peaking";
+    body.frequency.value = 620;
+    body.Q.value = 0.9;
+    body.gain.value = 6;
+    body.connect(hornGain);
+
+    const voice = (freq, level, detune) => {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = freq;
+      if (detune) o.detune.value = detune;
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = 2100;
+      f.Q.value = 0.8;
+      const g = ctx.createGain();
+      g.gain.value = level;
+      o.connect(f); f.connect(g); g.connect(body);
+      o.start();
+      return o;
+    };
+
+    // ~A#2 and ~D3: the classic two-tone interval on a large vehicle
+    hornOscA = voice(186, 0.34, 0);
+    hornOscB = voice(233, 0.28, 0);
+    hornOscC = voice(186, 0.16, 11);      // slight beat against A, adds life
+    hornSub = ctx.createOscillator();
+    hornSub.type = "sine";
+    hornSub.frequency.value = 93;
+    const subG = ctx.createGain();
+    subG.gain.value = 0.5;
+    hornSub.connect(subG); subG.connect(hornGain);
+    hornSub.start();
+
+    hornAir = ctx.createBufferSource();
+    hornAir.buffer = noiseBuffer;
+    hornAir.loop = true;
+    const airF = ctx.createBiquadFilter();
+    airF.type = "bandpass";
+    airF.frequency.value = 1500;
+    airF.Q.value = 0.7;
+    const airG = ctx.createGain();
+    airG.gain.value = 0.045;
+    hornAir.connect(airF); airF.connect(airG); airG.connect(hornGain);
+    hornAir.start();
+  }
+
+  const HORN_LEVEL = 0.5;
+
+  /** Press: opens the horn and holds it until hornOff. */
+  function hornOn() {
+    if (!ready || !ctx || hornHeld) return;
+    hornHeld = true;
+    // a tab that lost focus can leave the context suspended
+    try { if (ctx.state === "suspended") ctx.resume(); } catch { /* not resumable */ }
+    const now = ctx.currentTime;
+    // real air horns bloom in pitch as pressure builds
+    for (const [o, f] of [[hornOscA, 186], [hornOscB, 233], [hornOscC, 186]]) {
+      if (!o) continue;
+      o.frequency.cancelScheduledValues(now);
+      o.frequency.setValueAtTime(f * 0.955, now);
+      o.frequency.linearRampToValueAtTime(f, now + 0.09);
+    }
+    if (hornSub) {
+      hornSub.frequency.cancelScheduledValues(now);
+      hornSub.frequency.setValueAtTime(93 * 0.955, now);
+      hornSub.frequency.linearRampToValueAtTime(93, now + 0.09);
+    }
+    hornGain.gain.cancelScheduledValues(now);
+    hornGain.gain.setValueAtTime(Math.max(0.0001, hornGain.gain.value), now);
+    hornGain.gain.linearRampToValueAtTime(HORN_LEVEL, now + 0.035);
+  }
+
+  /** Release: smooth tail-off, never an abrupt cut. */
+  function hornOff() {
+    if (!ready || !ctx || !hornHeld) return;
+    hornHeld = false;
+    const now = ctx.currentTime;
+    hornGain.gain.cancelScheduledValues(now);
+    hornGain.gain.setValueAtTime(Math.max(0.0001, hornGain.gain.value), now);
+    hornGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
   }
 
   function startAmbient() {
@@ -213,13 +319,19 @@ export function createBusAudio() {
 
   const S = {
     horn() {
-      tone({ freq: 233, type: "square", dur: 0.55, gain: 0.16 });
-      tone({ freq: 311, type: "square", dur: 0.55, gain: 0.13 });
-      tone({ freq: 116, type: "sawtooth", dur: 0.55, gain: 0.09 });
+      // a tap: same voice, just closed again straight away
+      hornOn();
+      const at = ctx.currentTime + 0.22;
+      hornGain.gain.cancelScheduledValues(at);
+      hornGain.gain.setValueAtTime(HORN_LEVEL, at);
+      hornGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+      hornHeld = false;
     },
     trafficHorn() {
-      tone({ freq: 392, type: "square", dur: 0.28, gain: 0.06 });
-      tone({ freq: 494, type: "square", dur: 0.28, gain: 0.05 });
+      // a small car two blocks away, not the bus
+      tone({ freq: 405, type: "square", dur: 0.26, gain: 0.05 });
+      tone({ freq: 508, type: "square", dur: 0.26, gain: 0.04 });
+      tone({ freq: 203, type: "sawtooth", dur: 0.24, gain: 0.03 });
     },
     airBrake() { noiseBurst({ dur: 0.7, type: "highpass", freq: 2100, gain: 0.22, q: 0.7 }); },
     doorOpen() {
@@ -277,6 +389,7 @@ export function createBusAudio() {
 
   function setMuted(next) {
     muted = next;
+    if (next) hornOff();
     if (master) master.gain.setTargetAtTime(next ? 0 : volumes.master, ctx.currentTime, 0.05);
     if (next && speech) speech.cancel();
   }
@@ -284,12 +397,17 @@ export function createBusAudio() {
   function dispose() {
     if (speech) speech.cancel();
     try {
-      [engineOsc1, engineOsc2, engineSub, dieselSrc, ambientSrc].forEach((n) => n && n.stop());
+      [engineOsc1, engineOsc2, engineSub, dieselSrc, ambientSrc,
+        hornOscA, hornOscB, hornOscC, hornSub, hornAir].forEach((n) => n && n.stop());
       if (ctx) ctx.close();
     } catch { /* already gone */ }
     ctx = null;
     ready = false;
   }
 
-  return { unlock, updateEngine, play, announce, setMuted, dispose, get ready() { return ready; } };
+  return {
+    unlock, updateEngine, play, announce, setMuted, dispose,
+    hornOn, hornOff,
+    get ready() { return ready; },
+  };
 }
