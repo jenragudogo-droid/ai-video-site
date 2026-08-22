@@ -70,11 +70,12 @@ export function createRushAudio() {
     engineNodes = null; skidNodes = null;
   };
 
-  const engine = (speedK, boosting, drifting, inTunnel) => {
+  const engine = (speedK, boosting, drifting, inTunnel, reversing = false) => {
     if (!ctx || !started) return;
     if (!engineNodes) startEngine();
     const t = ctx.currentTime;
-    const f = 42 + speedK * 130 + (boosting ? 40 : 0);
+    /* reverse gear whines higher at low speed, like a real gearbox */
+    const f = (42 + speedK * 130 + (boosting ? 40 : 0)) * (reversing ? 1.5 : 1);
     engineNodes.osc.frequency.setTargetAtTime(f, t, 0.05);
     engineNodes.osc2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
     engineNodes.lp.frequency.setTargetAtTime(300 + speedK * 1400 + (boosting ? 800 : 0), t, 0.08);

@@ -146,15 +146,14 @@ export function aiInput(race, r, dt) {
   }
 
   /* ------- recovery: stuck against a wall / facing backwards ------- */
-  if (b.speed < 3 && race.time > 5 && !r.finished) {
+  if (r.recoverT > 0) {
+    /* committed reverse burst: back out and turn, then resume driving */
+    r.recoverT -= dt;
+    throttle = 0; brake = 0.85;
+    steer = p.decisionSeed > 0.5 ? 1 : -1;
+  } else if (Math.abs(b.speed) < 3 && race.time > 5 && !r.finished) {
     r.stuckT = (r.stuckT || 0) + dt;
-    if (r.stuckT > 1.2) {
-      /* reverse-and-turn, never teleport */
-      throttle = 0; brake = 0.8;
-      steer = p.decisionSeed > 0.5 ? 1 : -1;
-      b.speed = Math.max(b.speed - 8 * dt, -8);
-      if (r.stuckT > 2.6) r.stuckT = 0;
-    }
+    if (r.stuckT > 1.2) { r.recoverT = 1.1; r.stuckT = 0; } // never teleports
   } else r.stuckT = 0;
 
   /* boss quirks */
@@ -175,7 +174,11 @@ export function aiInput(race, r, dt) {
     if (threat && Math.random() < 0.04) r.fx.ghost = 1.6;
   }
 
-  return { steer, throttle, brake, drift, boost: false };
+  /* The AI plans in the internal heading frame (positive steer raises the
+     heading angle). Player input uses screen frame (+1 = screen right),
+     which physics negates once on entry — so the AI's plan is negated
+     here to pass through that same front door unchanged. */
+  return { steer: -steer, throttle, brake, drift, boost: false };
 }
 
 /* Mild rubber-band factor for AI top speed. The player can still gap the

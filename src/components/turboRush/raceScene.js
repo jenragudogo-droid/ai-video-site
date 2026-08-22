@@ -217,6 +217,9 @@ export function createRaceScene(canvas, quality) {
         w.spin.rotation.x = b.wheelSpin % (Math.PI * 2);
         if (w.front) w.steer.rotation.y = b.steerVis;
       }
+      /* brake + reverse lights */
+      car.brakeMat.emissiveIntensity = b.braking ? 2.2 : 0.15;
+      car.reverseMat.emissiveIntensity = b.reversing ? 2.5 : 0;
       car.flame.visible = r.fx.boostTime > 0;
       if (car.flame.visible) car.flame.scale.setScalar(0.8 + Math.random() * 0.5);
       car.shield.visible = r.fx.shield > 0 || r.fx.invinc > 0;

@@ -174,23 +174,33 @@ export function stepRace(race, playerInput, dt) {
     stepBody(r, r.st, input, env, r.fx, dt);
     r.st.maxSpeed = bandSave;
 
-    /* marshal recovery: a car wedged for many seconds (walls, boulders,
-       another car) is set back on its own spot on the road — same
-       progress, no positions gained, never a cheat-teleport forward. */
+    /* marshal recovery, progress-based: a car that has gained no ground
+       for 8 seconds (wedged on walls, boulders, or another car — even
+       while its wheels spin or it rocks back and forth) is set back on
+       its own spot on the road. Same progress, no positions gained,
+       never a cheat-teleport forward. */
     if (race.state === "racing" && !r.finished && !r.eliminated) {
-      if (Math.abs(r.body.speed) < 2.5 && r.spinT <= 0 && r.fx.frozen <= 0) {
-        r.deepStuck = (r.deepStuck || 0) + dt;
-        if (r.deepStuck > 6) {
-          const b = r.body;
-          const onSc = b.route >= 0;
-          const chain = onSc ? race.track.shortcuts[b.route].samples : race.track.samples;
-          const s = chain[onSc ? b.routeSeg : b.seg];
-          b.x = s.x; b.y = s.y; b.z = s.z;
-          b.heading = s.ang; b.velAng = s.ang; b.speed = 6; b.vy = 0; b.airborne = false;
-          r.deepStuck = 0;
-          if (r.isPlayer) race.events.push({ t: "rescue" });
-        }
-      } else r.deepStuck = 0;
+      const total = r.body.lap * race.track.length + r.body.sProg;
+      /* a player idling or deliberately reversing is not "stuck": the
+         timer only RUNS while they try to drive forward (it freezes,
+         not resets, so wedged cars that rock back and forth still get
+         rescued) */
+      const trying = !r.isPlayer || (playerInput && playerInput.throttle > 0.1);
+      if (!r.progWatch || total > r.progWatch.s + 12 || total < r.progWatch.s - 40) {
+        r.progWatch = { s: total };
+        r.watchT = 0;
+      } else if (trying && (r.watchT = (r.watchT || 0) + dt) > 8) {
+        const b = r.body;
+        const onSc = b.route >= 0;
+        const chain = onSc ? race.track.shortcuts[b.route].samples : race.track.samples;
+        const s = chain[onSc ? b.routeSeg : b.seg];
+        b.x = s.x; b.y = s.y; b.z = s.z;
+        b.heading = s.ang; b.velAng = s.ang; b.speed = 6; b.vy = 0; b.airborne = false;
+        r.spinT = 0; r.recoverT = 0; r.stuckT = 0;
+        r.progWatch = { s: total };
+        r.watchT = 0;
+        if (r.isPlayer) race.events.push({ t: "rescue" });
+      }
     }
 
     /* drift scoring */
@@ -210,6 +220,11 @@ export function stepRace(race, playerInput, dt) {
       r.bigAir = null;
     }
 
+    /* reversed back over the line: give the lap back */
+    if (r.body.lapBack && !r.finished) {
+      r.body.lapBack = false;
+      r.body.lap -= 1;
+    }
     /* lap crossing */
     if (r.body.lapCross && !r.finished) {
       r.body.lapCross = false;

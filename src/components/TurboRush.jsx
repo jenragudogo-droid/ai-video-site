@@ -28,8 +28,9 @@ const COMBO_WINDOW = 0.28; // seconds to press slots together (fingers are slowe
 
 const KEY_HELP = [
   ["↑ / W", "Accelerate"],
-  ["↓ / S", "Brake / reverse"],
-  ["← → / A D", "Steer"],
+  ["↓ / S", "Brake — keep holding to reverse"],
+  ["← / A", "Steer left"],
+  ["→ / D", "Steer right"],
   ["Space", "Drift (hold in a turn — charges nitro)"],
   ["Shift", "Fire nitro"],
   ["1 · 2 · 3", "Use power-up slot — press two or three TOGETHER to combine"],
@@ -141,9 +142,22 @@ export default function TurboRush() {
       if (k === "p" || k === "P" || k === "Escape") setPaused((p) => !p);
     };
     const up = (e) => { keysRef.current[e.key.toLowerCase()] = false; };
+    /* losing focus (Cmd-Tab, pause overlay click, phone rotation) must never
+       leave a key latched down */
+    const clearAll = () => {
+      keysRef.current = {};
+      inputRef.current = { steer: 0, throttle: 0, brake: 0, drift: false, nitro: false };
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+    window.addEventListener("blur", clearAll);
+    document.addEventListener("visibilitychange", clearAll);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", clearAll);
+      document.removeEventListener("visibilitychange", clearAll);
+    };
   }, [pressSlot]);
 
   /* ---------------- quality ---------------- */
@@ -322,6 +336,7 @@ export default function TurboRush() {
       audioRef.current?.engine(
         Math.min(1, Math.abs(p.body.speed) / 70),
         p.fx.boostTime > 0, p.body.drift && !p.body.airborne, !!p.body.inTunnel,
+        !!p.body.reversing,
       );
 
       view.frame(isPaused ? 0 : dt, race, input);

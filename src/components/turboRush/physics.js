@@ -90,28 +90,55 @@ export function stepBody(r, st, input, env, fx, dt) {
   let boosting = false;
   if (fx.boostTime > 0) { speedCap *= st.boostPower * (fx.boostMul || 1); boosting = true; }
 
-  /* throttle / brake */
+  /* ------------------------------------------------------------------
+   * Convention: input.steer = +1 means "turn RIGHT on screen".
+   * Heading is measured as atan2(x, z) with forward = (sin h, cos h);
+   * in that frame a screen-right turn DECREASES heading (the chase
+   * camera's screen-right is the -x side of forward), so the raw input
+   * is negated exactly once, here, and every consumer downstream —
+   * wheels, body roll, drift, AI — works in this internal frame.
+   * ------------------------------------------------------------------ */
+  const steer = -input.steer;
+
+  /* throttle / brake / reverse */
   const wantSpeed = input.throttle * speedCap;
   const accel = st.accel * (b.offroad ? 0.6 : 1) * (boosting ? 1.5 : 1);
+  const maxRev = Math.min(16, st.maxSpeed * 0.28); // reverse is deliberately slow
   if (r.spinT > 0) {
     b.speed *= Math.pow(0.5, dt);
     b.heading += dt * 9 * (r.spinDir || 1);
-  } else if (b.speed < wantSpeed) {
-    b.speed = Math.min(wantSpeed, b.speed + accel * dt);
+  } else if (input.throttle > 0) {
+    /* accelerating also pulls the car smoothly out of reverse, through 0 */
+    if (b.speed < wantSpeed) b.speed = Math.min(wantSpeed, b.speed + accel * dt);
+    else b.speed = Math.max(wantSpeed, b.speed - 12 * dt);
+  } else if (input.brake > 0) {
+    if (b.speed > 2) {
+      /* moving forward: brake hard first */
+      b.speed = Math.max(0, b.speed - (30 + 26 * input.brake) * dt);
+    } else {
+      /* near-stopped with the key still held: creep backwards */
+      b.speed = Math.max(-maxRev, b.speed - accel * 0.55 * dt);
+    }
   } else {
-    b.speed = Math.max(wantSpeed, b.speed - (input.brake > 0 ? 42 : 12) * dt);
+    /* nothing held: coast to rest from either direction */
+    b.speed = b.speed > 0 ? Math.max(0, b.speed - 12 * dt) : Math.min(0, b.speed + 18 * dt);
   }
-  if (input.brake > 0 && b.speed > 4) b.speed = Math.max(4, b.speed - 30 * input.brake * dt);
+  b.braking = input.brake > 0 && b.speed > 0.5;
+  b.reversing = b.speed < -0.5;
 
-  /* steering + drift */
-  const spdF = Math.min(1, b.speed / 22);
-  let yawRate = st.yaw * input.steer * spdF;
-  const wantDrift = input.drift && Math.abs(input.steer) > 0.25 && b.speed > st.maxSpeed * 0.35 && !b.airborne;
-  if (wantDrift && !b.drift) { b.drift = 1; b.driftDir = Math.sign(input.steer); }
+  /* steering + drift — yaw follows the SIGN of travel, like a real car:
+     steering left while reversing swings the nose the believable way,
+     and a stationary car cannot pivot on the spot. */
+  const dir = Math.sign(b.speed) || 0;
+  const spdF = Math.min(1, Math.abs(b.speed) / 22);
+  /* reversing steers gently — assertive enough to manoeuvre, never twitchy */
+  let yawRate = st.yaw * steer * spdF * dir * (dir < 0 ? 0.55 : 1);
+  const wantDrift = input.drift && Math.abs(steer) > 0.25 && b.speed > st.maxSpeed * 0.35 && !b.airborne;
+  if (wantDrift && !b.drift) { b.drift = 1; b.driftDir = Math.sign(steer); }
   if (b.drift && (!input.drift || b.speed < 10)) { b.drift = 0; b.driftT = 0; }
   if (b.drift) {
     yawRate = (st.yaw * 0.55 + st.driftYaw) * b.driftDir * spdF
-      + st.yaw * 0.5 * input.steer * spdF; // counter-steer refines the arc
+      + st.yaw * 0.5 * steer * spdF; // counter-steer refines the arc
     b.driftT += dt;
     const nitroRate = r.driver?.ability?.id === "smokeLine" ? 0.34 : 0.24;
     b.nitro = Math.min(1, b.nitro + nitroRate * dt);
@@ -209,14 +236,20 @@ export function stepBody(r, st, input, env, fx, dt) {
   } else {
     const a = track.samples[b.seg];
     b.sProg = a.s;
-    /* lap line: crossing from the end of the lap back to the start */
+    /* lap line: crossing from the end of the lap back to the start —
+       and the mirror case, reversing back over the line, un-counts it
+       so reverse gear can't farm laps */
     if (b.prevS > track.length * 0.9 && b.sProg < track.length * 0.1) b.lapCross = true;
-    else b.lapCross = false;
+    else {
+      b.lapCross = false;
+      if (b.prevS < track.length * 0.1 && b.sProg > track.length * 0.9) b.lapBack = true;
+    }
   }
 
-  /* cosmetic dynamics */
+  /* cosmetic dynamics — wheelSpin flips with reverse; steerVis is in the
+     internal frame so the front wheels visibly point where the car will go */
   b.wheelSpin += (b.speed / 0.45) * dt;
-  b.steerVis += (input.steer * 0.45 - b.steerVis) * Math.min(1, 10 * dt);
+  b.steerVis += (steer * 0.45 - b.steerVis) * Math.min(1, 10 * dt);
   const latAcc = yawRate * b.speed * 0.02;
   b.bodyRoll += (-latAcc * (0.5 + st.weight * 0.3) - b.bodyRoll) * Math.min(1, 6 * dt);
   const slope = b.airborne ? -b.vy * 0.02 : 0;

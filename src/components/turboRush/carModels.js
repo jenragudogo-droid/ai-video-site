@@ -188,6 +188,17 @@ export function createCarMesh(carDef, cosmetics, driverLook) {
     return { steer, spin, front: i < 2, r: wheelSpec.r };
   });
 
+  /* Brake / reverse lights on the tail */
+  const brakeMat = new THREE.MeshStandardMaterial({ color: 0x7a1010, emissive: 0xff2222, emissiveIntensity: 0.15 });
+  const brakeLight = box(1.1, 0.14, 0.08, brakeMat);
+  const tallBody = carDef.type === "truck" || carDef.type === "armored";
+  brakeLight.position.set(0, tallBody ? 1.45 : 0.72, -(tallBody ? 1.95 : 2.0));
+  root.add(brakeLight);
+  const reverseMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d0, emissive: 0xffffff, emissiveIntensity: 0 });
+  const reverseLight = box(0.5, 0.1, 0.07, reverseMat);
+  reverseLight.position.set(0, brakeLight.position.y - 0.16, brakeLight.position.z);
+  root.add(reverseLight);
+
   /* Boost flame */
   const flameMat = new THREE.MeshBasicMaterial({ color: cosmetics.flame || "#ff8c2e", transparent: true, opacity: 0.9 });
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.6, 8), flameMat);
@@ -216,5 +227,5 @@ export function createCarMesh(carDef, cosmetics, driverLook) {
 
   root.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
 
-  return { root, bodyGroup, wheels, flame, glow, shield, frost, hover: !!wheelSpec.hover, paintMat };
+  return { root, bodyGroup, wheels, flame, glow, shield, frost, brakeMat, reverseMat, hover: !!wheelSpec.hover, paintMat };
 }
