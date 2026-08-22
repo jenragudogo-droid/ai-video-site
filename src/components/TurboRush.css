@@ -1,0 +1,274 @@
+/* Kianimation Turbo Rush — UI styles. Scoped under .turboRush. */
+.turboRush {
+  position: relative;
+  width: 100%;
+  min-height: 540px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0b0f1a;
+  color: #e8ecf2;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.trMenuBg {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(211, 47, 47, 0.28), transparent 60%),
+    radial-gradient(900px 420px at 10% 110%, rgba(30, 120, 200, 0.25), transparent 60%),
+    linear-gradient(160deg, #10162a 0%, #0b0f1a 60%, #131022 100%);
+  padding: 18px 18px 26px;
+}
+
+/* ---------- title ---------- */
+.trTitleWrap { text-align: center; padding: 22px 0 10px; }
+.trTitle {
+  margin: 0;
+  font-size: clamp(1.5rem, 4.5vw, 2.6rem);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #ffd34d;
+  text-shadow: 0 3px 0 #7a2d12, 0 8px 24px rgba(211, 47, 47, 0.5);
+}
+.trTitle span {
+  display: block;
+  color: #fff;
+  font-size: 1.25em;
+  letter-spacing: 0.24em;
+  background: linear-gradient(90deg, #ff8c2e, #ffd34d, #ff8c2e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.trTag { color: #9fb2c8; margin: 8px 0 0; font-size: 0.9rem; }
+
+/* ---------- menu grid ---------- */
+.trMenuGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  max-width: 980px;
+  margin: 20px auto 0;
+}
+.trCard {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+.trCard:hover { transform: translateY(-2px); border-color: #ffd34d; background: rgba(255, 211, 77, 0.08); }
+.trCard strong { font-size: 1.05rem; }
+.trCard span { color: #9fb2c8; font-size: 0.85rem; }
+.trCard--big { grid-column: span 2; background: linear-gradient(120deg, rgba(211, 47, 47, 0.25), rgba(255, 140, 46, 0.12)); }
+.trCard--daily { border-color: rgba(87, 242, 200, 0.4); }
+.trCard--done { opacity: 0.6; }
+
+.trMenuFoot {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center;
+  margin-top: 22px; color: #9fb2c8;
+}
+.trHelp {
+  max-width: 760px; margin: 18px auto 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2px 22px; color: #7c8aa0; font-size: 0.8rem;
+}
+.trHelp p { margin: 2px 0; }
+.trHelp b { color: #c8d2e0; }
+
+/* ---------- shared ---------- */
+.trTopBar { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.trCoins { color: #ffd34d; font-weight: 800; }
+.trTrophies { color: #9fb2c8; font-size: 0.9rem; margin-left: auto; }
+.trH3 { margin: 10px 0 12px; font-size: 1.15rem; }
+.trDim { color: #9fb2c8; font-size: 0.84rem; }
+.trBtn {
+  border: 0; border-radius: 12px; padding: 12px 20px;
+  font-weight: 800; font-size: 0.95rem; cursor: pointer;
+  background: #223052; color: #e8ecf2;
+  transition: transform 0.12s, filter 0.12s;
+}
+.trBtn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.15); }
+.trBtn:disabled { opacity: 0.45; cursor: default; }
+.trBtn--go { background: linear-gradient(120deg, #d32f2f, #ff8c2e); color: #fff; font-size: 1.05rem; }
+.trBtn--ghost { background: rgba(255, 255, 255, 0.08); }
+.trBtn--small { padding: 7px 14px; font-size: 0.82rem; }
+.trSelect {
+  background: #16203a; color: #e8ecf2; border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px; padding: 7px 10px; font-size: 0.88rem;
+}
+.trToggle { display: inline-flex; gap: 6px; align-items: center; font-size: 0.9rem; cursor: pointer; }
+
+/* ---------- career ---------- */
+.trCupList { display: flex; flex-direction: column; gap: 12px; max-width: 900px; margin: 0 auto; }
+.trCup {
+  background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px; padding: 14px 16px;
+}
+.trCup p { margin: 6px 0; color: #9fb2c8; font-size: 0.86rem; }
+.trCup--locked { opacity: 0.55; }
+.trCup--won { border-color: rgba(255, 211, 77, 0.5); }
+.trCupHead { display: flex; align-items: baseline; gap: 10px; }
+.trTier { color: #7c8aa0; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.trLockLine { color: #c8a2a2; font-size: 0.82rem; }
+.trEventRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.trEvent {
+  display: flex; flex-direction: column; gap: 2px; position: relative;
+  min-width: 130px; padding: 9px 12px; text-align: left;
+  background: rgba(255, 255, 255, 0.06); color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; cursor: pointer;
+}
+.trEvent b { font-size: 0.85rem; }
+.trEvent span { font-size: 0.75rem; color: #9fb2c8; }
+.trEvent em { position: absolute; top: 6px; right: 8px; color: #57f2c8; font-style: normal; }
+.trEvent:disabled { opacity: 0.45; cursor: default; }
+.trEvent--next { border-color: #ffd34d; box-shadow: 0 0 12px rgba(255, 211, 77, 0.25); }
+.trEvent--done { opacity: 0.7; }
+
+/* ---------- single race ---------- */
+.trSingleGrid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; max-width: 980px; margin: 0 auto; }
+@media (max-width: 760px) { .trSingleGrid { grid-template-columns: 1fr; } }
+.trTrackPick { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; align-content: start; }
+.trTrackCard {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px; text-align: left;
+  background: rgba(255, 255, 255, 0.05); color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; cursor: pointer;
+}
+.trTrackCard span { color: #9fb2c8; font-size: 0.76rem; }
+.trTrackCard em { color: #57f2c8; font-size: 0.72rem; font-style: normal; }
+.trTrackCard--sel { border-color: #ffd34d; background: rgba(255, 211, 77, 0.1); }
+.trTrackCard--locked { opacity: 0.5; cursor: default; }
+.trSinglePanel { display: flex; flex-direction: column; gap: 12px; align-content: start; }
+.trSinglePanel label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: #9fb2c8; }
+
+/* ---------- garage / shops ---------- */
+.trTabs { display: flex; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
+.trTab {
+  padding: 9px 18px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent; color: #c8d2e0; font-weight: 700; cursor: pointer;
+}
+.trTab--sel { background: #ffd34d; color: #1a1408; border-color: #ffd34d; }
+.trGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.trItemCard {
+  display: flex; flex-direction: column; gap: 7px; padding: 14px; text-align: left;
+  background: rgba(255, 255, 255, 0.05); color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 13px; cursor: pointer;
+}
+.trItemCard--sel { border-color: #57f2c8; box-shadow: 0 0 14px rgba(87, 242, 200, 0.18); }
+.trItemCard--owned { border-color: rgba(87, 242, 200, 0.35); }
+.trOwned { color: #57f2c8; font-weight: 800; font-size: 0.8rem; }
+.trAbility { color: #ffd34d; font-size: 0.78rem; }
+.trDriverRow { display: flex; align-items: center; gap: 10px; }
+.trFace { position: relative; display: inline-block; border-radius: 50% 50% 42% 42%; overflow: hidden; flex: none; }
+.trFaceVisor { position: absolute; left: 18%; right: 18%; top: 34%; height: 22%; border-radius: 999px; }
+.trFaceSuit { position: absolute; left: 8%; right: 8%; bottom: 0; height: 20%; border-radius: 8px 8px 0 0; }
+
+.trStatBars { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+.trStatRow { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; font-size: 0.68rem; color: #9fb2c8; }
+.trStatTrack { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.trStatTrack div { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #1e78c8, #57f2c8); }
+
+.trUpgrades { max-width: 560px; display: flex; flex-direction: column; gap: 9px; }
+.trUpRow { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; }
+.trUpName { font-size: 0.92rem; }
+.trPips { display: flex; gap: 4px; }
+.trPip { width: 14px; height: 8px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); }
+.trPip--on { background: #ffd34d; }
+
+.trStyle { display: flex; flex-direction: column; gap: 6px; max-width: 640px; }
+.trSwatchRow, .trChipRow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.trSwatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; }
+.trSwatch--sel { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 211, 77, 0.6); }
+.trChip {
+  padding: 7px 13px; border-radius: 999px; font-size: 0.8rem; cursor: pointer;
+  background: rgba(255, 255, 255, 0.07); color: #e8ecf2; border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.trChip--sel { background: #ffd34d; color: #1a1408; border-color: #ffd34d; }
+
+.trComboList { display: flex; flex-wrap: wrap; gap: 7px; }
+.trComboChip {
+  font-size: 0.74rem; padding: 6px 11px; border-radius: 999px;
+  background: rgba(142, 63, 208, 0.2); border: 1px solid rgba(142, 63, 208, 0.45);
+}
+
+/* ---------- race screen ---------- */
+.trRaceWrap { height: min(76vh, 720px); min-height: 460px; background: #000; }
+.trGl, .trHudCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.trHudCanvas { pointer-events: none; }
+
+.trPauseBtn {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(10, 14, 22, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px; padding: 6px 14px; cursor: pointer; font-size: 1rem;
+}
+
+.trBossIntro {
+  position: absolute; top: 18%; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 16px; align-items: center;
+  background: rgba(20, 6, 10, 0.85); border: 2px solid #ff4d6b;
+  border-radius: 16px; padding: 16px 22px; max-width: min(520px, 92%);
+  animation: trBossIn 0.5s ease-out;
+  z-index: 5;
+}
+.trBossIntro strong { color: #ff6b8a; font-size: 1.2rem; letter-spacing: 0.06em; }
+.trBossIntro p { margin: 4px 0; font-style: italic; }
+.trBossIntro em { color: #c8a2ae; font-size: 0.8rem; font-style: normal; }
+@keyframes trBossIn { from { opacity: 0; transform: translateX(-50%) scale(1.3); } }
+
+.trOverlay {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(5, 8, 14, 0.66); backdrop-filter: blur(3px); z-index: 10;
+}
+.trPanel {
+  display: flex; flex-direction: column; gap: 12px; align-items: stretch;
+  background: #121a2c; border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px; padding: 22px 26px; min-width: 280px; max-width: min(480px, 94%);
+  max-height: 92%; overflow: auto;
+}
+.trPanel h3 { margin: 0; text-align: center; font-size: 1.35rem; }
+.trPhoto { color: #ffd34d; text-align: center; font-weight: 800; margin: 0; }
+.trResultList { margin: 0; padding: 0 0 0 22px; display: flex; flex-direction: column; gap: 4px; }
+.trResultList li { display: flex; justify-content: space-between; gap: 18px; font-size: 0.94rem; color: #c8d2e0; }
+.trResultList .trMe { color: #ffd34d; font-weight: 800; }
+.trRewardRow { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; color: #ffd34d; font-weight: 700; font-size: 0.9rem; }
+.trNotice { margin: 0; text-align: center; font-size: 0.85rem; color: #57f2c8; }
+.trNotice--boss, .trNotice--cup { color: #ffd34d; font-weight: 800; }
+.trNotice--cupFail { color: #ff8a8a; }
+
+/* ---------- touch controls ---------- */
+.trTouchLeft, .trTouchRight {
+  position: absolute; bottom: 14px; display: flex; gap: 12px; z-index: 6;
+}
+.trTouchLeft { left: 14px; }
+.trTouchRight { right: 14px; align-items: flex-end; }
+.trTouchBtn {
+  width: 66px; height: 66px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14); color: #fff; border: 2px solid rgba(255, 255, 255, 0.3);
+  font-size: 1.35rem; font-weight: 900; cursor: pointer;
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.trTouchBtn:active { background: rgba(255, 211, 77, 0.4); }
+.trTouchBtn--gas { width: 78px; height: 78px; background: rgba(211, 47, 47, 0.4); }
+.trTouchBtn--small { width: 54px; height: 54px; font-size: 0.72rem; }
+.trTouchSlots {
+  position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 14px; z-index: 6;
+}
+.trTouchSlot {
+  width: 60px; height: 60px; border-radius: 16px;
+  background: rgba(10, 14, 22, 0.6); border: 2px solid rgba(255, 255, 255, 0.35);
+  color: #fff; font-size: 1.5rem; cursor: pointer;
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.trTouchSlot:active { background: rgba(87, 242, 200, 0.4); }
+
+@media (max-width: 640px) {
+  .trMenuBg { padding: 12px 10px 20px; }
+  .trCard--big { grid-column: span 1; }
+  .trRaceWrap { height: 72vh; }
+  .trPanel { padding: 16px; }
+}

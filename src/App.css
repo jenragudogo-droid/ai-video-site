@@ -282,3 +282,67 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
   .rushDash { opacity: .5; }
   .rushCoin { opacity: .8; bottom: 24%; width: 14px; height: 14px; }
 }
+
+/* ---------- Turbo Rush game card art ---------- */
+.gameArt--turbo {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0d1230 0%, #24164a 45%, #4a1a3a 70%, #1a1020 100%);
+}
+.turboSky {
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 15% 20%, #fff, transparent),
+    radial-gradient(1px 1px at 40% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 70% 25%, #fff, transparent),
+    radial-gradient(1px 1px at 88% 10%, #fff, transparent),
+    radial-gradient(1px 1px at 55% 35%, #ffd, transparent);
+}
+.turboPlanet {
+  position: absolute; top: 12%; right: 12%;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6fb2e8, #1e5a9a 60%, #12386b);
+  box-shadow: 0 0 22px rgba(110, 178, 232, 0.5);
+}
+.turboRoad {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 130px solid transparent;
+  border-right: 130px solid transparent;
+  border-bottom: 120px solid #2c2f3c;
+}
+.turboStripe {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 110px;
+  background: repeating-linear-gradient(180deg, #ffd34d 0 14px, transparent 14px 28px);
+  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+}
+.turboCar {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  width: 74px; height: 30px; border-radius: 8px 8px 5px 5px;
+  background: linear-gradient(180deg, #e84a3a, #b32516);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+}
+.turboCabin {
+  position: absolute; top: -10px; left: 18px;
+  width: 38px; height: 14px; border-radius: 7px 7px 0 0;
+  background: linear-gradient(180deg, #a8d8f0, #4a7a9a);
+}
+.turboWheel {
+  position: absolute; bottom: -7px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #14161c; border: 3px solid #3a3f4a;
+}
+.turboWheel--f { left: 6px; }
+.turboWheel--r { right: 6px; }
+.turboFlame {
+  position: absolute; left: -20px; top: 9px;
+  width: 20px; height: 12px; border-radius: 50% 0 0 50%;
+  background: linear-gradient(90deg, transparent, #ff8c2e 55%, #ffd34d);
+  filter: blur(1px);
+  animation: turboFlicker 0.28s infinite alternate;
+}
+@keyframes turboFlicker {
+  from { transform: scaleX(0.8); opacity: 0.75; }
+  to { transform: scaleX(1.25); opacity: 1; }
+}

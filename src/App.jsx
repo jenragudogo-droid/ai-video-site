@@ -12,6 +12,11 @@ import "./App.css";
    stays exactly as light as it was before the game existed. */
 const EndlessRush = lazy(() => import("./components/EndlessRush"));
 
+/* Turbo Rush is the same deal at a bigger scale — a full 3D arcade
+   racer (three.js, 12 tracks, career mode) that only loads when the
+   player presses Play. */
+const TurboRush = lazy(() => import("./components/TurboRush"));
+
 const videos = [
   {
     title: "Lion vs Dragon Part 1",
@@ -88,6 +93,7 @@ function VideoCard({ video }) {
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
+  const [turboOpen, setTurboOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -216,12 +222,59 @@ function App() {
                 </button>
               </div>
             </article>
+            <article className="gameCard">
+              <div className="gameArt gameArt--turbo" aria-hidden="true">
+                <span className="turboSky" />
+                <span className="turboPlanet" />
+                <span className="turboRoad" />
+                <span className="turboStripe" />
+                <span className="turboCar">
+                  <span className="turboCabin" />
+                  <span className="turboWheel turboWheel--f" />
+                  <span className="turboWheel turboWheel--r" />
+                  <span className="turboFlame" />
+                </span>
+                <span className="episodeLabel">Game 05</span>
+              </div>
+              <div className="cardContent">
+                <h3>Kianimation Turbo Rush</h3>
+                <p>
+                  A full 3D arcade racer. Nine original drivers, fourteen
+                  machines and twelve tracks that climb from tropical beaches
+                  and neon cities all the way to the Moon, Mars and the
+                  asteroid belt. Drift for nitro, stack three power-ups and
+                  slam two together for combo attacks, find the hidden
+                  shortcuts, and take down five bosses in a nine-cup career.
+                </p>
+                <div className="gameTags">
+                  <span>3D racing</span>
+                  <span>12 tracks</span>
+                  <span>9 drivers</span>
+                  <span>Power-up combos</span>
+                  <span>Boss races</span>
+                  <span>Career + shops</span>
+                  <span>Earth &amp; space</span>
+                  <span>Touch + keyboard</span>
+                </div>
+                <button type="button" onClick={() => setTurboOpen((open) => !open)}>
+                  {turboOpen ? "Close game" : "Play now"}
+                </button>
+              </div>
+            </article>
           </div>
 
           {rushOpen && (
             <div className="gameStageWrap">
               <Suspense fallback={<div className="gameLoading">Loading Endless Rush…</div>}>
                 <EndlessRush />
+              </Suspense>
+            </div>
+          )}
+
+          {turboOpen && (
+            <div className="gameStageWrap">
+              <Suspense fallback={<div className="gameLoading">Loading Turbo Rush…</div>}>
+                <TurboRush />
               </Suspense>
             </div>
           )}
