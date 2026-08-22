@@ -93,6 +93,12 @@ export default function EndlessRush() {
   const tickRef = useRef({ fpsAcc: 0, fpsN: 0, fps: 0, zone: "", zoneAge: 9 });
   const swipeRef = useRef(null);
   const profileHintRef = useRef(true);
+  /* Has the run currently in `gameRef` already had its coins added to the
+     profile? There are four ways out of a run — dying, quitting from the
+     pause card, closing the game card, and starting a fresh one — and the
+     coins have to be banked on every one of them, exactly once. Starts
+     true because there is no run to bank before the first one begins. */
+  const bankedRef = useRef(true);
   const previewCharRef = useRef(CHARACTERS[0].id);
 
   const [screen, setScreen] = useState("intro");
@@ -196,17 +202,39 @@ export default function EndlessRush() {
 
   /* ------------------------------- events ------------------------------- */
 
-  const finishRun = useCallback(() => {
+  /**
+   * Folds the current run into the saved profile, once.
+   *
+   * `s.coins` is the current run's tally and nothing else; the permanent
+   * balance lives in the profile, in localStorage. This is the only place
+   * the one is added to the other, so every exit from a run can call it
+   * without any of them needing to know what the others did. Reads the
+   * profile back off disk rather than trusting React state, so two exits
+   * racing in the same tick cannot write a stale total.
+   *
+   * Returns null when there was nothing to bank.
+   */
+  const bankRun = useCallback(() => {
     const s = gameRef.current;
-    if (!s) return;
+    if (!s || bankedRef.current) return null;
+    bankedRef.current = true;
     const run = summarise(s);
     const { profile: next, isRecord } = recordRun(readSave(), run);
     setProfile(next);
+    return { run, isRecord };
+  }, []);
+
+  const finishRun = useCallback(() => {
+    const s = gameRef.current;
+    if (!s) return;
+    const banked = bankRun();
+    const run = banked ? banked.run : summarise(s);
+    const isRecord = banked ? banked.isRecord : false;
     setResults({ ...run, isRecord, previousBest: bestRef.current });
     setScreen("over");
     audioRef.current?.stopMusic();
     if (isRecord) setTimeout(() => audioRef.current?.play("record"), 900);
-  }, []);
+  }, [bankRun]);
 
   const handleEvents = useCallback(() => {
     const s = gameRef.current;
@@ -438,6 +466,7 @@ export default function EndlessRush() {
     tickRef.current.zoneAge = 9;
     setResults(null);
     startRun(s);
+    bankedRef.current = false;      // this run's coins are now owed
     setScreen("playing");
     const a = audioRef.current;
     a?.unlock();
@@ -481,10 +510,16 @@ export default function EndlessRush() {
 
   const quitToMenu = useCallback(() => {
     audioRef.current?.stopMusic();
+    /* Bank *before* resetting: resetGame zeroes s.coins, and this used to
+       run first, which is why walking away from a good run through the
+       pause card threw every coin in it away. Harmless after a death,
+       because finishRun has already banked and the guard makes this a
+       no-op. */
+    bankRun();
     const s = gameRef.current;
     if (s) { resetGame(s, undefined, readSave().selected); resetCamera(); resetPoseBlend(); }
     setScreen("intro");
-  }, []);
+  }, [bankRun]);
 
   const openShop = useCallback(() => {
     setShopFocus(readSave().selected);
@@ -594,6 +629,15 @@ export default function EndlessRush() {
     if (s) attack(s);
     audioRef.current?.unlock();
   }, []);
+
+  /* Closing the game card unmounts this component mid-run, which is the
+     fourth way out of a run and just as much a "I am done, keep my
+     coins" as the other three. Banking on unmount also covers a route
+     change or the whole app being torn down. The write goes to
+     localStorage synchronously, so it survives even though the React
+     state update that follows it lands on a component that no longer
+     exists — which React treats as a no-op, not an error. */
+  useEffect(() => () => { bankRun(); }, [bankRun]);
 
   /* auto-pause whenever the game leaves the screen */
   useEffect(() => {
