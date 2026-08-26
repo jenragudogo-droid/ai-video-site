@@ -176,8 +176,12 @@ export function stepBody(r, st, input, env, fx, dt) {
     }
   }
 
-  /* vertical: follow the road, fly off ramps */
-  const gy = surfaceY(samples, loop, onShortcut ? b.routeSeg : b.seg, b.x, b.z);
+  /* vertical: follow the road, fly off ramps. The rendered road ribbon
+     sits slightly above the physics samples (0.02 main, 0.03 shortcut),
+     so lift the contact height to match — wheels rest ON the visible
+     surface instead of 2-3 cm inside it. */
+  const gy = surfaceY(samples, loop, onShortcut ? b.routeSeg : b.seg, b.x, b.z)
+    + (onShortcut ? 0.03 : 0.02);
   const g = 24 * env.gravity;
   if (b.airborne) {
     b.vy -= g * dt;
@@ -207,7 +211,15 @@ export function stepBody(r, st, input, env, fx, dt) {
     } else if (b.y > gy + 0.55 && !env.magnetic) {
       b.airborne = true; b.vy = Math.max(0, b.vy);
     } else {
-      b.y = b.y + (gy - b.y) * Math.min(1, 14 * dt); // suspension settle
+      /* suspension settle: the follow rate scales with speed so fast
+         climbs and descents keep the wheels on the surface (a fixed
+         rate lags ~1 m below the road at top speed on steep hills).
+         Small deficits clamp to the surface outright — the body must
+         never sit inside the road; big ones (route switches, rescues)
+         close over a few frames so there is no visible teleport. */
+      const follow = (env.magnetic ? 30 : 16) + Math.abs(b.speed) * 0.55;
+      b.y += (gy - b.y) * Math.min(1, follow * dt);
+      if (b.y < gy && gy - b.y < 0.5) b.y = gy;
       b.vy = 0;
     }
   }
@@ -228,8 +240,9 @@ export function stepBody(r, st, input, env, fx, dt) {
   if (onShortcut) {
     const f = b.routeSeg / Math.max(1, sc.samples.length - 1);
     b.sProg = (sc.sStart + f * (sc.sEnd - sc.sStart)) % track.length;
-    /* leave the shortcut at its end */
-    if (b.routeSeg >= sc.samples.length - 3) {
+    /* leave the shortcut at its end — the last sample sits exactly on
+       the main road, so handing over there keeps the height seamless */
+    if (b.routeSeg >= sc.samples.length - 1) {
       b.route = -1;
       b.seg = sc.exitIdx;
     }

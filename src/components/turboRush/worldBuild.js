@@ -175,10 +175,15 @@ function terrainSkirt(compiled, rng) {
         const wob = j === 0 ? 0 : (rng() - 0.5) * offs[j] * 0.25;
         let y = s.y - 0.15;
         if (j > 0) {
+          /* cars may drive up to ~6.5 m past the road edge before the wall
+             push, so the terrain stays flush with the road across that
+             strip (eff = 0) and only rises/falls beyond it — otherwise the
+             car buries into rising hillsides or floats over drops */
+          const eff = Math.max(0, offs[j] - 9);
           const fall = def.theme === "mountain" || def.theme === "canyon" || def.theme === "volcano" || def.theme === "mars"
-            ? (side > 0 ? -offs[j] * 0.5 : offs[j] * 0.55)  // cliff down one side, up the other
-            : -offs[j] * 0.18;                                // gentle roll-off
-          y = s.y + fall + (rng() - 0.5) * (2 + j * 1.5);
+            ? (side > 0 ? -eff * 0.5 : eff * 0.55)  // cliff down one side, up the other
+            : -eff * 0.18;                            // gentle roll-off
+          y = s.y + fall + (rng() - 0.5) * (j === 1 ? 0.5 : 2 + j * 1.5);
           /* keep a strip of dry sand beside the road on water tracks so the
              drivable margin is beach, never open sea */
           if (def.water) y = j <= 2 ? Math.max(y, def.waterLevel + 0.6) : Math.max(y, def.waterLevel - 6);

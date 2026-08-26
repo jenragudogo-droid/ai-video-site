@@ -61,6 +61,13 @@ function respace(raw, spacing, loop) {
     acc += d;
     if (acc >= spacing) { out.push({ x: b.x, y: b.y, z: b.z }); acc = 0; }
   }
+  if (!loop) {
+    /* open chains (shortcuts) must end EXACTLY on their final point, or
+       the rejoin seam with the main road gets a height/position step */
+    const e = raw[N - 1], l = out[out.length - 1];
+    if (Math.hypot(e.x - l.x, e.y - l.y, e.z - l.z) > spacing * 0.25) out.push({ x: e.x, y: e.y, z: e.z });
+    else { l.x = e.x; l.y = e.y; l.z = e.z; }
+  }
   return out;
 }
 

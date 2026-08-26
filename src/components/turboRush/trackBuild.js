@@ -198,16 +198,24 @@ export function lateralOffset(s, x, z) {
   return (x - s.x) * Math.cos(s.ang) - (z - s.z) * Math.sin(s.ang);
 }
 
-/* Road surface height near sample i for a car at (x,z): lerp along the
-   segment toward the next sample for smooth slopes. */
+/* Road surface height near sample i for a car at (x,z). The nearest
+   sample can be AHEAD of the car, so project onto the forward segment
+   first and fall back to the previous segment when the car is behind
+   sample i — otherwise the height stair-steps at every sample join. */
 export function surfaceY(samples, loop, i, x, z) {
   const n = samples.length;
   const a = samples[i];
-  const j = loop ? (i + 1) % n : Math.min(i + 1, n - 1);
-  const b = samples[j];
+  const b = samples[loop ? (i + 1) % n : Math.min(i + 1, n - 1)];
   const dx = b.x - a.x, dz = b.z - a.z;
   const L2 = dx * dx + dz * dz || 1;
-  let t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
-  t = Math.max(0, Math.min(1, t));
-  return a.y + (b.y - a.y) * t;
+  const t = ((x - a.x) * dx + (z - a.z) * dz) / L2;
+  if (t < 0 && (loop || i > 0)) {
+    const p = samples[loop ? (i - 1 + n) % n : i - 1];
+    const dx2 = a.x - p.x, dz2 = a.z - p.z;
+    const L22 = dx2 * dx2 + dz2 * dz2 || 1;
+    let t2 = ((x - p.x) * dx2 + (z - p.z) * dz2) / L22;
+    t2 = Math.max(0, Math.min(1, t2));
+    return p.y + (a.y - p.y) * t2;
+  }
+  return a.y + (b.y - a.y) * Math.max(0, Math.min(1, t));
 }
