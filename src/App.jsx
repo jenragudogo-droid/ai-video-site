@@ -100,8 +100,8 @@ function App() {
     <div className="app">
       <header className="navbar">
         <a className="brand" href="#home" onClick={closeMenu}>
-          <span className="brandMark">AI</span>
-          <span>Story World</span>
+          <span className="brandMark">KS</span>
+          <span>kianimationstudios</span>
         </a>
 
         <button
@@ -166,7 +166,7 @@ function App() {
               <p className="eyebrow">Play games</p>
               <h2>Step into the arena</h2>
             </div>
-            <p>Playable browser games built around the creatures of AI Story World. No download, no sign up—just pick a game and go.</p>
+            <p>Playable browser games built around the creatures of kianimationstudio. No download, no sign up—just pick a game and go.</p>
           </div>
 
           <div className="gameGrid">
@@ -309,9 +309,9 @@ function App() {
       </main>
 
       <footer>
-        <a className="brand footerBrand" href="#home"><span className="brandMark">AI</span><span>Story World</span></a>
+        <a className="brand footerBrand" href="#home"><span className="brandMark">KS</span><span>kianimationstudio</span></a>
         <p>Original worlds. Artificial intelligence. Human imagination.</p>
-        <p>© 2026 AI Story World</p>
+        <p>© 2026 kianimationstudio</p>
       </footer>
     </div>
   );
