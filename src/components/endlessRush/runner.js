@@ -26,8 +26,11 @@ import {
 } from "./models.js";
 import { characterById, drawRide, drawRideTrail } from "./characters.js";
 
-/* The scans face −Z as exported; the game runs toward +Z. */
-const MODEL_YAW = Math.PI;
+/* The Meshy scans face +Z as exported — nose and toes both reach
+   furthest toward +Z in the baked vertex data — and +Z is already the
+   direction of travel, so the root needs no yaw at all. The old π here
+   assumed a −Z export and spun the runner round to face the camera. */
+const MODEL_YAW = 0;
 
 /* ------------------------------ fallback kit ------------------------------ */
 
@@ -242,14 +245,20 @@ function evaluate(p, dt, ride) {
       e.shoulderL = lerp(e.shoulderL, 1.35, w);
       e.shoulderR = lerp(e.shoulderR, 1.35, w);
     } else {
-      e.hipL = lerp(e.hipL, 1.05, w);
-      e.hipR = lerp(e.hipR, 0.72, w);
-      e.kneeL = lerp(e.kneeL, 0.12, w);
-      e.kneeR = lerp(e.kneeR, 0.85, w);
-      e.shoulderL = lerp(e.shoulderL, 0.85, w);
-      e.shoulderR = lerp(e.shoulderR, 0.7, w);
-      e.elbowL = lerp(e.elbowL, 0.7, w);
-      e.elbowR = lerp(e.elbowR, 0.7, w);
+      /* Feet-first slide: legs out in front, arms braced behind, chin
+         up. The recline is applied at the root by `place` and already
+         swings the legs forward with it, so the hip angles here are
+         small — they only spread the legs relative to the leant-back
+         pelvis. */
+      e.hipL = lerp(e.hipL, 0.3, w);
+      e.hipR = lerp(e.hipR, 0.55, w);
+      e.kneeL = lerp(e.kneeL, 0.1, w);
+      e.kneeR = lerp(e.kneeR, 0.8, w);
+      e.shoulderL = lerp(e.shoulderL, -0.35, w);
+      e.shoulderR = lerp(e.shoulderR, -0.55, w);
+      e.elbowL = lerp(e.elbowL, 0.35, w);
+      e.elbowR = lerp(e.elbowR, 0.35, w);
+      e.head = lerp(e.head, -0.45, w);
       e.bob = 0;
     }
   }
@@ -300,6 +309,14 @@ const MATS = Array.from({ length: GROUP_COUNT }, () => mat());
 const LOCAL = Array.from({ length: GROUP_COUNT }, () => mat());
 const TMP = mat();
 const G = mat();
+const RECLINE = mat();
+
+/* Slide shape, tuned against the collision box: hips sink to ~0.35 m
+   and the body leans back a radian, which puts the top of the head at
+   ~0.95 m — under every slideable underside (the lowest is 1.00 m) and
+   comfortably clear of the road. */
+const SLIDE_DROP = 0.285;      // of body height
+const SLIDE_RECLINE = 1.0;     // radians, feet-first
 
 function place(m, pose, ev, ch, spinY) {
   /* Model space is one unit tall with the soles on zero, so the scale is
@@ -307,11 +324,19 @@ function place(m, pose, ev, ch, spinY) {
   const h = ch.height;
   const yaw = MODEL_YAW + pose.lean * 0.24 + (spinY || 0);
   const roll = -pose.lean * 0.26;
-  const lift = ev.fly > 0.01 ? 0 : 0;
+  /* The bicycle duck folds over the bars instead (see evaluate); every
+     other ride slides feet-first. Both the sink and the recline are
+     root-level model-space transforms, so nothing about the slide can
+     turn the body toward the camera. */
+  const slide = ch.ride === "bicycle" ? 0 : ev.slide;
   matPlace(G,
-    pose.wx, pose.wy + ev.bob + lift, pose.wz,
+    pose.wx, pose.wy + ev.bob - slide * SLIDE_DROP * h, pose.wz,
     h, h, h, yaw, roll);
-  void m;
+  if (slide > 0.01) {
+    const p = m.pivots[G_PELVIS];
+    matJoint(RECLINE, p[0], p[1], p[2], -slide * SLIDE_RECLINE, 0, 0);
+    matMul(G, G, RECLINE);
+  }
 }
 
 function composeLimbs(m, ev) {
@@ -374,7 +399,7 @@ const SHOULDER_Y = 1.40;
 function makeXform(pose, ev, scale) {
   const roll = -pose.lean * 0.3;
   const yaw = pose.lean * 0.2;
-  const pitch = -ev.slide * 1.26 - ev.dead * 0.5;
+  const pitch = -ev.slide * 1.15 - ev.dead * 0.5;
   const cr = Math.cos(roll), sr = Math.sin(roll);
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
   const cy = Math.cos(yaw), sy = Math.sin(yaw);
