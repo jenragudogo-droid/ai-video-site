@@ -66,13 +66,17 @@ export function compileTrack(def) {
   const shortcuts = (def.shortcuts || []).map((sc, idx) => {
     const i0 = Math.floor(sc.f0 * n), i1 = Math.floor(sc.f1 * n);
     const A = samples[i0], B = samples[i1];
-    // Two mid control points pulled toward the chord (a shorter line than
-    // the road's bulge) with the shortcut's own elevation character.
-    const mids = [0.33, 0.66].map((t, mi) => {
+    // Mid control points pulled toward the chord (a shorter line than the
+    // road's bulge) with the shortcut's own elevation character. The two
+    // near-end points carry only a fraction of the dip and no wobble, so
+    // the route leaves and rejoins the road without a vertical kink at
+    // the seam (a kinked first segment used to dip wheels into the road).
+    const prof = [[0.14, 0.3, 0], [0.36, 0.85, 1], [0.64, 1, 1], [0.86, 0.3, 0]];
+    const mids = prof.map(([t, dk, wk]) => {
       const cx = A.x + (B.x - A.x) * t, cz = A.z + (B.z - A.z) * t;
-      const cy = A.y + (B.y - A.y) * t + sc.dip * (mi === 0 ? 0.8 : 1) + (rng() - 0.5) * 2;
+      const cy = A.y + (B.y - A.y) * t + sc.dip * dk + (rng() - 0.5) * 2 * wk;
       // small sideways wobble so it doesn't look like a ruler line
-      const wob = (rng() - 0.5) * 18;
+      const wob = (rng() - 0.5) * 18 * wk;
       return { x: cx + Math.cos(A.ang) * wob, y: cy, z: cz - Math.sin(A.ang) * wob };
     });
     const open = sampleOpen([{ x: A.x, y: A.y, z: A.z }, ...mids, { x: B.x, y: B.y, z: B.z }], 4);

@@ -185,7 +185,9 @@ export function createCarMesh(carDef, cosmetics, driverLook) {
     if (wheelSpec.hover) spin.visible = false;
     steer.add(spin);
     root.add(steer);
-    return { steer, spin, front: i < 2, r: wheelSpec.r };
+    /* baseY: rest height of the axle — per-wheel suspension in the
+       renderer offsets around it so every tire meets the road */
+    return { steer, spin, front: i < 2, r: wheelSpec.r, baseY: y };
   });
 
   /* Brake / reverse lights on the tail */

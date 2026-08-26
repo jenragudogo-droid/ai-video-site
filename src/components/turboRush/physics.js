@@ -38,7 +38,7 @@ export function makeBody(x, y, z, heading) {
     speed: 0, vy: 0, airborne: false, airTime: 0, airSpin: 0,
     drift: 0, driftDir: 0, driftT: 0, nitro: 0,
     seg: 0, route: -1, routeSeg: 0, sProg: 0, prevS: 0, lap: 0, offroad: false, inTunnel: false,
-    steerVis: 0, wheelSpin: 0, bodyRoll: 0, bodyPitch: 0, bounce: 0,
+    steerVis: 0, wheelSpin: 0, bodyRoll: 0, bodyPitch: 0, bounce: 0, groundPitch: 0, groundRoll: 0,
   };
 }
 
@@ -224,6 +224,29 @@ export function stepBody(r, st, input, env, fx, dt) {
     }
   }
 
+  /* Slope alignment: sample the surface half a wheelbase ahead and
+     behind (per-axle contact, not the centre point) so the whole car —
+     wheels included — pitches with the road. Without this the model
+     renders level and half the car sits inside the road on every hill:
+     front wheels bury on climbs, rear wheels bury on descents. */
+  {
+    const AX = 1.3; // ~half wheelbase, all vehicle types
+    const LX = 0.9; // ~half track width
+    const seg2 = onShortcut ? b.routeSeg : b.seg;
+    const sh = Math.sin(b.heading), ch = Math.cos(b.heading);
+    const yF = surfaceY(samples, loop, seg2, b.x + sh * AX, b.z + ch * AX);
+    const yB = surfaceY(samples, loop, seg2, b.x - sh * AX, b.z - ch * AX);
+    const target = b.airborne ? 0 : Math.max(-0.55, Math.min(0.55, Math.atan2(yF - yB, AX * 2)));
+    b.groundPitch += (target - b.groundPitch) * Math.min(1, (b.airborne ? 2.5 : 18) * dt);
+    /* roll: on curving climbs the surface twists — the left and right
+       wheel rows sit at different heights, so sample across the car too
+       (right-perp of forward is (cos h, -sin h)) */
+    const yRt = surfaceY(samples, loop, seg2, b.x + ch * LX, b.z - sh * LX);
+    const yLt = surfaceY(samples, loop, seg2, b.x - ch * LX, b.z + sh * LX);
+    const rTarget = b.airborne ? 0 : Math.max(-0.45, Math.min(0.45, Math.atan2(yRt - yLt, LX * 2)));
+    b.groundRoll += (rTarget - b.groundRoll) * Math.min(1, (b.airborne ? 2.5 : 18) * dt);
+  }
+
   /* boost pad */
   if (!b.airborne && (s.flags & FLAG.BOOST) && r.padCd <= 0) {
     r.fx.boostTime = Math.max(r.fx.boostTime, 1.1);
@@ -264,7 +287,10 @@ export function stepBody(r, st, input, env, fx, dt) {
   b.wheelSpin += (b.speed / 0.45) * dt;
   b.steerVis += (steer * 0.45 - b.steerVis) * Math.min(1, 10 * dt);
   const latAcc = yawRate * b.speed * 0.02;
-  b.bodyRoll += (-latAcc * (0.5 + st.weight * 0.3) - b.bodyRoll) * Math.min(1, 6 * dt);
+  /* cap the cornering lean: uncapped it exceeds 30° in fast corners and
+     tips the body sideways through the road surface */
+  const rollT = Math.max(-0.16, Math.min(0.16, -latAcc * (0.5 + st.weight * 0.3)));
+  b.bodyRoll += (rollT - b.bodyRoll) * Math.min(1, 6 * dt);
   const slope = b.airborne ? -b.vy * 0.02 : 0;
   b.bodyPitch += ((boosting ? -0.05 : 0) + slope - b.bodyPitch) * Math.min(1, 5 * dt);
   b.bounce = Math.max(0, b.bounce - dt);
@@ -282,7 +308,10 @@ export function maybeEnterShortcut(r, track, want) {
     if (!near) continue;
     const e = sc.samples[0];
     const dist = Math.hypot(b.x - e.x, b.z - e.z);
-    if (dist < sc.samples[0].w + 10 && want(sc, i)) {
+    /* the car must genuinely be at the mouth (position AND height):
+       a wider radius snaps the ground reference to the chain while the
+       car is still metres away, visibly sagging it into the road */
+    if (dist < sc.samples[0].w * 0.5 + 5 && Math.abs(b.y - e.y) < 3.5 && want(sc, i)) {
       b.route = i;
       b.routeSeg = 0;
       r.usedShortcut = sc.name;

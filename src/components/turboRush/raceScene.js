@@ -9,7 +9,7 @@ import { buildWorld } from "./worldBuild.js";
 import { buildScenery } from "./scenery.js";
 import { createCarMesh } from "./carModels.js";
 import { PAINTS } from "./data.js";
-import { FLAG } from "./trackBuild.js";
+import { FLAG, surfaceY } from "./trackBuild.js";
 
 const AI_PAINTS = ["#1e78c8", "#2e9e4f", "#e0a92e", "#8e3fd0", "#e85d1f", "#4a5058"];
 
@@ -133,6 +133,7 @@ export function createRaceScene(canvas, quality) {
         glow: r.cosmetics?.glow || (def.time === "night" && !r.isPlayer ? null : r.cosmetics?.glow),
       };
       const car = createCarMesh(r.car, cos, r.driver.look);
+      car.root.rotation.order = "YXZ"; // yaw first, then road-slope pitch
       car.root.position.set(r.body.x, r.body.y, r.body.z);
       scene.add(car.root);
       view.cars.set(r.id, car);
@@ -209,13 +210,42 @@ export function createRaceScene(canvas, quality) {
       if (!car) continue;
       const b = r.body;
       const hoverBob = car.hover ? Math.sin(view.time * 4 + b.x) * 0.12 + 0.25 : 0;
-      car.root.position.set(b.x, b.y + hoverBob + (b.bounce > 0 ? -b.bounce * 0.3 : 0), b.z);
+      car.root.position.set(b.x, b.y + hoverBob, b.z);
       car.root.rotation.y = b.heading + b.airSpin;
+      /* whole car (wheels included) follows the road slope; three.js
+         +rotation.x drops the nose, so uphill (positive pitch) negates.
+         +rotation.z raises the car's right (+x) side, matching groundRoll. */
+      car.root.rotation.x = -(b.groundPitch || 0);
+      car.root.rotation.z = b.groundRoll || 0;
       car.bodyGroup.rotation.z = b.bodyRoll;
       car.bodyGroup.rotation.x = b.bodyPitch + (b.airborne ? -0.08 : 0);
+      /* landing crouch compresses the body over the wheels — moving the
+         whole root down here used to push the wheels into the road */
+      car.bodyGroup.position.y = b.bounce > 0 ? -b.bounce * 0.25 : 0;
       for (const w of car.wheels) {
         w.spin.rotation.x = b.wheelSpin % (Math.PI * 2);
         if (w.front) w.steer.rotation.y = b.steerVis;
+      }
+      /* per-wheel suspension: pitch+roll fit the body to the surface
+         plane, but on twisted stretches the four contact points are not
+         coplanar — so each wheel samples the road beneath itself and
+         offsets (within travel) until the tire meets the surface */
+      if (!b.airborne && !car.hover) {
+        const onSc = b.route >= 0;
+        const chain = onSc ? race.track.shortcuts[b.route]?.samples : race.track.samples;
+        if (chain) {
+          const cIdx = onSc ? b.routeSeg : b.seg;
+          const lift = onSc ? 0.03 : 0.02;
+          car.root.updateMatrixWorld(true);
+          for (const w of car.wheels) {
+            tmpV.set(w.steer.position.x, w.baseY, w.steer.position.z).applyMatrix4(car.root.matrixWorld);
+            const road = surfaceY(chain, !onSc, cIdx, tmpV.x, tmpV.z) + lift;
+            const pen = tmpV.y - w.r - road;
+            w.steer.position.y = w.baseY - Math.max(-0.22, Math.min(0.22, pen));
+          }
+        }
+      } else {
+        for (const w of car.wheels) w.steer.position.y = w.baseY;
       }
       /* brake + reverse lights */
       car.brakeMat.emissiveIntensity = b.braking ? 2.2 : 0.15;
