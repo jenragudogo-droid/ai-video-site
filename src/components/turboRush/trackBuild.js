@@ -202,12 +202,40 @@ export function lateralOffset(s, x, z) {
   return (x - s.x) * Math.cos(s.ang) - (z - s.z) * Math.sin(s.ang);
 }
 
-/* Road surface height near sample i for a car at (x,z). The nearest
-   sample can be AHEAD of the car, so project onto the forward segment
-   first and fall back to the previous segment when the car is behind
-   sample i — otherwise the height stair-steps at every sample join. */
+/* Road surface height at (x,z) near sample i — computed from the SAME
+   triangles the rendered road ribbon is built from (worldBuild.ribbon:
+   rows L/R at s ∓ perp·w/2, quad split (L_j, L_j+1, R_j) and
+   (R_j, L_j+1, R_j+1)). On curved or twisted stretches the triangle
+   planes deviate up to ±0.3 m from a centreline lerp, so physics MUST
+   interpolate the actual tessellation or cars visibly phase into the
+   drawn road. Falls back to centreline projection off the ribbon edge. */
 export function surfaceY(samples, loop, i, x, z) {
   const n = samples.length;
+  const corner = (j, side) => {
+    const s = samples[loop ? ((j % n) + n) % n : Math.max(0, Math.min(n - 1, j))];
+    const half = s.w / 2;
+    return { x: s.x + Math.cos(s.ang) * half * side, y: s.y, z: s.z - Math.sin(s.ang) * half * side };
+  };
+  let best = null;
+  const lastQuad = loop ? n : n - 1;
+  for (let j = i - 2; j <= i + 1; j++) {
+    if (!loop && (j < 0 || j >= lastQuad)) continue;
+    const L0 = corner(j, -1), R0 = corner(j, 1), L1 = corner(j + 1, -1), R1 = corner(j + 1, 1);
+    for (const [p0, p1, p2] of [[L0, L1, R0], [R0, L1, R1]]) {
+      const v0x = p1.x - p0.x, v0z = p1.z - p0.z;
+      const v1x = p2.x - p0.x, v1z = p2.z - p0.z;
+      const den = v0x * v1z - v1x * v0z;
+      if (Math.abs(den) < 1e-9) continue;
+      const a = ((x - p0.x) * v1z - v1x * (z - p0.z)) / den;
+      const b = (v0x * (z - p0.z) - (x - p0.x) * v0z) / den;
+      if (a < -0.02 || b < -0.02 || a + b > 1.02) continue;
+      const h = p0.y + a * (p1.y - p0.y) + b * (p2.y - p0.y);
+      /* overlapping fan quads on curves: the visible surface is the top */
+      if (best === null || h > best) best = h;
+    }
+  }
+  if (best !== null) return best;
+  /* off the ribbon (shoulder/offroad): extend the centreline plane */
   const a = samples[i];
   const b = samples[loop ? (i + 1) % n : Math.min(i + 1, n - 1)];
   const dx = b.x - a.x, dz = b.z - a.z;
