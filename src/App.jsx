@@ -12,10 +12,10 @@ import "./App.css";
    stays exactly as light as it was before the game existed. */
 const EndlessRush = lazy(() => import("./components/EndlessRush"));
 
-/* Turbo Rush is the same deal at a bigger scale — a full 3D arcade
-   racer (three.js, 12 tracks, career mode) that only loads when the
-   player presses Play. */
-const TurboRush = lazy(() => import("./components/TurboRush"));
+/* Neon Space Shooter is a 2D canvas arcade shooter — engine, renderer
+   and synth audio — and none of it is needed until the player presses
+   Play, so it is fetched on demand like the others. */
+const NeonSpaceShooter = lazy(() => import("./components/NeonSpaceShooter"));
 
 const videos = [
   {
@@ -93,7 +93,7 @@ function VideoCard({ video }) {
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
-  const [turboOpen, setTurboOpen] = useState(false);
+  const [shooterOpen, setShooterOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -223,41 +223,42 @@ function App() {
               </div>
             </article>
             <article className="gameCard">
-              <div className="gameArt gameArt--turbo" aria-hidden="true">
-                <span className="turboSky" />
-                <span className="turboPlanet" />
-                <span className="turboRoad" />
-                <span className="turboStripe" />
-                <span className="turboCar">
-                  <span className="turboCabin" />
-                  <span className="turboWheel turboWheel--f" />
-                  <span className="turboWheel turboWheel--r" />
-                  <span className="turboFlame" />
+              <div className="gameArt gameArt--shooter" aria-hidden="true">
+                <span className="shooterStars shooterStars--far" />
+                <span className="shooterStars shooterStars--near" />
+                <span className="shooterNebula" />
+                <span className="shooterPlanet" />
+                <span className="shooterEnemy shooterEnemy--1" />
+                <span className="shooterEnemy shooterEnemy--2" />
+                <span className="shooterEnemy shooterEnemy--3" />
+                <span className="shooterLaser shooterLaser--1" />
+                <span className="shooterLaser shooterLaser--2" />
+                <span className="shooterBurst" />
+                <span className="shooterShip">
+                  <span className="shooterWing shooterWing--l" />
+                  <span className="shooterWing shooterWing--r" />
+                  <span className="shooterCockpit" />
+                  <span className="shooterFlame" />
                 </span>
                 <span className="episodeLabel">Game 05</span>
               </div>
               <div className="cardContent">
-                <h3>Kianimation Turbo Rush</h3>
+                <h3>Neon Space Shooter</h3>
                 <p>
-                  A full 3D arcade racer. Nine original drivers, fourteen
-                  machines and twelve tracks that climb from tropical beaches
-                  and neon cities all the way to the Moon, Mars and the
-                  asteroid belt. Drift for nitro, stack three power-ups and
-                  slam two together for combo attacks, find the hidden
-                  shortcuts, and take down five bosses in a nine-cup career.
+                  Blast through waves of neon enemies, upgrade your weapons,
+                  collect energy crystals and defeat powerful space bosses.
                 </p>
                 <div className="gameTags">
-                  <span>3D racing</span>
-                  <span>12 tracks</span>
-                  <span>9 drivers</span>
-                  <span>Power-up combos</span>
-                  <span>Boss races</span>
-                  <span>Career + shops</span>
-                  <span>Earth &amp; space</span>
+                  <span>2D arcade shooter</span>
+                  <span>Auto-fire</span>
+                  <span>7 power-ups</span>
+                  <span>Weapon levels</span>
+                  <span>Boss battles</span>
+                  <span>Combos + crystals</span>
                   <span>Touch + keyboard</span>
                 </div>
-                <button type="button" onClick={() => setTurboOpen((open) => !open)}>
-                  {turboOpen ? "Close game" : "Play now"}
+                <button type="button" onClick={() => setShooterOpen((open) => !open)}>
+                  {shooterOpen ? "Close game" : "Play now"}
                 </button>
               </div>
             </article>
@@ -271,10 +272,10 @@ function App() {
             </div>
           )}
 
-          {turboOpen && (
+          {shooterOpen && (
             <div className="gameStageWrap">
-              <Suspense fallback={<div className="gameLoading">Loading Turbo Rush…</div>}>
-                <TurboRush />
+              <Suspense fallback={<div className="gameLoading">Loading Neon Space Shooter…</div>}>
+                <NeonSpaceShooter />
               </Suspense>
             </div>
           )}

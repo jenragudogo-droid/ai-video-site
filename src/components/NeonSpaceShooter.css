@@ -1,0 +1,283 @@
+/* ------------------------------------------------------------------ *
+ * Neon Space Shooter — shell, overlays and cards.
+ * Score, hearts, crystals, wave banners and combos are painted on the
+ * canvas; everything in this file is chrome around it.
+ * ------------------------------------------------------------------ */
+
+.nshoot {
+  --nshoot-cyan: #52e9ff;
+  --nshoot-violet: #9e62ff;
+  --nshoot-pink: #ff5f8f;
+  --nshoot-panel: rgba(10, 12, 24, 0.92);
+  --nshoot-line: rgba(122, 226, 255, 0.18);
+  --nshoot-text: #f6f2e9;
+  --nshoot-dim: rgba(246, 242, 233, 0.62);
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 360px;
+  max-height: min(76vh, 760px);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #060714;
+  border: 1px solid var(--nshoot-line);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+  color: var(--nshoot-text);
+  font-family: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Only a live run swallows touch gestures; on menus the page scrolls. */
+.nshoot.is-live { touch-action: none; }
+
+.nshoot.is-full {
+  border-radius: 0;
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.nshootCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.nshootGestures {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  touch-action: none;
+}
+
+/* ------------------------------ quick bar ------------------------------ */
+
+.nshootQuick {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 5;
+}
+
+.nshootQuick button {
+  min-width: 40px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--nshoot-line);
+  background: rgba(8, 10, 20, 0.72);
+  color: var(--nshoot-text);
+  font: 600 13px/1 inherit;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.nshootQuick button:hover {
+  background: rgba(20, 28, 46, 0.9);
+  border-color: rgba(82, 233, 255, 0.55);
+}
+
+/* ------------------------------- overlays ------------------------------- */
+
+.nshootOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vw, 28px);
+  background: radial-gradient(circle at 50% 40%, rgba(10, 8, 26, 0.5), rgba(3, 4, 10, 0.87));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.nshootOverlay--thin { background: rgba(3, 4, 10, 0.35); }
+
+.nshootCard {
+  width: min(520px, 100%);
+  padding: clamp(18px, 3vw, 30px);
+  border-radius: 16px;
+  border: 1px solid var(--nshoot-line);
+  background: var(--nshoot-panel);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(82, 233, 255, 0.06) inset;
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.nshootCard--slim { width: min(400px, 100%); }
+
+.nshootCard h3 {
+  margin: 0 0 12px;
+  font-size: clamp(1.4rem, 3.2vw, 2rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+.nshootEyebrow {
+  margin: 0 0 10px;
+  color: var(--nshoot-cyan);
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.nshootTitle {
+  margin: 0 0 12px;
+  font-size: clamp(1.7rem, 4vw, 2.5rem);
+  line-height: 1.02;
+  letter-spacing: 0.02em;
+  font-weight: 800;
+  color: var(--nshoot-text);
+  text-shadow: 0 0 22px rgba(82, 233, 255, 0.45);
+}
+
+.nshootTitle em {
+  font-style: normal;
+  color: var(--nshoot-cyan);
+  text-shadow: 0 0 26px rgba(82, 233, 255, 0.8);
+}
+
+.nshootLead {
+  margin: 0 auto 18px;
+  max-width: 400px;
+  color: var(--nshoot-dim);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.nshootHow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0 auto 18px;
+  max-width: 380px;
+  text-align: left;
+  font-size: 0.76rem;
+  color: var(--nshoot-dim);
+}
+
+.nshootHow div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nshootHow span {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--nshoot-line);
+  background: rgba(82, 233, 255, 0.07);
+  color: var(--nshoot-cyan);
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
+.nshootStats {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  margin: 0 0 20px;
+}
+
+.nshootStats--over {
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.nshootStats div { display: grid; gap: 2px; }
+.nshootStats strong { font-size: 1.05rem; color: var(--nshoot-text); }
+.nshootStats span {
+  color: var(--nshoot-dim);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.nshootScore {
+  margin: 4px 0 14px;
+  font-size: clamp(2rem, 6vw, 2.8rem);
+  font-weight: 800;
+  color: var(--nshoot-cyan);
+  text-shadow: 0 0 26px rgba(82, 233, 255, 0.6);
+}
+
+.nshootMain {
+  min-height: 46px;
+  padding: 12px 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(82, 233, 255, 0.65);
+  background: linear-gradient(180deg, rgba(82, 233, 255, 0.22), rgba(30, 111, 174, 0.28));
+  color: #eafcff;
+  font-weight: 800;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgba(82, 233, 255, 0.25);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.nshootMain:hover {
+  box-shadow: 0 0 32px rgba(82, 233, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.nshootGhost {
+  min-height: 46px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: var(--nshoot-dim);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.nshootGhost:hover { color: var(--nshoot-text); border-color: rgba(255, 255, 255, 0.4); }
+
+.nshootRow {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nshootHint {
+  margin: 14px 0 0;
+  color: var(--nshoot-dim);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+}
+
+/* ------------------------------ responsive ------------------------------ */
+
+@media (max-width: 760px) {
+  .nshoot {
+    aspect-ratio: 3 / 4;
+    min-height: 440px;
+    max-height: min(72vh, 640px);
+  }
+}
+
+@media (max-height: 480px) {
+  .nshoot {
+    aspect-ratio: auto;
+    height: 92svh;
+    min-height: 240px;
+  }
+  .nshootCard { padding: 14px 16px; }
+  .nshootLead { display: none; }
+}

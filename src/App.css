@@ -283,66 +283,113 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
   .rushCoin { opacity: .8; bottom: 24%; width: 14px; height: 14px; }
 }
 
-/* ---------- Turbo Rush game card art ---------- */
-.gameArt--turbo {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(180deg, #0d1230 0%, #24164a 45%, #4a1a3a 70%, #1a1020 100%);
+/* ---------- Neon Space Shooter game card art ---------- */
+.gameArt--shooter {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(64, 220, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 22% 64%, rgba(158, 98, 255, 0.22), transparent 42%),
+    linear-gradient(180deg, #060714 0%, #0d0a26 52%, #140a22 100%);
 }
-.turboSky {
-  position: absolute; inset: 0;
+.shooterStars {
+  position: absolute; inset: -60px 0 0 0;
   background-image:
-    radial-gradient(1.5px 1.5px at 15% 20%, #fff, transparent),
-    radial-gradient(1px 1px at 40% 12%, #fff, transparent),
-    radial-gradient(1.5px 1.5px at 70% 25%, #fff, transparent),
-    radial-gradient(1px 1px at 88% 10%, #fff, transparent),
-    radial-gradient(1px 1px at 55% 35%, #ffd, transparent);
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 34% 42%, #cfe9ff, transparent),
+    radial-gradient(1.5px 1.5px at 58% 12%, #fff, transparent),
+    radial-gradient(1px 1px at 76% 56%, #ffd9f2, transparent),
+    radial-gradient(1px 1px at 90% 28%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 22% 78%, #bff3ff, transparent),
+    radial-gradient(1px 1px at 66% 84%, #fff, transparent);
+  background-size: 100% 260px;
+  animation: shooterStarfall 9s linear infinite;
 }
-.turboPlanet {
-  position: absolute; top: 12%; right: 12%;
-  width: 52px; height: 52px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #6fb2e8, #1e5a9a 60%, #12386b);
-  box-shadow: 0 0 22px rgba(110, 178, 232, 0.5);
+.shooterStars--near { opacity: .9; animation-duration: 5s; background-size: 100% 200px; }
+.shooterStars--far { opacity: .45; }
+@keyframes shooterStarfall { from { background-position: 0 0; } to { background-position: 0 260px; } }
+.shooterNebula {
+  position: absolute; left: -12%; top: 6%; width: 68%; height: 62%;
+  border-radius: 50%; filter: blur(14px); opacity: .5;
+  background: radial-gradient(ellipse at 45% 50%, rgba(158, 98, 255, .5), rgba(64, 120, 255, .22) 55%, transparent 72%);
 }
-.turboRoad {
-  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 0; height: 0;
-  border-left: 130px solid transparent;
-  border-right: 130px solid transparent;
-  border-bottom: 120px solid #2c2f3c;
+.shooterPlanet {
+  position: absolute; top: 11%; right: 10%;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #9be8ff, #2a7ad2 58%, #123a78);
+  box-shadow: 0 0 26px rgba(90, 190, 255, 0.45), inset -8px -8px 18px rgba(3, 8, 30, .8);
 }
-.turboStripe {
-  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 8px; height: 110px;
-  background: repeating-linear-gradient(180deg, #ffd34d 0 14px, transparent 14px 28px);
-  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+.shooterEnemy {
+  position: absolute; width: 26px; height: 15px;
+  border-radius: 50% 50% 42% 42%;
+  background: linear-gradient(180deg, #ff5f8f, #a01d55);
+  box-shadow: 0 0 12px rgba(255, 95, 143, .65);
+  animation: shooterEnemyDrift 3.4s ease-in-out infinite alternate;
 }
-.turboCar {
-  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-  width: 74px; height: 30px; border-radius: 8px 8px 5px 5px;
-  background: linear-gradient(180deg, #e84a3a, #b32516);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+.shooterEnemy::after {
+  content: ""; position: absolute; left: 50%; top: -5px; width: 12px; height: 8px;
+  margin-left: -6px; border-radius: 50% 50% 0 0;
+  background: linear-gradient(180deg, #ffc4d9, #ff5f8f);
 }
-.turboCabin {
-  position: absolute; top: -10px; left: 18px;
-  width: 38px; height: 14px; border-radius: 7px 7px 0 0;
-  background: linear-gradient(180deg, #a8d8f0, #4a7a9a);
+.shooterEnemy--1 { left: 22%; top: 18%; }
+.shooterEnemy--2 { left: 47%; top: 9%; animation-delay: -1.3s; }
+.shooterEnemy--3 { left: 68%; top: 24%; width: 20px; height: 12px; animation-delay: -2.2s; }
+@keyframes shooterEnemyDrift { from { transform: translateX(-7px); } to { transform: translateX(7px); } }
+.shooterLaser {
+  position: absolute; left: 50%; width: 4px; height: 26px; margin-left: -2px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(120, 255, 255, 0), #52e9ff 40%, #eaffff);
+  box-shadow: 0 0 10px rgba(82, 233, 255, .9);
+  animation: shooterLaserUp 1.05s linear infinite;
 }
-.turboWheel {
-  position: absolute; bottom: -7px;
-  width: 15px; height: 15px; border-radius: 50%;
-  background: #14161c; border: 3px solid #3a3f4a;
+.shooterLaser--2 { animation-delay: -.5s; }
+@keyframes shooterLaserUp {
+  0% { bottom: 24%; opacity: 0; }
+  12% { opacity: 1; }
+  100% { bottom: 86%; opacity: 0; }
 }
-.turboWheel--f { left: 6px; }
-.turboWheel--r { right: 6px; }
-.turboFlame {
-  position: absolute; left: -20px; top: 9px;
-  width: 20px; height: 12px; border-radius: 50% 0 0 50%;
-  background: linear-gradient(90deg, transparent, #ff8c2e 55%, #ffd34d);
+.shooterBurst {
+  position: absolute; left: 47%; top: 16%; width: 34px; height: 34px; margin-left: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 244, 214, .95), rgba(255, 170, 90, .55) 40%, transparent 68%);
+  animation: shooterBurstPop 2.1s ease-out infinite;
+}
+@keyframes shooterBurstPop {
+  0%, 55% { transform: scale(.1); opacity: 0; }
+  62% { transform: scale(1); opacity: 1; }
+  80%, 100% { transform: scale(1.5); opacity: 0; }
+}
+.shooterShip {
+  position: absolute; left: 50%; bottom: 26px; width: 34px; height: 40px; margin-left: -17px;
+  background: linear-gradient(180deg, #eafcff 0%, #6fd9ff 45%, #1e6fae 100%);
+  clip-path: polygon(50% 0, 78% 62%, 100% 100%, 50% 82%, 0 100%, 22% 62%);
+  filter: drop-shadow(0 0 12px rgba(82, 233, 255, .7));
+  animation: shooterShipSway 3s ease-in-out infinite alternate;
+}
+@keyframes shooterShipSway { from { transform: translateX(-9px); } to { transform: translateX(9px); } }
+.shooterWing {
+  position: absolute; bottom: 4px; width: 9px; height: 16px;
+  background: linear-gradient(180deg, #9e62ff, #4a1f96);
+  box-shadow: 0 0 8px rgba(158, 98, 255, .8);
+}
+.shooterWing--l { left: -4px; transform: skewY(24deg); }
+.shooterWing--r { right: -4px; transform: skewY(-24deg); }
+.shooterCockpit {
+  position: absolute; left: 50%; top: 34%; width: 10px; height: 13px; margin-left: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 32%, #fff, #43e6ff 55%, #0f5c8f);
+}
+.shooterFlame {
+  position: absolute; left: 50%; bottom: -13px; width: 10px; height: 15px; margin-left: -5px;
+  border-radius: 0 0 50% 50%;
+  background: linear-gradient(180deg, #9ff2ff, #3aa7ff 55%, transparent);
   filter: blur(1px);
-  animation: turboFlicker 0.28s infinite alternate;
+  animation: shooterFlameFlicker .24s infinite alternate;
 }
-@keyframes turboFlicker {
-  from { transform: scaleX(0.8); opacity: 0.75; }
-  to { transform: scaleX(1.25); opacity: 1; }
+@keyframes shooterFlameFlicker {
+  from { transform: scaleY(.75); opacity: .75; }
+  to { transform: scaleY(1.2); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shooterStars, .shooterEnemy, .shooterLaser, .shooterBurst, .shooterShip, .shooterFlame { animation: none; }
+  .shooterLaser { bottom: 50%; opacity: .8; }
+  .shooterBurst { opacity: 0; }
 }
