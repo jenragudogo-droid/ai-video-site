@@ -11,7 +11,10 @@
  * the sides when the screen is wider than the playfield.
  * ------------------------------------------------------------------ */
 
-import { VIEW_H, SHIP_R, MAX_WEAPON, MAX_HEARTS, POWER_TIME, POWER_LABEL } from "./engine.js";
+import {
+  VIEW_H, MAX_WEAPON, MAX_HEARTS, POWER_TIME, POWER_LABEL,
+  SHIELD_MAX, SPECIAL_MAX, DASH_CD, shipScale, shipR, bossCoreOpen,
+} from "./engine.js";
 
 const TAU = Math.PI * 2;
 
@@ -356,34 +359,74 @@ function bakeCrystal() {
   });
 }
 
+/* colour, glyph, silhouette — every power-up reads differently at a
+   glance: chips are triangles, defensive pickups are hexes/circles,
+   the rare life-savers get stars and crosses. */
 const POWER_STYLE = {
-  upgrade: ["#ffd34d", "▲"],
-  double: ["#52e9ff", "‖"],
-  triple: ["#9e62ff", "Ψ"],
-  rapid: ["#ffab47", "»"],
-  shield: ["#4d9fff", "◍"],
-  beam: ["#ff5f8f", "†"],
-  missiles: ["#ff6c50", "➤"],
-  magnet: ["#3dffc8", "U"],
+  upgrade: ["#ffd34d", "▲", "tri"],
+  double: ["#52e9ff", "‖", "rect"],
+  triple: ["#9e62ff", "Ψ", "rect"],
+  rapid: ["#ffab47", "»", "circle"],
+  shield: ["#4d9fff", "◍", "hex"],
+  beam: ["#ff5f8f", "†", "rect"],
+  missiles: ["#ff6c50", "➤", "diamond"],
+  magnet: ["#3dffc8", "U", "circle"],
+  slow: ["#7ab8ff", "◔", "circle"],
+  repair: ["#6bff8f", "+", "cross"],
+  invuln: ["#ffe95c", "★", "star"],
 };
 
+function dropShape(c, shape, w, h) {
+  const cx = w / 2, cy = h / 2, r = w / 2 - 5;
+  c.beginPath();
+  if (shape === "hex") {
+    for (let i = 0; i < 6; i += 1) {
+      const a = -Math.PI / 2 + (i / 6) * TAU;
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.closePath();
+  } else if (shape === "circle") {
+    c.arc(cx, cy, r, 0, TAU);
+  } else if (shape === "diamond") {
+    c.moveTo(cx, cy - r); c.lineTo(cx + r, cy); c.lineTo(cx, cy + r); c.lineTo(cx - r, cy);
+    c.closePath();
+  } else if (shape === "tri") {
+    c.moveTo(cx, cy - r); c.lineTo(cx + r, cy + r * 0.8); c.lineTo(cx - r, cy + r * 0.8);
+    c.closePath();
+  } else if (shape === "star") {
+    for (let i = 0; i < 10; i += 1) {
+      const a = -Math.PI / 2 + (i / 10) * TAU;
+      const rr = i % 2 ? r * 0.5 : r;
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.closePath();
+  } else if (shape === "cross") {
+    const a = r * 0.42;
+    c.moveTo(cx - a, cy - r); c.lineTo(cx + a, cy - r); c.lineTo(cx + a, cy - a);
+    c.lineTo(cx + r, cy - a); c.lineTo(cx + r, cy + a); c.lineTo(cx + a, cy + a);
+    c.lineTo(cx + a, cy + r); c.lineTo(cx - a, cy + r); c.lineTo(cx - a, cy + a);
+    c.lineTo(cx - r, cy + a); c.lineTo(cx - r, cy - a); c.lineTo(cx - a, cy - a);
+    c.closePath();
+  } else { // rect
+    c.roundRect(4, 4, w - 8, h - 8, 9);
+  }
+}
+
 function bakeDrop(kind) {
-  const [colour, glyph] = POWER_STYLE[kind];
+  const [colour, glyph, shape] = POWER_STYLE[kind];
   return bake(32, 32, (ctx, w, h) => {
-    glowPath(ctx, colour, 9, "rgba(10,14,26,.92)", (c) => {
-      c.beginPath();
-      c.roundRect(4, 4, w - 8, h - 8, 9);
-    });
+    glowPath(ctx, colour, 9, "rgba(10,14,26,.92)", (c) => dropShape(c, shape, w, h));
     ctx.strokeStyle = colour;
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(4, 4, w - 8, h - 8, 9);
+    dropShape(ctx, shape, w, h);
     ctx.stroke();
     ctx.fillStyle = colour;
-    ctx.font = "700 15px 'DM Sans', Arial, sans-serif";
+    ctx.font = "700 13px 'DM Sans', Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(glyph, w / 2, h / 2 + 1);
+    ctx.fillText(glyph, w / 2, h / 2 + (shape === "tri" ? 4 : 1));
   });
 }
 
@@ -553,9 +596,18 @@ export function createRenderer() {
       case "explode":
         explode(e.x, e.y, e.a.kind, e.a.big);
         break;
-      case "spark":
-        particle({ type: "spark", x: e.x, y: e.y, vx: 0, vy: -60, life: 0, max: 0.18, size: 2, colour: "#aef7ff" });
+      case "spark": {
+        // impact particles scale with the damage of the shot that landed
+        const n = 1 + Math.min(3, (e.a || 1));
+        for (let i = 0; i < n; i += 1) {
+          particle({
+            type: "spark", x: e.x, y: e.y,
+            vx: (i - n / 2) * 46, vy: -60 - i * 18,
+            life: 0, max: 0.18 + i * 0.03, size: 2 + Math.min(2, (e.a || 1) - 1), colour: "#aef7ff",
+          });
+        }
         break;
+      }
       case "crystal":
         for (let i = 0; i < 5; i += 1) {
           particle({
@@ -568,9 +620,48 @@ export function createRenderer() {
       case "hit":
         fx.flash = 0.55;
         break;
-      case "shieldBreak":
+      case "shieldHit":
+        // the bubble takes the blow: a blue shock ring at the ship
+        particle({ type: "ring", x: e.x, y: e.y - 2, life: 0, max: 0.35, size: 52, colour: "#4d9fff" });
+        particle({ type: "flash", x: e.x, y: e.y - 2, life: 0, max: 0.18, size: 30, colour: "#8fc4ff" });
+        fx.toasts.push({ text: `SHIELD ${e.a}/${SHIELD_MAX}`, colour: "#4d9fff", t: 0 });
+        break;
+      case "shieldBreak": {
+        // the bubble shatters: shards fly outward along the old radius
         fx.flash = 0.3;
-        fx.toasts.push({ text: "SHIELD DOWN", colour: "#4d9fff", t: 0 });
+        for (let i = 0; i < 10; i += 1) {
+          const a = (i / 10) * TAU;
+          particle({
+            type: "spark", x: e.x + Math.cos(a) * 28, y: e.y - 2 + Math.sin(a) * 28,
+            vx: Math.cos(a) * 240, vy: Math.sin(a) * 240,
+            life: 0, max: 0.5, size: 3, colour: i % 2 ? "#8fc4ff" : "#4d9fff",
+          });
+        }
+        particle({ type: "ring", x: e.x, y: e.y - 2, life: 0, max: 0.5, size: 80, colour: "#4d9fff" });
+        fx.toasts.push({ text: "SHIELD DOWN", colour: "#ff5f8f", t: 0 });
+        break;
+      }
+      case "nearMiss":
+        fx.toasts.push({ text: "NEAR MISS", colour: "#7ef2ff", t: 0.4 }); // starts part-faded: quick and small
+        break;
+      case "comboReward":
+        fx.toasts.push({ text: e.a, colour: "#ffd34d", t: 0 });
+        break;
+      case "specialReady":
+        fx.toasts.push({ text: "SPECIAL READY!", colour: "#7ef2ff", t: 0 });
+        break;
+      case "special":
+        fx.flash = 0;
+        break;
+      case "bossPhase":
+        fx.announce = { lines: [`PHASE ${e.a}`, e.a === 3 ? "FINAL FURY" : "THE FIGHT ESCALATES"], t: 0, dur: 1.8, colour: e.a === 3 ? "#ff416c" : "#ffab47", pulse: true };
+        break;
+      case "coreOpen":
+        fx.toasts.push({ text: "CORE EXPOSED — ATTACK!", colour: "#7ef2ff", t: 0 });
+        break;
+      case "podDown":
+        particle({ type: "ring", x: e.x, y: e.y, life: 0, max: 0.45, size: 46, colour: "#ffd34d" });
+        fx.toasts.push({ text: "CANNON DESTROYED", colour: "#ffd34d", t: 0 });
         break;
       case "power":
         fx.toasts.push({ text: POWER_LABEL[e.a] || "POWER-UP", colour: POWER_STYLE[e.a]?.[0] || "#fff", t: 0 });
@@ -668,40 +759,93 @@ export function createRenderer() {
     if (s.phase === "over") return;
     const blink = s.inv > 0 && Math.floor(t * 14) % 2 === 0;
     const alpha = blink ? 0.35 : 1;
+    const scale = shipScale(s);
 
-    // engine flame: two flickering additive cones under the hull
+    // engine flame: flickering additive cones, hotter at higher levels
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    const fl = 12 + Math.sin(t * 31) * 4;
-    const grad = ctx.createLinearGradient(0, sh.y + 20, 0, sh.y + 24 + fl * 1.6);
+    const fl = (12 + Math.sin(t * 31) * 4 + (s.weapon - 1) * 2.5) * scale;
+    const grad = ctx.createLinearGradient(0, sh.y + 20 * scale, 0, sh.y + 24 * scale + fl * 1.6);
     grad.addColorStop(0, "rgba(158,242,255,.85)");
     grad.addColorStop(0.5, "rgba(58,167,255,.5)");
     grad.addColorStop(1, "rgba(58,167,255,0)");
     ctx.fillStyle = grad;
     ctx.globalAlpha = alpha;
-    for (const dx of [-6, 6]) {
+    for (const dx of [-6 * scale, 6 * scale]) {
       ctx.beginPath();
-      ctx.moveTo(sh.x + dx - 3.4, sh.y + 19);
-      ctx.lineTo(sh.x + dx + 3.4, sh.y + 19);
-      ctx.lineTo(sh.x + dx, sh.y + 22 + fl);
+      ctx.moveTo(sh.x + dx - 3.4, sh.y + 19 * scale);
+      ctx.lineTo(sh.x + dx + 3.4, sh.y + 19 * scale);
+      ctx.lineTo(sh.x + dx, sh.y + 22 * scale + fl);
       ctx.closePath();
       ctx.fill();
     }
     ctx.restore();
 
-    drawSprite(ctx, spr.ship, sh.x, sh.y, 1, sh.tilt * 0.22, alpha);
+    // dash: a streak of ghosts behind the real ship
+    if (s.dashT > 0) {
+      for (let g = 1; g <= 3; g += 1) {
+        drawSprite(ctx, spr.ship, sh.x - s.dashDir * g * 22, sh.y, scale, sh.tilt * 0.22, 0.28 / g);
+      }
+    }
 
-    if (s.shield) {
+    drawSprite(ctx, spr.ship, sh.x, sh.y, scale, sh.tilt * 0.22, alpha);
+
+    // invincibility: a golden aura that stutters as it runs out
+    if (s.power.invuln > 0) {
+      const ending = s.power.invuln < 1.5;
+      const on = !ending || Math.floor(t * 10) % 2 === 0;
+      if (on) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const r = (shipR(s) + 22) * (1 + Math.sin(t * 9) * 0.06);
+        const g = ctx.createRadialGradient(sh.x, sh.y - 2, 4, sh.x, sh.y - 2, r);
+        g.addColorStop(0, "rgba(255,240,150,.45)");
+        g.addColorStop(0.7, "rgba(255,215,80,.22)");
+        g.addColorStop(1, "rgba(255,215,80,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(sh.x, sh.y - 2, r, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,233,92,.85)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sh.x, sh.y - 2, r * 0.82, 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // shield bubble: colour and steadiness track its remaining strength
+    if (s.shield > 0) {
+      const frac = s.shield / SHIELD_MAX;
+      const weak = s.shield === 1;
+      const flick = weak ? 0.45 + 0.45 * Math.abs(Math.sin(t * 13)) : 1;
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.strokeStyle = "rgba(90,170,255,.8)";
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.55 + Math.sin(t * 6) * 0.2;
+      const r = shipR(s) + 16;
+      ctx.strokeStyle = weak ? "rgba(255,140,170,.9)" : "rgba(90,170,255,.85)";
+      ctx.lineWidth = 1.4 + frac * 1.6;
+      ctx.globalAlpha = (0.45 + frac * 0.35) * flick * (0.8 + Math.sin(t * 6) * 0.2);
       ctx.beginPath();
-      ctx.arc(sh.x, sh.y - 2, SHIP_R + 15, 0, TAU);
+      ctx.arc(sh.x, sh.y - 2, r, 0, TAU);
       ctx.stroke();
-      ctx.globalAlpha *= 0.35;
-      ctx.fillStyle = "#4d9fff";
+      // cracks appear as the bubble weakens
+      if (s.shield < SHIELD_MAX) {
+        ctx.lineWidth = 1.2;
+        ctx.globalAlpha *= 0.9;
+        for (let k = 0; k < SHIELD_MAX - s.shield; k += 1) {
+          const a0 = 0.8 + k * 2.3;
+          ctx.beginPath();
+          ctx.moveTo(sh.x + Math.cos(a0) * r, sh.y - 2 + Math.sin(a0) * r);
+          ctx.lineTo(sh.x + Math.cos(a0 + 0.5) * (r - 7), sh.y - 2 + Math.sin(a0 + 0.5) * (r - 7));
+          ctx.lineTo(sh.x + Math.cos(a0 + 0.9) * r, sh.y - 2 + Math.sin(a0 + 0.9) * r);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha *= 0.3;
+      ctx.fillStyle = weak ? "#ff5f8f" : "#4d9fff";
+      ctx.beginPath();
+      ctx.arc(sh.x, sh.y - 2, r, 0, TAU);
       ctx.fill();
       ctx.restore();
     }
@@ -719,6 +863,26 @@ export function createRenderer() {
       ctx.fillStyle = "rgba(255,255,255,.9)";
       ctx.fillRect(sh.x - 3, -10, 6, sh.y - 18);
       ctx.restore();
+    }
+
+    // the special: a field-wide plasma blast rolling up from the ship
+    if (s.specialT > 0) {
+      const k = 1 - s.specialT / 1.4;      // 0 → 1 over the blast
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const g = ctx.createLinearGradient(0, sh.y, 0, 0);
+      g.addColorStop(0, "rgba(190,250,255,.85)");
+      g.addColorStop(0.4, "rgba(82,233,255,.5)");
+      g.addColorStop(1, "rgba(158,98,255,.25)");
+      ctx.fillStyle = g;
+      ctx.globalAlpha = k < 0.12 ? k / 0.12 : 1 - Math.max(0, (k - 0.7) / 0.3);
+      ctx.fillRect(0, -10, s.W, sh.y);
+      // a bright shock line racing to the top of the field
+      const yLine = sh.y - k * (sh.y + 30);
+      ctx.fillStyle = "rgba(255,255,255,.95)";
+      ctx.fillRect(0, yLine - 4, s.W, 8);
+      ctx.restore();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -744,8 +908,24 @@ export function createRenderer() {
   function drawBoss(ctx, s, t) {
     const b = s.boss;
     if (!b) return;
-    const weak = b.state === "idle";
-    // weak windows read as the core flaring open
+    const weak = bossCoreOpen(b);
+
+    // later phases wrap the hull in an angrier glow
+    if (b.phase >= 2) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const col = b.phase === 3 ? "255,65,80" : "255,150,60";
+      const g = ctx.createRadialGradient(b.x, b.y, 10, b.x, b.y, 86);
+      g.addColorStop(0, `rgba(${col},${0.22 + Math.sin(t * (b.phase === 3 ? 8 : 4)) * 0.1})`);
+      g.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 86, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // the open core flares — this is the moment to unload
     if (weak) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
@@ -758,14 +938,69 @@ export function createRenderer() {
     }
     drawSprite(ctx, spr.boss, b.x, b.y, 1, Math.sin(t * 0.9) * 0.03);
 
-    const pat = b.state === "attack" ? ["spread", "barrage", "beam", "wave"][b.pattern] : null;
+    // gun pods: bright weak points while alive, burnt-out sockets after
+    for (const pod of b.pods) {
+      const px = b.x + pod.dx, py = b.y + pod.dy;
+      if (pod.dead) {
+        ctx.fillStyle = "rgba(20,8,16,.85)";
+        ctx.beginPath();
+        ctx.arc(px, py, pod.r * 0.6, 0, TAU);
+        ctx.fill();
+      } else {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.55 + Math.sin(t * 7 + pod.dx) * 0.3;
+        const g = ctx.createRadialGradient(px, py, 1, px, py, pod.r + 6);
+        g.addColorStop(0, "rgba(255,230,140,.95)");
+        g.addColorStop(0.6, "rgba(255,180,60,.5)");
+        g.addColorStop(1, "rgba(255,180,60,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(px, py, pod.r + 6, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        if (pod.hp < pod.maxHp) drawHpBar(ctx, px - pod.r, py + pod.r + 4, pod.r * 2, pod.hp / pod.maxHp, "#ffd34d");
+      }
+    }
+
+    const pat = b.state === "attack" ? b.patName : null;
     if (pat === "beam") {
       ctx.save();
       if (!b.beamOn) {
-        // telegraph: a thin warning line where the beam will strike
-        ctx.globalAlpha = 0.4 + Math.sin(t * 22) * 0.25;
+        /* Telegraph: the whole danger lane flashes, the safe side gets
+           chevrons pointing away, and an intensifying charge glow on
+           the boss counts down the fire moment. */
+        const flash = 0.22 + 0.2 * Math.abs(Math.sin(t * 16));
+        ctx.globalAlpha = flash;
         ctx.fillStyle = "#ff416c";
+        ctx.fillRect(b.beamX - 30, b.y + 24, 60, s.H);
+        ctx.globalAlpha = 0.85;
         ctx.fillRect(b.beamX - 2.4, b.y + 30, 4.8, s.H);
+        // safe-side chevrons at the player's altitude
+        const dir = -b.beamDir; // the beam sweeps beamDir; safety is behind it
+        const sx = b.beamX + dir * 70;
+        ctx.globalAlpha = 0.5 + 0.4 * Math.abs(Math.sin(t * 10));
+        ctx.strokeStyle = "#3dffc8";
+        ctx.lineWidth = 3;
+        for (let k = 0; k < 3; k += 1) {
+          const x = sx + dir * k * 16;
+          ctx.beginPath();
+          ctx.moveTo(x, s.ship.y - 46);
+          ctx.lineTo(x + dir * 9, s.ship.y - 36);
+          ctx.lineTo(x, s.ship.y - 26);
+          ctx.stroke();
+        }
+        // charge glow at the emitter
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = Math.min(1, b.patT / 1.15);
+        const cg = ctx.createRadialGradient(b.beamX, b.y + 30, 1, b.beamX, b.y + 30, 22);
+        cg.addColorStop(0, "rgba(255,255,255,.95)");
+        cg.addColorStop(0.5, "rgba(255,120,150,.7)");
+        cg.addColorStop(1, "rgba(255,65,108,0)");
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.arc(b.beamX, b.y + 30, 22, 0, TAU);
+        ctx.fill();
       } else {
         ctx.globalCompositeOperation = "lighter";
         const bw = 30 + Math.sin(t * 30) * 6;
@@ -824,7 +1059,7 @@ export function createRenderer() {
 
   /* -------------------------------- HUD -------------------------------- */
 
-  function drawHud(ctx, s, best, t, dt) {
+  function drawHud(ctx, s, best, t, dt, opts2 = {}) {
     const W = s.W;
     ctx.textBaseline = "alphabetic";
 
@@ -846,16 +1081,23 @@ export function createRenderer() {
     ctx.font = "700 11px 'DM Sans', Arial, sans-serif";
     if (!s.boss) ctx.fillText(`WAVE ${s.wave}`, W / 2, 26);
 
-    // hearts + crystals, top right
+    // hearts + shield pips + crystals, top right
     for (let i = 0; i < MAX_HEARTS; i += 1) {
       const sp = i < s.hearts ? spr.heart : spr.heartOff;
       drawSprite(ctx, sp, W - 22 - i * 26, 24, 1);
     }
-    drawSprite(ctx, spr.crystal, W - 24, 52, 0.8);
+    for (let i = 0; i < SHIELD_MAX; i += 1) {
+      const on = i < s.shield;
+      ctx.fillStyle = on ? "#4d9fff" : "rgba(255,255,255,.14)";
+      if (on) { ctx.shadowColor = "#4d9fff"; ctx.shadowBlur = 6; }
+      ctx.fillRect(W - 30 - i * 16, 38, 12, 4.6);
+      ctx.shadowBlur = 0;
+    }
+    drawSprite(ctx, spr.crystal, W - 24, 62, 0.8);
     ctx.textAlign = "right";
     ctx.fillStyle = "#5cffd9";
     ctx.font = "700 15px 'DM Sans', Arial, sans-serif";
-    ctx.fillText(`${s.crystalRun}`, W - 38, 57);
+    ctx.fillText(`${s.crystalRun}`, W - 38, 67);
 
     // weapon level pips, bottom left
     ctx.textAlign = "left";
@@ -866,6 +1108,40 @@ export function createRenderer() {
       ctx.fillStyle = i < s.weapon ? "#52e9ff" : "rgba(255,255,255,.16)";
       ctx.fillRect(14 + i * 14, s.H - 34, 10, 4);
     }
+
+    // dash cooldown, under the weapon pips
+    const dashFrac = 1 - Math.max(0, s.dashCd) / DASH_CD;
+    ctx.fillStyle = "rgba(246,242,233,.5)";
+    ctx.fillText("DASH", 14, s.H - 18);
+    ctx.fillStyle = "rgba(8,10,20,.72)";
+    ctx.fillRect(48, s.H - 24, 50, 5);
+    ctx.fillStyle = dashFrac >= 1 ? "#3dffc8" : "rgba(61,255,200,.45)";
+    ctx.fillRect(48.7, s.H - 23.3, 48.6 * dashFrac, 3.6);
+
+    // special meter, bottom centre — pulses when the blast is ready
+    const smW = Math.min(W - 200, 190);
+    const smX = W / 2 - smW / 2;
+    const full = s.special >= SPECIAL_MAX;
+    ctx.textAlign = "center";
+    ctx.fillStyle = full ? "#7ef2ff" : "rgba(246,242,233,.5)";
+    ctx.font = "700 10px 'DM Sans', Arial, sans-serif";
+    if (full) {
+      ctx.globalAlpha = 0.7 + Math.sin(t * 8) * 0.3;
+      ctx.shadowColor = "#7ef2ff";
+      ctx.shadowBlur = 8;
+    }
+    ctx.fillText(full ? (opts2.coarse ? "SPECIAL READY — TAP SPECIAL" : "SPECIAL READY — PRESS X") : "SPECIAL", W / 2, s.H - 28);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(8,10,20,.72)";
+    ctx.fillRect(smX, s.H - 22, smW, 7);
+    const sg = ctx.createLinearGradient(smX, 0, smX + smW, 0);
+    sg.addColorStop(0, "#52e9ff");
+    sg.addColorStop(1, "#9e62ff");
+    ctx.fillStyle = sg;
+    if (full) { ctx.shadowColor = "#52e9ff"; ctx.shadowBlur = 9; }
+    ctx.fillRect(smX + 1, s.H - 21, (smW - 2) * Math.min(1, s.special / SPECIAL_MAX), 5);
+    ctx.shadowBlur = 0;
 
     // active power-up pills, bottom left above weapon
     let py = s.H - 58;
@@ -984,7 +1260,7 @@ export function createRenderer() {
 
   /* -------------------------------- frame -------------------------------- */
 
-  function draw(ctx, s, vw, vh, dt, { best = 0, showHud = true } = {}) {
+  function draw(ctx, s, vw, vh, dt, { best = 0, showHud = true, coarse = false } = {}) {
     fx.starT += dt;
     const t = fx.starT;
     drawBackground(ctx, s, vw, vh, t);
@@ -1021,15 +1297,47 @@ export function createRenderer() {
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    for (const p of s.shots) drawSprite(ctx, p.heavy ? spr.heavyShot : spr.shot, p.x, p.y, 1, Math.atan2(p.vx, -p.vy));
+    // higher weapon levels fire visibly bigger, brighter bolts
+    const shotScale = 1 + (s.weapon - 1) * 0.09;
+    for (const p of s.shots) drawSprite(ctx, p.heavy ? spr.heavyShot : spr.shot, p.x, p.y, shotScale, Math.atan2(p.vx, -p.vy));
     for (const p of s.enemyShots) drawSprite(ctx, spr.bolt, p.x, p.y, 1);
     ctx.restore();
-    for (const m of s.missiles) drawSprite(ctx, spr.missile, m.x, m.y, 1, Math.atan2(m.vx, -m.vy));
+    for (const m of s.missiles) {
+      // a neon trail, laid down as short-lived particles
+      if (dt > 0) {
+        particle({
+          type: "spark", x: m.x - m.vx * 0.02, y: m.y - m.vy * 0.02,
+          vx: -m.vx * 0.12, vy: -m.vy * 0.12,
+          life: 0, max: 0.28, size: 2.4, colour: "#7ef2ff",
+        });
+      }
+      drawSprite(ctx, spr.missile, m.x, m.y, 1, Math.atan2(m.vx, -m.vy));
+    }
 
     drawShip(ctx, s, t);
     drawParticles(ctx, dt);
 
-    if (showHud) drawHud(ctx, s, best, t, dt);
+    // slow time: the world visibly drops into a cold blue trance
+    if (s.power.slow > 0) {
+      ctx.save();
+      const ending = s.power.slow < 1.2 && Math.floor(t * 8) % 2 === 0;
+      const g = ctx.createRadialGradient(s.W / 2, s.H / 2, s.H * 0.2, s.W / 2, s.H / 2, s.H * 0.8);
+      g.addColorStop(0, "rgba(80,140,255,0.02)");
+      g.addColorStop(1, `rgba(60,110,255,${ending ? 0.08 : 0.17})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, s.W, s.H);
+      // a slow ripple ring so the state reads even mid-dogfight
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "rgba(122,184,255,.25)";
+      ctx.lineWidth = 2;
+      const rip = (t * 90) % 260;
+      ctx.beginPath();
+      ctx.arc(s.ship.x, s.ship.y, 30 + rip, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (showHud) drawHud(ctx, s, best, t, dt, { coarse });
     ctx.restore();
   }
 

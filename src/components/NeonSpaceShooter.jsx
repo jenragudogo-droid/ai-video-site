@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   makeGame, resetGame, startRun, stepGame, drainEvents, summarise,
-  setViewport, dragShip, releaseDrag,
+  setViewport, dragShip, releaseDrag, dash, fireSpecial,
+  SPECIAL_MAX, DASH_CD,
 } from "./neonSpaceShooter/engine.js";
 import { createRenderer } from "./neonSpaceShooter/render.js";
 import { createShooterAudio } from "./neonSpaceShooter/audio.js";
@@ -24,6 +25,8 @@ const MAX_SUBSTEPS = 6;
 const KEYS = [
   ["← → / A D", "Move"],
   ["Auto", "Fire — just fly"],
+  ["Space", "Dash"],
+  ["X", "Special attack"],
   ["P / Esc", "Pause"],
   ["M", "Mute"],
 ];
@@ -31,6 +34,8 @@ const KEYS = [
 const TOUCH = [
   ["Drag", "Move your ship"],
   ["Auto", "Fire — just fly"],
+  ["DASH", "Quick burst + brief protection"],
+  ["SPECIAL", "Full meter unleashes a blast"],
 ];
 
 export default function NeonSpaceShooter() {
@@ -45,6 +50,8 @@ export default function NeonSpaceShooter() {
   const dragRef = useRef(null);
   const bankedRef = useRef(true);
   const viewRef = useRef({ w: 480, h: 800 });
+  const dashBtnRef = useRef(null);
+  const specialBtnRef = useRef(null);
 
   const [screen, setScreen] = useState("intro");
   const [profile, setProfile] = useState(() => readSave());
@@ -155,8 +162,19 @@ export default function NeonSpaceShooter() {
         case "explode": a?.play(e.a.big ? "bigBoom" : "boom"); break;
         case "crystal": a?.play("crystal"); break;
         case "hit": a?.play("hit"); break;
+        case "shieldHit": a?.play("shieldHit"); break;
         case "shieldBreak": a?.play("shieldBreak"); break;
-        case "power": a?.play("power"); break;
+        case "dash": a?.play("dash"); break;
+        case "special": a?.play("special"); break;
+        case "specialReady": a?.play("specialReady"); break;
+        case "nearMiss": a?.play("nearMiss"); break;
+        case "comboReward": a?.play("comboReward"); break;
+        case "bossPhase": a?.play("bossPhase"); break;
+        case "coreOpen": a?.play("coreOpen"); break;
+        case "podDown": a?.play("podDown"); break;
+        case "power":
+          a?.play(e.a === "repair" ? "repair" : e.a === "invuln" ? "invuln" : e.a === "slow" ? "slow" : "power");
+          break;
         case "upgrade": a?.play("upgrade"); break;
         case "wave": if (e.a > 1) a?.play("wave"); break;
         case "bossWarn": a?.play("bossWarn"); break;
@@ -199,7 +217,15 @@ export default function NeonSpaceShooter() {
     r.draw(ctx, s, w, h, fdt, {
       best: bestRef.current,
       showHud: scr === "playing" || scr === "paused" || scr === "over",
+      coarse,
     });
+
+    /* The touch buttons live in the DOM, so their cooldown ring and the
+       ready pulse are poked directly — no React re-render at 60fps. */
+    const db = dashBtnRef.current;
+    if (db) db.style.setProperty("--cd", String(Math.min(1, 1 - Math.max(0, s.dashCd) / DASH_CD)));
+    const sb = specialBtnRef.current;
+    if (sb) sb.classList.toggle("is-ready", s.special >= SPECIAL_MAX && s.specialT <= 0);
 
     if (paused) {
       ctx.save();
@@ -207,7 +233,7 @@ export default function NeonSpaceShooter() {
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
     }
-  }, [handleEvents]);
+  }, [handleEvents, coarse]);
 
   useEffect(() => {
     let raf = 0;
@@ -292,9 +318,12 @@ export default function NeonSpaceShooter() {
         }
         return;
       }
-      /* Space is a fire key by tradition; fire is automatic here, so it
-         only needs swallowing to stop the page scrolling mid-game. */
-      if (setKey(k, true) || k === " ") e.preventDefault();
+      /* Fire is automatic, which frees Space for the dash; X (or E)
+         triggers the special once the meter is full. */
+      const s = gameRef.current;
+      if (k === " ") { e.preventDefault(); if (s) dash(s); return; }
+      if (k === "x" || k === "e") { e.preventDefault(); if (s) fireSpecial(s); return; }
+      if (setKey(k, true)) e.preventDefault();
     };
     const up = (e) => { setKey(e.key.toLowerCase(), false); };
     window.addEventListener("keydown", down);
@@ -331,6 +360,24 @@ export default function NeonSpaceShooter() {
       const s = gameRef.current;
       if (s) releaseDrag(s);
     }
+  }, []);
+
+  /* The corner buttons must not read as drags: stop the event before
+     the gesture layer sees it. */
+  const onDashTouch = useCallback((e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const s = gameRef.current;
+    if (s) dash(s);
+    audioRef.current?.unlock();
+  }, []);
+
+  const onSpecialTouch = useCallback((e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const s = gameRef.current;
+    if (s) fireSpecial(s);
+    audioRef.current?.unlock();
   }, []);
 
   useEffect(() => () => { bankRun(); }, [bankRun]);
@@ -385,6 +432,31 @@ export default function NeonSpaceShooter() {
         />
       )}
 
+      {live && coarse && (
+        <>
+          <button
+            type="button"
+            ref={specialBtnRef}
+            className="nshootActionBtn nshootActionBtn--special"
+            onPointerDown={onSpecialTouch}
+            onContextMenu={(e) => e.preventDefault()}
+            aria-label="Special attack"
+          >
+            SPECIAL
+          </button>
+          <button
+            type="button"
+            ref={dashBtnRef}
+            className="nshootActionBtn nshootActionBtn--dash"
+            onPointerDown={onDashTouch}
+            onContextMenu={(e) => e.preventDefault()}
+            aria-label="Dash"
+          >
+            DASH
+          </button>
+        </>
+      )}
+
       {(live || screen === "paused") && (
         <div className="nshootQuick">
           <button type="button" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title="Sound (M)">
@@ -422,7 +494,7 @@ export default function NeonSpaceShooter() {
             <button type="button" className="nshootMain" onClick={begin}>
               START GAME
             </button>
-            <p className="nshootHint">{coarse ? "DRAG TO MOVE · AUTO FIRE" : "ARROWS TO MOVE · AUTO FIRE · P PAUSES"}</p>
+            <p className="nshootHint">{coarse ? "DRAG TO MOVE · AUTO FIRE · DASH + SPECIAL BUTTONS" : "ARROWS TO MOVE · AUTO FIRE · SPACE DASH · X SPECIAL"}</p>
           </div>
         </div>
       )}

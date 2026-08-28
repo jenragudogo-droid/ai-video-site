@@ -262,6 +262,59 @@
   letter-spacing: 0.16em;
 }
 
+/* --------------------------- touch action buttons --------------------------- */
+
+/* Corner placement keeps thumbs off the playfield; --cd (0..1) is fed
+   by the game loop and drawn as a conic cooldown ring. */
+.nshootActionBtn {
+  position: absolute;
+  bottom: 14px;
+  z-index: 3;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgba(61, 255, 200, 0.5);
+  color: #d8fff2;
+  font: 800 10px/1 inherit;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(8, 12, 22, 0.88) 62%, transparent 63%),
+    conic-gradient(rgba(61, 255, 200, 0.9) calc(var(--cd, 1) * 360deg), rgba(61, 255, 200, 0.15) 0);
+}
+
+.nshootActionBtn--dash { right: 14px; }
+
+.nshootActionBtn--special {
+  left: 14px;
+  border-color: rgba(158, 98, 255, 0.55);
+  color: #efe2ff;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(10, 8, 24, 0.88) 62%, transparent 63%),
+    conic-gradient(rgba(158, 98, 255, 0.35) 360deg, transparent 0);
+}
+
+.nshootActionBtn--special.is-ready {
+  border-color: rgba(122, 242, 255, 0.9);
+  color: #eafcff;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(10, 14, 28, 0.85) 62%, transparent 63%),
+    conic-gradient(rgba(82, 233, 255, 0.95) 360deg, transparent 0);
+  box-shadow: 0 0 22px rgba(82, 233, 255, 0.55);
+  animation: nshootReadyPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes nshootReadyPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nshootActionBtn--special.is-ready { animation: none; }
+}
+
 /* ------------------------------ responsive ------------------------------ */
 
 @media (max-width: 760px) {

@@ -86,6 +86,21 @@ export function createShooterAudio() {
     }],
     gameover: [0.5, (t) => { tone("triangle", 420, 105, t, 1.15, 0.2); tone("triangle", 210, 52, t + 0.12, 1.1, 0.14); }],
     record: [0.5, (t) => { [660, 880, 1100, 1320].forEach((f, i) => tone("square", f, f, t + i * 0.11, 0.16, 0.1)); }],
+    dash: [0.15, (t) => { noise(t, 0.16, 0.1, 3600, 2); tone("sine", 300, 900, t, 0.14, 0.07, "lin"); }],
+    shieldHit: [0.1, (t) => { tone("triangle", 520, 300, t, 0.16, 0.16); noise(t, 0.1, 0.08, 1400); }],
+    special: [0.5, (t) => {
+      noise(t, 1.2, 0.4, 500); tone("sawtooth", 60, 240, t, 0.5, 0.22, "lin");
+      tone("sawtooth", 120, 480, t + 0.1, 0.6, 0.16, "lin"); tone("sine", 90, 24, t + 0.4, 0.8, 0.26);
+    }],
+    specialReady: [0.5, (t) => { tone("sine", 880, 880, t, 0.1, 0.11); tone("sine", 1320, 1320, t + 0.09, 0.2, 0.12); }],
+    nearMiss: [0.3, (t) => tone("triangle", 2100, 1600, t, 0.06, 0.05)],
+    repair: [0.2, (t) => { tone("sine", 520, 520, t, 0.12, 0.11); tone("sine", 780, 780, t + 0.1, 0.12, 0.11); tone("sine", 1040, 1040, t + 0.2, 0.2, 0.12); }],
+    invuln: [0.2, (t) => { [700, 950, 1250, 1600, 2000].forEach((f, i) => tone("triangle", f, f, t + i * 0.06, 0.12, 0.08)); }],
+    slow: [0.2, (t) => { tone("sine", 700, 130, t, 0.7, 0.14, "lin"); tone("sine", 350, 65, t + 0.05, 0.7, 0.1, "lin"); }],
+    bossPhase: [0.4, (t) => { for (let i = 0; i < 2; i += 1) { tone("square", 260, 260, t + i * 0.22, 0.12, 0.13); tone("square", 390, 390, t + i * 0.22 + 0.1, 0.12, 0.13); } }],
+    coreOpen: [0.3, (t) => { tone("sine", 660, 660, t, 0.1, 0.1); tone("sine", 990, 990, t + 0.08, 0.1, 0.1); tone("sine", 1320, 1320, t + 0.16, 0.18, 0.11); }],
+    comboReward: [0.3, (t) => { [523, 659, 784].forEach((f, i) => tone("square", f, f, t + i * 0.07, 0.12, 0.09)); }],
+    podDown: [0.2, (t) => { noise(t, 0.3, 0.24, 1500); tone("sine", 240, 60, t, 0.3, 0.18); tone("square", 880, 880, t + 0.16, 0.12, 0.08); }],
   };
 
   return {
