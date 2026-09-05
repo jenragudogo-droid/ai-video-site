@@ -1,0 +1,492 @@
+/* ------------------------------------------------------------------ *
+ * Castle Defender — shell, HUD, menus.
+ * Stone, parchment, heraldic red and gold. Everything the battle
+ * itself needs is painted on the canvas; this is the chrome.
+ * ------------------------------------------------------------------ */
+
+.cd {
+  --cd-ink: #f3ead6;
+  --cd-dim: rgba(243, 234, 214, 0.66);
+  --cd-panel: rgba(28, 24, 20, 0.92);
+  --cd-panel-2: rgba(44, 38, 30, 0.94);
+  --cd-line: rgba(217, 168, 58, 0.35);
+  --cd-gold: #d9a83a;
+  --cd-gold-2: #f1d27a;
+  --cd-red: #9b2a2a;
+  --cd-red-2: #c04040;
+  --cd-green: #5bbf4a;
+  --cd-serif: "Cinzel", Georgia, "Times New Roman", serif;
+  --cd-body: Georgia, "Times New Roman", serif;
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 380px;
+  max-height: min(78vh, 780px);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1a2012;
+  border: 1px solid var(--cd-line);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+  color: var(--cd-ink);
+  font-family: var(--cd-body);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: contain;
+}
+.cd.is-live { touch-action: none; }
+.cd.is-full { border-radius: 0; aspect-ratio: auto; width: 100%; height: 100%; max-height: none; min-height: 0; }
+.cd[data-cursor="target"] .cdGestures { cursor: crosshair; }
+
+.cdCanvas { display: block; width: 100%; height: 100%; }
+.cdGestures { position: absolute; inset: 0; z-index: 2; touch-action: none; cursor: default; }
+
+.cd button { font-family: inherit; }
+.cd h2, .cd h3, .cd h4, .cd strong { font-family: var(--cd-serif); }
+
+/* ------------------------------ generic ------------------------------ */
+
+.cdEyebrow {
+  margin: 0 0 6px;
+  font: 600 11px/1.2 var(--cd-serif);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cd-gold);
+}
+.cdBtn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 0 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 168, 58, 0.45);
+  background: linear-gradient(180deg, rgba(74, 62, 46, 0.95), rgba(40, 33, 26, 0.95));
+  color: var(--cd-ink);
+  font: 600 14px/1 var(--cd-serif);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 235, 190, 0.18), 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease, filter 0.12s ease, border-color 0.12s ease;
+}
+.cdBtn:hover { filter: brightness(1.12); border-color: var(--cd-gold); }
+.cdBtn:active { transform: translateY(1px); }
+.cdBtn:focus-visible { outline: 2px solid var(--cd-gold-2); outline-offset: 2px; }
+.cdBtn--main { background: linear-gradient(180deg, #c8493f, #8a2222); border-color: var(--cd-gold); min-height: 52px; font-size: 15px; }
+.cdBtn--gold { background: linear-gradient(180deg, #e0b652, #9c7a2c); color: #2a1f0e; border-color: #f1d27a; }
+.cdBtn--ghost { background: rgba(20, 16, 12, 0.6); }
+.cdBtn--danger { background: linear-gradient(180deg, #a83030, #6a1a1a); }
+.cdBtn.is-off { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.4); }
+.cdBtn.is-on { border-color: var(--cd-gold-2); box-shadow: 0 0 0 2px rgba(241, 210, 122, 0.45), 0 4px 14px rgba(0, 0, 0, 0.35); }
+.cdBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.cdKey {
+  display: inline-grid; place-items: center;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  font: 600 10px/1 var(--cd-serif); letter-spacing: 0;
+  color: var(--cd-dim);
+}
+.cdCost { display: inline-flex; align-items: center; gap: 4px; font-family: var(--cd-serif); font-size: 13px; }
+.cdCoin {
+  display: inline-block; width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff0b0, #f3c43c 45%, #b8871e 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 0 0 1.5px rgba(120, 80, 10, 0.5);
+}
+.cdCoin--s { width: 12px; height: 12px; }
+.cdIconBtn {
+  min-width: 40px; height: 36px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--cd-line); background: rgba(20, 16, 12, 0.7); color: var(--cd-ink);
+  font-size: 15px; cursor: pointer;
+}
+.cdRow { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.cdCol { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.cdCol .cdRow > * { flex: 1; }
+.cdNote { margin: 4px 0 0; font-size: 12px; color: var(--cd-dim); text-align: center; }
+
+.cdStars { display: inline-flex; gap: 2px; font-size: 16px; color: rgba(255, 255, 255, 0.22); line-height: 1; }
+.cdStars span.is-on { color: var(--cd-gold-2); text-shadow: 0 0 10px rgba(241, 210, 122, 0.6); }
+.cdStars--big { font-size: 44px; gap: 10px; margin: 6px 0 2px; }
+.cdStars--big span { transition: transform 0.3s cubic-bezier(0.2, 1.4, 0.4, 1), color 0.3s ease; transform: scale(0.85); }
+.cdStars--big span.is-on { transform: scale(1.1); }
+
+/* ------------------------------ overlays ------------------------------ */
+
+.cdOverlay {
+  position: absolute; inset: 0; z-index: 6;
+  display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(20, 16, 10, 0.35), rgba(12, 10, 6, 0.78));
+  backdrop-filter: blur(1px);
+  overflow: hidden;
+}
+.cdOverlay--thin { background: rgba(10, 8, 6, 0.55); }
+.cdOverlay--menu { background: linear-gradient(180deg, rgba(20, 14, 8, 0.3), rgba(20, 14, 8, 0.6) 60%, rgba(12, 8, 4, 0.85)); align-content: center; grid-template-rows: auto auto auto; gap: 18px; }
+.cdOverlay--page { place-items: stretch; padding: 0; background: rgba(14, 11, 8, 0.86); }
+
+.cdCard {
+  width: min(560px, 100%);
+  padding: 26px 28px 24px;
+  border-radius: 14px;
+  border: 1px solid var(--cd-line);
+  background: var(--cd-panel);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 235, 190, 0.08);
+  text-align: center;
+}
+.cdCard--slim { width: min(380px, 100%); }
+.cdCard h3 { margin: 0 0 10px; font-size: clamp(24px, 4vw, 34px); letter-spacing: 0.06em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdCard--defeat h3 { color: #ff9f8a; }
+.cdResultLine { margin: 6px 0 16px; color: var(--cd-dim); font-size: 14px; }
+.cdResultGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 18px; }
+.cdResultGrid div { padding: 10px 6px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); }
+.cdResultGrid strong { display: block; font-size: 18px; color: var(--cd-ink); }
+.cdResultGrid span { display: block; margin-top: 2px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cd-dim); }
+
+/* ------------------------------ main menu ------------------------------ */
+
+.cdTitleBlock { text-align: center; }
+.cdTitle {
+  margin: 0;
+  font: 700 clamp(38px, 7vw, 72px)/0.95 var(--cd-serif);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--cd-ink);
+  text-shadow: 0 2px 0 #6a4a10, 0 6px 24px rgba(0, 0, 0, 0.7);
+}
+.cdTitle span { display: block; color: var(--cd-gold-2); font-size: 0.72em; letter-spacing: 0.32em; margin-top: 6px; }
+.cdTagline { margin: 12px 0 0; font-size: 15px; color: var(--cd-dim); font-style: italic; }
+.cdMenu { display: flex; flex-direction: column; gap: 10px; width: min(300px, 90%); margin: 0 auto; }
+.cdMenuFoot { display: flex; gap: 18px; align-items: center; justify-content: center; font-size: 13px; color: var(--cd-dim); }
+.cdMenuFoot span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* ------------------------------ pages ------------------------------ */
+
+.cdPage { width: 100%; height: 100%; overflow: auto; padding: 16px clamp(14px, 3vw, 32px) 24px; box-sizing: border-box; }
+.cdPageHead { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.cdPageHead h3 { margin: 0; font-size: clamp(20px, 3vw, 26px); letter-spacing: 0.08em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdPageNote { margin-left: auto; font-size: 13px; color: var(--cd-dim); }
+.cdBack { min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--cd-line); background: rgba(20, 16, 12, 0.7); color: var(--cd-ink); font: 600 13px var(--cd-serif); cursor: pointer; }
+.cdDiff { margin-left: auto; display: inline-flex; border: 1px solid var(--cd-line); border-radius: 999px; overflow: hidden; }
+.cdDiff button { min-height: 36px; padding: 0 14px; border: 0; background: transparent; color: var(--cd-dim); font: 600 12px var(--cd-serif); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+.cdDiff button.is-on { background: var(--cd-gold); color: #2a1f0e; }
+
+.cdStageList { display: grid; gap: 12px; }
+.cdStage { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--cd-line); background: var(--cd-panel); }
+.cdStage.is-locked { opacity: 0.6; grid-template-columns: 64px 1fr; }
+.cdStageNum { font: 700 34px var(--cd-serif); color: var(--cd-gold-2); text-align: center; }
+.cdStage h4 { margin: 0; font-size: 19px; letter-spacing: 0.04em; }
+.cdStageSub { margin: 2px 0 6px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cd-gold); }
+.cdStageIntro { margin: 0 0 8px; font-size: 13px; color: var(--cd-dim); font-style: italic; }
+.cdStageMeta { display: flex; gap: 14px; align-items: center; font-size: 13px; color: var(--cd-dim); flex-wrap: wrap; }
+.cdLocked { margin: 0; font-size: 13px; color: var(--cd-dim); }
+.cdStageActions { display: flex; flex-direction: column; gap: 8px; }
+
+.cdKingdoms { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.cdKingdom { border-radius: 12px; border: 1px solid var(--cd-line); background: var(--cd-panel); overflow: hidden; display: flex; flex-direction: column; }
+.cdKingdomBanner { height: 64px; background: linear-gradient(90deg, var(--k1), var(--k2)); position: relative; }
+.cdKingdomBanner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.25)); }
+.cdKingdomBanner span { position: absolute; left: 16px; bottom: -10px; width: 34px; height: 46px; background: var(--k1); border: 2px solid var(--k2); border-radius: 4px 4px 17px 17px; z-index: 1; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
+.cdKingdomBody { padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.cdKingdom h4 { margin: 0; font-size: 17px; }
+.cdKingdomBody > p { margin: 0; font-size: 13px; color: var(--cd-dim); }
+.cdKingdom dl { margin: 6px 0 10px; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; }
+.cdKingdom dt { color: var(--cd-gold); font-family: var(--cd-serif); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; padding-top: 2px; }
+.cdKingdom dd { margin: 0; color: var(--cd-dim); }
+.cdKingdom .cdBtn { margin-top: auto; }
+.cdSoon { margin-top: auto; align-self: flex-start; padding: 8px 14px; border-radius: 999px; border: 1px dashed var(--cd-line); font: 600 11px var(--cd-serif); letter-spacing: 0.14em; text-transform: uppercase; color: var(--cd-dim); }
+.cdKingdom.is-soon .cdKingdomBanner { filter: saturate(0.6); }
+
+.cdHow h4 { margin: 0 0 6px; font-size: 20px; color: var(--cd-gold-2); }
+.cdHow > p { margin: 0 0 14px; max-width: 70ch; font-size: 14px; line-height: 1.5; color: var(--cd-ink); }
+.cdHowGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cdHowCard { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); text-align: center; }
+.cdHowCard strong { font-size: 13px; }
+.cdHowCard span { font-size: 12px; color: var(--cd-dim); line-height: 1.35; }
+.cdHowCard em { display: inline-flex; gap: 4px; align-items: center; font-style: normal; font-family: var(--cd-serif); color: var(--cd-gold-2); font-size: 13px; }
+.cdHowList { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 6px; font-size: 14px; }
+.cdHowList li { display: flex; gap: 10px; align-items: center; }
+.cdHowKeys { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 14px; font-size: 13px; color: var(--cd-dim); }
+.cdHowKeys span { display: inline-block; min-width: 92px; margin-right: 8px; font-family: var(--cd-serif); font-size: 11px; color: var(--cd-gold-2); }
+.cdPager { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; }
+
+.cdSettings { display: grid; gap: 14px; max-width: 520px; }
+.cdToggle, .cdSlider, .cdChoice { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: 10px; background: var(--cd-panel); border: 1px solid var(--cd-line); font-size: 14px; }
+.cdToggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.cdToggle i { width: 46px; height: 26px; border-radius: 999px; background: rgba(255, 255, 255, 0.15); position: relative; transition: background 0.15s ease; flex: none; }
+.cdToggle i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.15s ease; }
+.cdToggle input:checked + i { background: var(--cd-gold); }
+.cdToggle input:checked + i::after { transform: translateX(20px); }
+.cdToggle input:focus-visible + i { outline: 2px solid var(--cd-gold-2); }
+.cdSlider input { width: 160px; accent-color: var(--cd-gold); }
+.cdChoice > div { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.cdChoice > div > button:not(.cdBtn) { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--cd-line); background: transparent; color: var(--cd-dim); font: 600 12px var(--cd-serif); cursor: pointer; }
+.cdChoice > div > button.is-on { background: var(--cd-gold); color: #2a1f0e; border-color: var(--cd-gold); }
+
+/* ------------------------------ HUD ------------------------------ */
+
+.cdTop {
+  position: absolute; left: 10px; right: 10px; top: 10px; z-index: 5;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  pointer-events: none;
+}
+.cdTop > * { pointer-events: auto; }
+.cdStat {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--cd-line); background: var(--cd-panel);
+  font: 600 15px var(--cd-serif); color: var(--cd-ink);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.cdStat--gold { color: var(--cd-gold-2); }
+.cdCastleIcon { width: 16px; height: 14px; background: linear-gradient(180deg, #d9d2c2, #8a8274); clip-path: polygon(0 30%, 15% 30%, 15% 0, 35% 0, 35% 30%, 65% 30%, 65% 0, 85% 0, 85% 30%, 100% 30%, 100% 100%, 0 100%); }
+.cdBar { display: inline-block; width: 96px; height: 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.12); }
+.cdBarFill { display: block; height: 100%; background: linear-gradient(180deg, #7fd66b, #3f9a30); transition: width 0.25s ease; }
+.cdBarFill.is-low { background: linear-gradient(180deg, #ff8a6a, #b8321e); animation: cdPulse 1s ease-in-out infinite; }
+.cdBarFill.is-hero { background: linear-gradient(180deg, #f1d27a, #b8871e); }
+.cdBarFill.is-boss { background: linear-gradient(180deg, #ff6b57, #8a1c10); }
+.cdBarText { font-size: 12px; color: var(--cd-dim); }
+.cdWaveLabel { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cd-dim); }
+.cdTimer { font-size: 12px; color: var(--cd-gold-2); }
+.cdQuick { margin-left: auto; display: flex; gap: 6px; }
+.cdQuick button { min-width: 38px; height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--cd-line); background: var(--cd-panel); color: var(--cd-ink); font: 600 13px/1 var(--cd-serif); cursor: pointer; }
+.cdQuick button:hover { border-color: var(--cd-gold); }
+@keyframes cdPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.cdBoss {
+  position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 5;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 14px; border-radius: 10px; background: rgba(60, 12, 10, 0.85); border: 1px solid rgba(255, 120, 100, 0.4);
+  font: 600 12px var(--cd-serif); letter-spacing: 0.18em; text-transform: uppercase; color: #ffd0c0;
+  pointer-events: none;
+}
+.cdBar--boss { width: min(320px, 46vw); height: 9px; }
+
+.cdWaveBtn {
+  position: absolute; left: 0; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px 8px 8px; border-radius: 12px;
+  border: 1px solid var(--cd-gold); background: var(--cd-panel-2);
+  color: var(--cd-ink); cursor: pointer; text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  max-width: 260px;
+  animation: cdRise 0.4s ease;
+}
+.cdWaveBtn:hover { filter: brightness(1.1); }
+.cdWaveBtnRing { position: relative; flex: none; width: 34px; height: 34px; border-radius: 50%; background: conic-gradient(var(--cd-gold-2) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.12) 0); }
+.cdWaveBtnRing::after { content: "▶"; position: absolute; inset: 4px; border-radius: 50%; background: var(--cd-panel); display: grid; place-items: center; font-size: 11px; color: var(--cd-gold-2); }
+.cdWaveBtnBody { display: flex; flex-direction: column; gap: 2px; }
+.cdWaveBtnBody strong { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdWaveNext { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.cdWaveNext em { font-style: normal; font-size: 11px; color: var(--cd-dim); }
+.cdWaveBtnBody small { font-size: 11px; color: #9fe58a; }
+@keyframes cdRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+.cdBottomLeft { position: absolute; left: 10px; bottom: 10px; z-index: 5; display: flex; gap: 8px; align-items: flex-end; }
+.cdBottomRight { position: absolute; right: 10px; bottom: 10px; z-index: 5; display: flex; gap: 8px; align-items: flex-end; }
+.cdHero {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 6px; border-radius: 12px;
+  border: 1px solid var(--cd-line); background: var(--cd-panel);
+  color: var(--cd-ink); cursor: pointer; text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.cdHero.is-on { border-color: var(--cd-gold-2); box-shadow: 0 0 0 2px rgba(241, 210, 122, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45); }
+.cdHero.is-down { opacity: 0.7; }
+.cdHeroPortrait { border-radius: 8px; background: radial-gradient(circle at 50% 30%, rgba(217, 168, 58, 0.25), rgba(0, 0, 0, 0.2)); }
+.cdHeroInfo { display: flex; flex-direction: column; gap: 3px; }
+.cdHeroInfo strong { font-size: 13px; letter-spacing: 0.08em; }
+.cdHeroInfo em { font-size: 11px; color: #ffb59a; font-style: normal; }
+.cdBar--hero { width: 84px; height: 7px; }
+.cdPips { display: flex; gap: 3px; }
+.cdPips i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); }
+.cdPips i.is-on { background: var(--cd-gold-2); border-color: var(--cd-gold-2); }
+
+.cdAbility {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 64px; height: 60px; border-radius: 12px;
+  border: 1px solid var(--cd-line); background: var(--cd-panel);
+  color: var(--cd-ink); cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.cdAbility:disabled { cursor: not-allowed; color: var(--cd-dim); }
+.cdAbility.is-ready { border-color: var(--cd-gold); }
+.cdAbility.is-ready::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 100%, rgba(217, 168, 58, 0.35), transparent 70%); }
+.cdAbility.is-on { box-shadow: 0 0 0 2px rgba(241, 210, 122, 0.55), 0 8px 24px rgba(0, 0, 0, 0.45); border-color: var(--cd-gold-2); }
+.cdAbility .cdCd { position: absolute; inset: 0; background: conic-gradient(rgba(0, 0, 0, 0.55) calc(var(--p) * 360deg), transparent 0); pointer-events: none; }
+.cdAbilityIcon { font-size: 20px; line-height: 1; position: relative; }
+.cdAbilityLabel { font: 600 10px var(--cd-serif); letter-spacing: 0.1em; text-transform: uppercase; position: relative; }
+.cdCdText { position: absolute; right: 5px; top: 3px; font: 700 11px var(--cd-serif); color: var(--cd-gold-2); }
+.cdAbility .cdCost { font-size: 11px; position: relative; }
+.cdAbility--charge { width: 70px; }
+.cdAbility--charge .cdAbilityLabel::before { content: "⚡"; display: block; font-size: 18px; margin-bottom: 2px; }
+
+.cdModeHint {
+  position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 8px 8px 16px; border-radius: 999px;
+  background: var(--cd-panel-2); border: 1px solid var(--cd-gold);
+  font-size: 13px; white-space: nowrap;
+  animation: cdRise 0.25s ease;
+}
+.cdModeHint button { min-height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--cd-line); background: rgba(0, 0, 0, 0.35); color: var(--cd-ink); font: 600 11px var(--cd-serif); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+
+/* ------------------------------ build ring ------------------------------ */
+
+.cdRing { position: absolute; left: 0; top: 0; z-index: 5; width: 0; height: 0; }
+.cdRingBtn {
+  position: absolute; width: 72px; height: 78px; margin: -39px 0 0 -36px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: 14px; border: 1px solid var(--cd-gold);
+  background: var(--cd-panel-2); color: var(--cd-ink); cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: cdPop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.cdRingBtn:hover { filter: brightness(1.15); }
+.cdRingBtn.is-off { opacity: 0.55; filter: grayscale(0.6); }
+.cdRingBtn canvas { margin-top: -6px; }
+.cdRingName { font: 600 10px var(--cd-serif); letter-spacing: 0.08em; text-transform: uppercase; margin-top: -4px; }
+.cdRingCost { display: inline-flex; align-items: center; gap: 3px; font: 600 11px var(--cd-serif); color: var(--cd-gold-2); }
+.cdRingBtn .cdKey { position: absolute; left: 5px; top: 5px; }
+.cdRingBtn--0 { transform: translate(-58px, -62px); }
+.cdRingBtn--1 { transform: translate(58px, -62px); }
+.cdRingBtn--2 { transform: translate(-58px, 34px); }
+.cdRingBtn--3 { transform: translate(58px, 34px); }
+.cdRingClose {
+  position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; transform: translate(0, -14px);
+  border-radius: 50%; border: 1px solid var(--cd-line); background: var(--cd-panel);
+  color: var(--cd-ink); font-size: 14px; cursor: pointer;
+}
+@keyframes cdPop { from { opacity: 0; scale: 0.6; } to { opacity: 1; scale: 1; } }
+.cd.is-coarse .cdRingBtn { width: 80px; height: 84px; margin: -42px 0 0 -40px; }
+.cd.is-coarse .cdRingBtn--0 { transform: translate(-64px, -70px); }
+.cd.is-coarse .cdRingBtn--1 { transform: translate(64px, -70px); }
+.cd.is-coarse .cdRingBtn--2 { transform: translate(-64px, 40px); }
+.cd.is-coarse .cdRingBtn--3 { transform: translate(64px, 40px); }
+.cd.is-coarse .cdRingClose { width: 44px; height: 44px; margin: -22px 0 0 -22px; }
+
+/* ------------------------------ tower sheet ------------------------------ */
+
+.cdSheet {
+  z-index: 5; width: 270px; padding: 12px 14px 12px;
+  border-radius: 12px; border: 1px solid var(--cd-gold); background: var(--cd-panel-2);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  animation: cdRise 0.2s ease;
+}
+.cdSheet--float { position: absolute; left: 0; top: 0; }
+.cdSheet--bottom { position: absolute; left: 50%; bottom: 82px; transform: translateX(-50%); width: min(340px, calc(100% - 20px)); }
+.cdSheetHead { display: flex; align-items: center; gap: 10px; }
+.cdSheetHead > div { display: flex; flex-direction: column; }
+.cdSheetHead strong { font-size: 14px; letter-spacing: 0.06em; }
+.cdSheetHead span { font-size: 12px; color: var(--cd-gold-2); }
+.cdSheetClose { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--cd-line); background: rgba(0, 0, 0, 0.3); color: var(--cd-ink); cursor: pointer; }
+.cdSheetStats { margin: 8px 0 10px; font-size: 12px; color: var(--cd-dim); line-height: 1.4; }
+.cdSheetRow { display: flex; gap: 8px; margin-bottom: 8px; }
+.cdSheetRow:empty { display: none; }
+.cdSheetRow .cdBtn { flex: 1; min-height: 40px; padding: 0 10px; font-size: 12px; }
+.cdSheetRow .cdBtn .cdKey { position: absolute; right: 5px; top: 4px; }
+.cdSheetRow .cdBtn:has(.cdKey) { padding-right: 30px; }
+.cdMax { flex: 1; display: grid; place-items: center; font: 600 12px var(--cd-serif); letter-spacing: 0.1em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdSheetNext { margin: 0; font-size: 11px; color: var(--cd-dim); font-style: italic; }
+.cdBtn--ability.is-ready { border-color: var(--cd-gold-2); background: linear-gradient(180deg, rgba(120, 90, 30, 0.95), rgba(60, 44, 18, 0.95)); }
+
+/* ------------------------------ banners ------------------------------ */
+
+.cdBanners { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 6; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; width: min(92%, 520px); }
+.cdBanner {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 8px 20px; border-radius: 10px;
+  background: var(--cd-panel); border: 1px solid var(--cd-line);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  animation: cdBanner 0.5s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+.cdBanner strong { font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdBanner span { font-size: 12px; color: var(--cd-dim); margin-top: 2px; }
+.cdBanner--good strong { color: #a8e88f; }
+.cdBanner--alert { border-color: rgba(255, 140, 110, 0.5); }
+.cdBanner--alert strong { color: #ffb59a; }
+.cdBanner--boss { border-color: rgba(255, 90, 70, 0.6); background: rgba(60, 12, 10, 0.92); }
+.cdBanner--boss strong { color: #ff8f7a; font-size: 20px; }
+@keyframes cdBanner { from { opacity: 0; transform: translateY(-10px) scale(0.96); } to { opacity: 1; } }
+
+/* ------------------------------ intro ------------------------------ */
+
+.cdIntro { position: absolute; inset: 0; z-index: 6; cursor: pointer; }
+.cdLetterbox { position: absolute; left: 0; right: 0; height: 11%; background: #07060a; }
+.cdLetterbox--top { top: 0; }
+.cdLetterbox--bottom { bottom: 0; }
+.cdIntroText { position: absolute; left: 0; right: 0; bottom: 14%; text-align: center; padding: 0 20px; animation: cdFadeUp 0.9s ease both; }
+.cdIntroText h3 { margin: 0; font-size: clamp(20px, 3.4vw, 34px); letter-spacing: 0.1em; text-transform: uppercase; color: var(--cd-ink); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); }
+.cdIntroLine { font-size: clamp(16px, 2.4vw, 24px) !important; text-transform: none !important; letter-spacing: 0.02em !important; font-style: italic; }
+.cdIntroLine + .cdIntroLine { margin-top: 6px !important; }
+.cdSkip { position: absolute; right: 14px; bottom: calc(11% + 10px); min-height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--cd-line); background: rgba(20, 16, 12, 0.7); color: var(--cd-ink); font: 600 12px var(--cd-serif); letter-spacing: 0.1em; cursor: pointer; }
+@keyframes cdFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ------------------------------ responsive ------------------------------ */
+
+@media (max-width: 900px) {
+  /* phones and tablets held upright get the portrait battlefield */
+  .cd { aspect-ratio: 3 / 4; min-height: 480px; max-height: min(80vh, 820px); }
+}
+@media (max-width: 760px) {
+  .cdTop { gap: 6px; }
+  .cdStat { height: 34px; padding: 0 10px; font-size: 13px; }
+  .cdBar { width: 64px; }
+  .cdBarText { display: none; }
+  .cdQuick button { min-width: 34px; height: 34px; }
+  .cdResultGrid { grid-template-columns: repeat(2, 1fr); }
+  .cdCard { padding: 20px 18px; }
+  .cdStage { grid-template-columns: 44px 1fr; }
+  .cdStageActions { grid-column: 1 / -1; flex-direction: row; }
+  .cdStageNum { font-size: 26px; }
+  .cdAbility { width: 58px; height: 58px; }
+  .cdAbility--charge { width: 64px; }
+  .cdBar--hero { width: 64px; }
+  .cdHeroInfo strong { font-size: 12px; }
+  .cdModeHint { bottom: 78px; font-size: 12px; white-space: normal; text-align: center; max-width: 88%; }
+  .cdWaveBtn { max-width: 210px; }
+  .cdWaveNext em { display: none; }
+  .cdWaveNext em:nth-child(-n + 2) { display: inline; }
+}
+@media (max-width: 480px) {
+  /* narrow phones: compact hero card and smaller ability tiles so both corners fit */
+  .cdHero { padding: 4px 8px 4px 4px; gap: 6px; }
+  .cdHeroPortrait { width: 36px !important; height: 44px !important; }
+  .cdHeroInfo strong { display: none; }
+  .cdBar--hero { width: 48px; height: 6px; }
+  .cdPips i { width: 6px; height: 6px; }
+  .cdAbility { width: 50px; height: 52px; border-radius: 10px; }
+  .cdAbility--charge { width: 54px; }
+  .cdAbilityIcon { font-size: 16px; }
+  .cdAbilityLabel { font-size: 9px; letter-spacing: 0.06em; }
+  .cdAbility--charge .cdAbilityLabel::before { font-size: 15px; }
+  .cdBottomLeft, .cdBottomRight { gap: 5px; bottom: 8px; }
+  .cdBottomLeft { left: 8px; flex-direction: column-reverse; align-items: flex-start; }
+  .cdBottomRight { right: 8px; }
+  .cdStat { height: 30px; padding: 0 8px; font-size: 12px; gap: 5px; }
+  .cdStat--wave .cdWaveLabel { display: none; }
+  .cdBar { width: 52px; height: 8px; }
+  .cdQuick button { min-width: 30px; height: 30px; padding: 0 7px; font-size: 12px; }
+  .cdSheet--bottom { bottom: 70px; }
+  .cdModeHint { bottom: 66px; }
+  .cdRingBtn { width: 64px; height: 70px; margin: -35px 0 0 -32px; }
+  .cd.is-coarse .cdRingBtn { width: 68px; height: 74px; margin: -37px 0 0 -34px; }
+  .cdRingBtn--0, .cd.is-coarse .cdRingBtn--0 { transform: translate(-52px, -58px); }
+  .cdRingBtn--1, .cd.is-coarse .cdRingBtn--1 { transform: translate(52px, -58px); }
+  .cdRingBtn--2, .cd.is-coarse .cdRingBtn--2 { transform: translate(-52px, 30px); }
+  .cdRingBtn--3, .cd.is-coarse .cdRingBtn--3 { transform: translate(52px, 30px); }
+  .cdBanner strong { font-size: 14px; }
+  .cdBanners { top: 52px; }
+  .cdWaveBtn { padding: 6px 10px 6px 6px; }
+  .cdWaveBtnBody strong { font-size: 11px; }
+}
+@media (max-height: 480px) {
+  .cd { aspect-ratio: auto; height: 94svh; min-height: 260px; }
+  .cdOverlay--menu { gap: 8px; }
+  .cdTitle { font-size: 30px; }
+  .cdTagline { display: none; }
+  .cdMenu { flex-direction: row; flex-wrap: wrap; justify-content: center; width: 100%; }
+  .cdMenu .cdBtn { min-height: 40px; padding: 0 14px; font-size: 12px; }
+  .cdMenu .cdBtn--main { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cdRingBtn, .cdBanner, .cdWaveBtn, .cdSheet, .cdModeHint { animation: none; }
+  .cdBarFill.is-low { animation: none; }
+}

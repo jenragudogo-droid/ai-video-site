@@ -1,0 +1,126 @@
+/* ------------------------------------------------------------------ *
+ * Castle Defender — defences, soldiers, the hero and castle abilities.
+ *
+ * Tower levels are cumulative: level N is level N-1 with the listed
+ * fields overridden, so `towerLevel(type, n)` resolves the full stat
+ * block. Costs are tuned for a 250-gold opening on stage I.
+ * ------------------------------------------------------------------ */
+
+export const TOWERS = {
+  archer: {
+    name: "Archer Tower", short: "Archers", cost: 70, upgrades: [60, 90, 130],
+    role: "Fast arrows. Best against light troops.",
+    levels: [
+      { range: 190, rate: 0.9, dmg: [7, 10], shooters: 1, dtype: "arrow", label: "Wooden Platform" },
+      { range: 200, rate: 0.62, dmg: [7, 10], shooters: 2, label: "Twin Archers" },
+      { range: 215, rate: 0.62, dmg: [12, 16], shooters: 2, label: "Stone Tower" },
+      { range: 230, rate: 0.56, dmg: [14, 18], shooters: 2, label: "Royal Bowmen",
+        ability: { id: "arrowStorm", name: "Arrow Storm", cd: 25, volleys: 8, dmg: 10, radius: 80, desc: "Rain arrows on an area." } },
+    ],
+  },
+  barracks: {
+    name: "Barracks", short: "Barracks", cost: 90, upgrades: [70, 100, 140],
+    role: "Soldiers who block the road and fight.",
+    respawn: 10, rallyRange: 130,
+    levels: [
+      { soldiers: 3, unit: "militia", label: "Militia" },
+      { unit: "manAtArms", label: "Men-at-Arms" },
+      { unit: "knight", label: "Knights" },
+      { unit: "royalGuard", label: "Royal Guard" },
+    ],
+  },
+  ballista: {
+    name: "Ballista", short: "Ballista", cost: 120, upgrades: [90, 130, 180],
+    role: "Slow, heavy bolts that punch through armour.",
+    levels: [
+      { range: 260, rate: 2.6, dmg: [40, 55], pierceArmour: 0.6, dtype: "pierce", label: "Ballista" },
+      { rate: 2.1, label: "Quick Winch" },
+      { dmg: [70, 90], label: "Heavy Bolts" },
+      { pierceCount: 3, label: "Great Ballista",
+        ability: { id: "skewer", name: "Skewer", cd: 30, dmg: 250, desc: "One bolt, one target, 250 damage." } },
+    ],
+  },
+  catapult: {
+    name: "Catapult", short: "Catapult", cost: 140, upgrades: [100, 140, 190],
+    role: "Area damage that lands behind shields.",
+    levels: [
+      { range: 300, minRange: 90, rate: 3.4, dmg: [25, 35], radius: 60, dtype: "siege", label: "Catapult" },
+      { radius: 75, label: "Wide Shot" },
+      { dmg: [40, 55], label: "Heavy Stones" },
+      { fire: { dur: 4, dps: 7, radius: 55 }, label: "Fire Pots",
+        ability: { id: "barrage", name: "Barrage", cd: 30, count: 3, desc: "Three stones on a target." } },
+    ],
+  },
+};
+
+export const TOWER_ORDER = ["archer", "barracks", "ballista", "catapult"];
+export const MAX_LEVEL = 4;
+export const SELL_RATE = 0.7;
+
+const levelCache = {};
+export function towerLevel(type, level) {
+  const key = `${type}:${level}`;
+  if (levelCache[key]) return levelCache[key];
+  const def = TOWERS[type];
+  let out = {};
+  for (let i = 0; i < level; i += 1) out = { ...out, ...def.levels[i] };
+  out.level = level;
+  out.type = type;
+  levelCache[key] = out;
+  return out;
+}
+
+export function upgradeCost(type, level) {
+  const def = TOWERS[type];
+  if (level >= MAX_LEVEL) return null;
+  return def.upgrades[level - 1];
+}
+
+export function towerValue(type, level) {
+  const def = TOWERS[type];
+  let v = def.cost;
+  for (let i = 1; i < level; i += 1) v += def.upgrades[i - 1];
+  return v;
+}
+
+/* Soldiers from barracks and the reinforcement ability. `block` is a
+   chance to negate a blow outright with the shield; `shieldWall` is
+   bonus armour when standing beside another guard. */
+export const SOLDIERS = {
+  militia:     { name: "Militia",       hp: 80,  dmg: [4, 6],   armour: 0,    atk: 1.0, speed: 95, r: 12 },
+  manAtArms:   { name: "Man-at-Arms",   hp: 130, dmg: [7, 10],  armour: 0.2,  atk: 1.0, speed: 92, r: 13 },
+  knight:      { name: "Knight",        hp: 200, dmg: [10, 14], armour: 0.35, atk: 0.95, speed: 90, r: 14, block: 0.2 },
+  royalGuard:  { name: "Royal Guard",   hp: 260, dmg: [12, 18], armour: 0.45, atk: 0.9, speed: 90, r: 14, block: 0.2, shieldWall: 0.15 },
+  reinforcement: { name: "Levy",        hp: 70,  dmg: [4, 6],   armour: 0,    atk: 1.0, speed: 100, r: 12, life: 15 },
+};
+
+export const HERO = {
+  id: "edric", name: "Sir Edric", title: "Knight of Ashford",
+  hp: 320, hpPerLevel: 60, dmg: [15, 21], dmgPerLevel: 3, armour: 0.3, atk: 0.9, speed: 125, r: 15,
+  regen: 8, respawn: 12, engageRange: 70,
+  charge: { name: "Royal Charge", cd: 20, dist: 260, dmg: 60, dmgPerLevel: 12, stun: 1.0, kb: 45, width: 42 },
+  xpLevels: [0, 40, 100, 180, 290],
+  maxLevel: 5,
+};
+
+export function heroStats(level) {
+  const l = Math.max(1, Math.min(HERO.maxLevel, level));
+  return {
+    maxHp: HERO.hp + HERO.hpPerLevel * (l - 1),
+    dmg: [HERO.dmg[0] + HERO.dmgPerLevel * (l - 1), HERO.dmg[1] + HERO.dmgPerLevel * (l - 1)],
+    chargeDmg: HERO.charge.dmg + HERO.charge.dmgPerLevel * (l - 1),
+    chargeCd: HERO.charge.cd - (l - 1) * 1.5,
+    armour: HERO.armour + (l - 1) * 0.03,
+  };
+}
+
+export const ABILITIES = {
+  volley:    { name: "Arrow Volley",   cd: 35, dmg: 55, radius: 75, delay: 0.9, key: "V", desc: "The garrison rains arrows where you tap." },
+  reinforce: { name: "Reinforcements", cd: 25, count: 2, key: "R", desc: "Two levies hold the ground for 15 seconds." },
+  repair:    { name: "Repair",         cost: 60, hp: 5, key: "F", desc: "Masons restore 5 castle health." },
+};
+
+export const DIFFICULTY = {
+  normal: { name: "Normal", hp: 1, gold: 1, desc: "The way it is meant to be played." },
+  hard:   { name: "Hard",   hp: 1.25, gold: 0.85, desc: "Tougher enemies, thinner purse." },
+};

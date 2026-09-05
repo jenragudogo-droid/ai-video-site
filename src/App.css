@@ -393,3 +393,43 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
   .shooterLaser { bottom: 50%; opacity: .8; }
   .shooterBurst { opacity: 0; }
 }
+
+/* ---------------------------------------------------------------- *
+ * Castle Defender card art: a painted valley, a stone castle with a
+ * red banner, a knight on the road and arrows in flight.
+ * ---------------------------------------------------------------- */
+.gameArt--castle {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 226, 170, 0.35), transparent 30%),
+    linear-gradient(180deg, #f2d3a0 0%, #c7d8c4 38%, #7fa84c 40%, #4a7233 100%);
+}
+.castleSky { position: absolute; inset: 0 0 62% 0; background: linear-gradient(180deg, #f6d7a6, #b9d6c8); }
+.castleSun { position: absolute; left: 16%; top: 12%; width: 54px; height: 54px; border-radius: 50%; background: radial-gradient(circle at 40% 40%, #fff6dc, #f4c76a 60%, rgba(244, 199, 106, 0)); box-shadow: 0 0 40px rgba(255, 220, 150, 0.6); }
+.castleHill { position: absolute; left: -10%; right: -10%; border-radius: 50% 50% 0 0 / 100% 100% 0 0; }
+.castleHill--far { top: 30%; height: 30%; background: #7d9a83; }
+.castleHill--near { top: 38%; height: 70%; background: linear-gradient(180deg, #86b054, #4a7233); }
+.castleWall { position: absolute; left: 56%; top: 43%; width: 34%; height: 24%; background: linear-gradient(180deg, #d9d2c2 0 12%, #b8b0a0 12% 100%); box-shadow: inset -14px 0 20px rgba(0, 0, 0, 0.18), 0 14px 20px rgba(0, 0, 0, 0.25); }
+.castleWall::before { content: ""; position: absolute; left: 0; right: 0; top: -9px; height: 9px; background: repeating-linear-gradient(90deg, #d9d2c2 0 10px, transparent 10px 20px); }
+.castleKeep { position: absolute; left: 66%; top: 24%; width: 13%; height: 30%; background: linear-gradient(90deg, #cfc8b8, #b8b0a0 55%, #8a8274); box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25); }
+.castleKeep::before { content: ""; position: absolute; left: -6%; right: -6%; top: -34px; border-left: 27px solid transparent; border-right: 27px solid transparent; border-bottom: 34px solid #8e2a2a; }
+.castleKeep::after { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; background: repeating-linear-gradient(90deg, #d9d2c2 0 7px, transparent 7px 13px); }
+.castleTower { position: absolute; top: 34%; width: 7%; height: 34%; background: linear-gradient(90deg, #d9d2c2, #b8b0a0 60%, #8a8274); border-radius: 3px 3px 0 0; box-shadow: 0 10px 16px rgba(0, 0, 0, 0.25); }
+.castleTower::before { content: ""; position: absolute; left: 0; right: 0; top: -7px; height: 7px; background: repeating-linear-gradient(90deg, #d9d2c2 0 5px, transparent 5px 9px); }
+.castleTower--l { left: 54%; }
+.castleTower--r { left: 85%; }
+.castleGate { position: absolute; left: 69%; top: 54%; width: 7%; height: 13%; background: #3b2a1c; border-radius: 40px 40px 0 0; box-shadow: inset 0 0 0 2px #6c6558; }
+.castleFlag { position: absolute; left: 72.5%; top: 6%; width: 2px; height: 18%; background: #4a3a2a; }
+.castleFlag::after { content: ""; position: absolute; left: 2px; top: 0; width: 26px; height: 16px; background: #9b2a2a; clip-path: polygon(0 0, 100% 10%, 84% 50%, 100% 90%, 0 100%); border-left: 1px solid #d9a83a; animation: castleWave 1.4s ease-in-out infinite; transform-origin: left center; }
+@keyframes castleWave { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(-5deg) scaleX(0.93); } }
+.castleRoad { position: absolute; left: -10%; top: 74%; width: 90%; height: 22%; background: linear-gradient(180deg, #c8a46a, #a3814a); border-radius: 50% 50% 0 0 / 100% 100% 0 0; transform: rotate(-9deg); transform-origin: right bottom; box-shadow: 0 -2px 0 #8c6d3c; }
+.castleTree { position: absolute; width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #8bc25a, #2f5a2a); box-shadow: 0 16px 8px -6px rgba(0, 0, 0, 0.3); }
+.castleTree::after { content: ""; position: absolute; left: 45%; top: 80%; width: 5px; height: 16px; background: #5a3d22; }
+.castleTree--1 { left: 8%; top: 46%; }
+.castleTree--2 { left: 22%; top: 52%; width: 44px; height: 44px; }
+.castleKnight { position: absolute; left: 36%; top: 60%; width: 16px; height: 30px; background: linear-gradient(180deg, #c9c2b2 0 24%, #9b2a2a 24% 62%, #2b2a30 62%); border-radius: 8px 8px 3px 3px; box-shadow: 0 10px 6px -4px rgba(0, 0, 0, 0.35); }
+.castleKnight::before { content: ""; position: absolute; left: -12px; top: 8px; width: 12px; height: 16px; background: #9b2a2a; border: 1.5px solid #d9a83a; border-radius: 2px 2px 8px 8px; }
+.castleKnight::after { content: ""; position: absolute; left: 14px; top: -10px; width: 2.5px; height: 24px; background: #e8e2d4; transform: rotate(28deg); }
+.castleArrow { position: absolute; width: 28px; height: 2px; background: linear-gradient(90deg, transparent, #fff3d0); transform: rotate(-30deg); animation: castleArrow 1.6s linear infinite; }
+.castleArrow--1 { left: 40%; top: 40%; }
+.castleArrow--2 { left: 30%; top: 36%; animation-delay: 0.7s; }
+@keyframes castleArrow { 0% { transform: translate(0, 0) rotate(-30deg); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(120px, -60px) rotate(-30deg); opacity: 0; } }

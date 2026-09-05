@@ -17,6 +17,10 @@ const EndlessRush = lazy(() => import("./components/EndlessRush"));
    Play, so it is fetched on demand like the others. */
 const NeonSpaceShooter = lazy(() => import("./components/NeonSpaceShooter"));
 
+/* Castle Defender is a full defence game — engine, painted renderer,
+   synth music, campaign save — and is fetched only when opened. */
+const CastleDefender = lazy(() => import("./components/CastleDefender"));
+
 const videos = [
   {
     title: "Lion vs Dragon Part 1",
@@ -94,6 +98,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
   const [shooterOpen, setShooterOpen] = useState(false);
+  const [castleOpen, setCastleOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -262,6 +267,50 @@ function App() {
                 </button>
               </div>
             </article>
+            <article className="gameCard">
+              <div className="gameArt gameArt--castle" aria-hidden="true">
+                <span className="castleSky" />
+                <span className="castleSun" />
+                <span className="castleHill castleHill--far" />
+                <span className="castleHill castleHill--near" />
+                <span className="castleKeep" />
+                <span className="castleTower castleTower--l" />
+                <span className="castleTower castleTower--r" />
+                <span className="castleWall" />
+                <span className="castleGate" />
+                <span className="castleFlag" />
+                <span className="castleRoad" />
+                <span className="castleTree castleTree--1" />
+                <span className="castleTree castleTree--2" />
+                <span className="castleKnight" />
+                <span className="castleArrow castleArrow--1" />
+                <span className="castleArrow castleArrow--2" />
+                <span className="episodeLabel">Game 06</span>
+              </div>
+              <div className="cardContent">
+                <h3>Castle Defender</h3>
+                <p>
+                  Hold the Realm of Ashford against the Blackmoor Warband.
+                  Build archer towers, barracks, ballistas and catapults on a
+                  painted battlefield, command Sir Edric and his Royal Charge,
+                  and survive eight waves and a battering ram to earn three
+                  stars. A historical-fantasy defence campaign, with more
+                  kingdoms on the way.
+                </p>
+                <div className="gameTags">
+                  <span>Castle defence</span>
+                  <span>4 towers × 4 levels</span>
+                  <span>Knight hero</span>
+                  <span>Waves + mini-boss</span>
+                  <span>Stars + endless</span>
+                  <span>Original music</span>
+                  <span>Touch + keyboard</span>
+                </div>
+                <button type="button" onClick={() => setCastleOpen((open) => !open)}>
+                  {castleOpen ? "Close game" : "Play now"}
+                </button>
+              </div>
+            </article>
           </div>
 
           {rushOpen && (
@@ -276,6 +325,14 @@ function App() {
             <div className="gameStageWrap">
               <Suspense fallback={<div className="gameLoading">Loading Neon Space Shooter…</div>}>
                 <NeonSpaceShooter />
+              </Suspense>
+            </div>
+          )}
+
+          {castleOpen && (
+            <div className="gameStageWrap gameStageWrap--castle">
+              <Suspense fallback={<div className="gameLoading">Raising the banners…</div>}>
+                <CastleDefender />
               </Suspense>
             </div>
           )}
