@@ -18,6 +18,7 @@ import { START_SPEED, TOP_SPEED } from "./endlessRush/track.js";
 import { CHARACTERS, characterById, CHARACTER_MODELS } from "./endlessRush/characters.js";
 import { loadMeshes } from "./endlessRush/models.js";
 import "./EndlessRush.css";
+import { fullscreenElement, onFullscreenChange, toggleGameFullscreen, unlockPageScroll } from "./fullscreen.js";
 
 /* ------------------------------------------------------------------ *
  * Kianimation Endless Rush — the React shell.
@@ -106,6 +107,7 @@ export default function EndlessRush() {
   const [results, setResults] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pseudoFull, setPseudoFull] = useState(false);
   const [shopFocus, setShopFocus] = useState(() => readSave().selected);
   const [shopMsg, setShopMsg] = useState("");
   const [coarse, setCoarse] = useState(
@@ -653,18 +655,20 @@ export default function EndlessRush() {
     };
   }, [pauseGame]);
 
+  /* Real fullscreen where the browser has it (standard or WebKit-prefixed);
+     otherwise a pinned pseudo-fullscreen with page scrolling locked. */
   const toggleFullscreen = useCallback(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-    else el.requestFullscreen?.().catch(() => {});
-  }, []);
+    toggleGameFullscreen(wrapRef.current, { real: !!fullscreenElement(), pseudo: pseudoFull }, (st) => {
+      setPseudoFull(st.pseudo);
+      setTimeout(resize, 60); setTimeout(resize, 400);
+    });
+  }, [pseudoFull, resize]);
 
   useEffect(() => {
-    const onFs = () => { setFullscreen(!!document.fullscreenElement); setTimeout(resize, 60); };
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
+    const onFs = () => { setFullscreen(!!fullscreenElement()); setTimeout(resize, 60); setTimeout(resize, 400); };
+    return onFullscreenChange(onFs);
   }, [resize]);
+  useEffect(() => () => { if (pseudoFull) unlockPageScroll(); }, [pseudoFull]);
 
   /* -------------------------------- view -------------------------------- */
 
@@ -676,7 +680,7 @@ export default function EndlessRush() {
 
   return (
     <div
-      className={`krush ${live ? "is-live" : ""} ${fullscreen ? "is-full" : ""}`}
+      className={`krush ${live ? "is-live" : ""} ${fullscreen || pseudoFull ? "is-full" : ""} ${pseudoFull ? "is-pseudo" : ""}`}
       ref={wrapRef}
     >
       <canvas ref={canvasRef} className="krushCanvas" />
@@ -704,19 +708,23 @@ export default function EndlessRush() {
         </button>
       )}
 
-      {(live || screen === "paused") && (
-        <div className="krushQuick">
+      <div className="krushQuick">
+        {(live || screen === "paused") && (
+          <>
           <button type="button" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title="Sound (M)">
             {muted ? "🔇" : "🔊"}
           </button>
-          <button type="button" onClick={toggleFullscreen} aria-label="Fullscreen" title="Fullscreen">
-            {fullscreen ? "⤡" : "⤢"}
-          </button>
+          </>
+        )}
+        <button type="button" onClick={toggleFullscreen} aria-label={fullscreen || pseudoFull ? "Exit fullscreen" : "Fullscreen"} title={fullscreen || pseudoFull ? "Exit fullscreen" : "Fullscreen"}>
+          {fullscreen || pseudoFull ? "⤡" : "⤢"}
+        </button>
+        {(live || screen === "paused") && (
           <button type="button" onClick={togglePause} aria-label="Pause" title="Pause (P)">
             {live ? "❚❚" : "▶"}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ------------------------------ intro ------------------------------ */}
       {screen === "intro" && (

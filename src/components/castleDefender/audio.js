@@ -196,6 +196,24 @@ export function createCastleAudio() {
     spawnRam: [1, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.3, 0.25, 0.14, 300, 0.6); tone("sine", 60, 40, t + i * 0.3, 0.3, 0.14); } }],
     intro: [1, (t) => { horn(147, t, 1.2, 0.1, sfxBus); horn(220, t + 0.9, 1.4, 0.1, sfxBus); for (let i = 0; i < 8; i += 1) drum(t + 1.8 + i * 0.2, 0.08, i % 2 === 0, sfxBus); }],
     star: [0.1, (t) => { tone("sine", 1047, 1047, t, 0.3, 0.09); tone("sine", 1568, 1568, t + 0.05, 0.4, 0.07); }],
+    /* Stage II cavalry */
+    gallop: [0.3, (t) => { for (let i = 0; i < 6; i += 1) { const d = i * 0.075 + (i % 3 === 2 ? 0.03 : 0); noise(t + d, 0.045, 0.14, 700, 1.4, "bandpass"); tone("sine", 140, 90, t + d, 0.05, 0.05); } }],
+    chargeHorn: [1.2, (t) => { horn(262, t, 0.28, 0.14, sfxBus); horn(262, t + 0.3, 0.28, 0.14, sfxBus); horn(392, t + 0.6, 0.8, 0.16, sfxBus); tone("triangle", 784, 784, t + 0.6, 0.6, 0.04); }],
+    chargeGo: [0.5, (t) => { noise(t, 0.5, 0.22, 500, 0.8, "lowpass", sfxBus, 120); for (let i = 0; i < 8; i += 1) noise(t + i * 0.06, 0.04, 0.16, 800, 1.4, "bandpass"); }],
+    armour: [0.4, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.08, 0.05, 0.08, 3200, 2, "bandpass"); tone("triangle", 1800 + i * 200, 1400, t + i * 0.08, 0.05, 0.03); } }],
+    cavImpact: [0.12, (t) => { noise(t, 0.28, 0.34, 600, 0.8); tone("sine", 120, 40, t, 0.3, 0.26); tone("triangle", 2400, 900, t, 0.12, 0.08); noise(t + 0.05, 0.12, 0.12, 4000, 1, "highpass"); }],
+    chargeBroken: [0.4, (t) => { noise(t, 0.2, 0.26, 900, 0.9); tone("sawtooth", 600, 180, t, 0.3, 0.1); tone("sine", 90, 40, t, 0.35, 0.2); [523, 659].forEach((f, i) => tone("triangle", f, f, t + 0.3 + i * 0.1, 0.2, 0.08)); }],
+    brace: [0.5, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.05, 0.03, 0.14, 1400, 1.2); tone("square", 300, 220, t + i * 0.05, 0.04, 0.05); } }],
+    rear: [0.6, (t) => { tone("sawtooth", 700, 1100, t, 0.18, 0.05, sfxBus, "lin"); tone("sawtooth", 1100, 500, t + 0.18, 0.3, 0.05, sfxBus, "lin"); noise(t, 0.3, 0.06, 2000, 1.2, "bandpass"); }],
+    commanderEnter: [1.5, (t) => { horn(110, t, 1.0, 0.16, sfxBus); horn(165, t + 0.6, 1.0, 0.16, sfxBus); horn(220, t + 1.2, 1.4, 0.18, sfxBus); for (let i = 0; i < 8; i += 1) drum(t + i * 0.16, 0.14, i % 2 === 0, sfxBus); for (let i = 0; i < 6; i += 1) noise(t + 1.6 + i * 0.075, 0.045, 0.12, 700, 1.4, "bandpass"); }],
+    order: [0.12, (t) => { tone("square", 700, 900, t, 0.05, 0.04, sfxBus, "lin"); tone("sine", 1200, 1200, t + 0.05, 0.06, 0.04); }],
+    shieldBrace: [0.3, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.06, 0.05, 0.14, 900, 1); tone("triangle", 600 - i * 80, 400, t + i * 0.06, 0.06, 0.06); } tone("sine", 1400, 1400, t + 0.2, 0.15, 0.04); }],
+    perk: [0.5, (t) => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone("sine", f, f, t + i * 0.07, 0.35, 0.08)); noise(t, 0.3, 0.06, 4000, 0.5, "highpass"); }],
+    unlock: [0.8, (t) => { horn(330, t, 0.35, 0.1, sfxBus); horn(440, t + 0.3, 0.35, 0.1, sfxBus); horn(660, t + 0.6, 0.7, 0.12, sfxBus); [1047, 1319].forEach((f, i) => tone("sine", f, f, t + 0.7 + i * 0.1, 0.4, 0.05)); }],
+    watchfire: [0.6, (t) => { noise(t, 0.6, 0.2, 2200, 0.6, "bandpass", sfxBus, 300); tone("sawtooth", 200, 400, t, 0.5, 0.05, sfxBus, "lin"); for (let i = 0; i < 4; i += 1) noise(t + 0.2 + i * 0.1, 0.2, 0.06, 3000, 0.5, "highpass"); }],
+    royalRally: [0.8, (t) => { horn(392, t, 0.3, 0.12, sfxBus); horn(523, t + 0.28, 0.3, 0.12, sfxBus); horn(659, t + 0.56, 0.8, 0.14, sfxBus); for (let i = 0; i < 4; i += 1) drum(t + i * 0.14, 0.1, i % 2 === 0, sfxBus); }],
+    resume: [0.5, (t) => { [523, 784].forEach((f, i) => tone("triangle", f, f, t + i * 0.12, 0.25, 0.08)); }],
+    drill: [0.4, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.09, 0.04, 0.14, 1200, 1); tone("square", 500, 380, t + i * 0.09, 0.05, 0.04); } tone("triangle", 660, 990, t + 0.3, 0.2, 0.06, sfxBus, "lin"); }],
   };
 
   /* -------------------------------- music -------------------------------- */

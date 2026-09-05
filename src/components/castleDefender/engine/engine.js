@@ -15,11 +15,17 @@ import { expandWave, endlessWave, waveSummary } from "./waves.js";
 import { ENEMIES } from "../data/enemies.js";
 import {
   TOWERS, towerLevel, upgradeCost, towerValue, SELL_RATE, MAX_LEVEL,
-  SOLDIERS, HERO, heroStats, ABILITIES, DIFFICULTY,
+  SOLDIERS, HERO, heroStats, ABILITIES, DIFFICULTY, PIKE_UNITS, DRILL_COST,
 } from "../data/towers.js";
 import { stageById } from "../data/stages.js";
+import { PERKS, PERK_BY_ID, RARITY, POWERS } from "../data/perks.js";
+import { metaMods } from "../data/progression.js";
 
-export { towerLevel, upgradeCost, towerValue, waveSummary, SELL_RATE, MAX_LEVEL };
+/* 1 + a fractional modifier, e.g. mul(s, "archerRange") */
+const mul = (s, key) => 1 + ((s.mods && s.mods[key]) || 0);
+const add = (s, key) => (s.mods && s.mods[key]) || 0;
+
+export { towerLevel, upgradeCost, towerValue, waveSummary, SELL_RATE, MAX_LEVEL, DRILL_COST };
 
 export const PLOT_R = 36;
 const ARROW_SPEED = 520;
@@ -50,12 +56,14 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function resolveLayout(stage, name) {
   const raw = stage.layouts[name] || stage.layouts.landscape;
+  const opens = stage.routeOpens || {};
   const routes = raw.routes.map((r, i) => {
     const route = buildRoute(r.points);
-    route.opensAt = stage.routeOpens && stage.routeOpens[0] === i ? stage.routeOpens[1] : 1;
+    route.opensAt = opens[i] || 1;
+    route.width = r.width || 1;
     return route;
   });
-  return { name, ...raw, routes };
+  return { name, ...raw, routes, narrow: raw.narrow || [] };
 }
 
 function defaultRally(s, plotIdx) {
@@ -69,9 +77,12 @@ function defaultRally(s, plotIdx) {
 /*                              creation                               */
 /* ------------------------------------------------------------------ */
 
-export function makeGame({ stageId = "greenhollow", layout = "landscape", difficulty = "normal", mode = "campaign", seed = 1 } = {}) {
+export function makeGame({ stageId = "greenhollow", layout = "landscape", difficulty = "normal", mode = "campaign", seed = 1, upgrades = null } = {}) {
   const stage = stageById(stageId);
+  const mods = metaMods(upgrades || {});
   const s = {
+    mods, perks: [], perkOffer: null, perkPending: false, unlocks: [],
+    boostT: 0, rallyT: 0,
     seed,
     rng: mulberry(seed),
     stage,
@@ -81,9 +92,9 @@ export function makeGame({ stageId = "greenhollow", layout = "landscape", diffic
     layout: resolveLayout(stage, layout),
     phase: "ready",             // ready | playing | victory | defeat
     t: 0,
-    gold: stage.startGold,
-    castleHp: stage.castleHp,
-    castleMax: stage.castleHp,
+    gold: stage.startGold + (mods.startGold || 0),
+    castleHp: stage.castleHp + (mods.castleBonus || 0),
+    castleMax: stage.castleHp + (mods.castleBonus || 0),
     wave: 0,
     totalWaves: mode === "endless" ? Infinity : stage.waves.length,
     waveState: "countdown",     // countdown | active
@@ -98,13 +109,14 @@ export function makeGame({ stageId = "greenhollow", layout = "landscape", diffic
     strikes: [],
     zones: [],
     hero: null,
-    abilities: { volley: 0, reinforce: 0 },
+    abilities: { volley: 0, reinforce: 0, watchfire: 0, royalRally: 0 },
     stats: { kills: 0, score: 0, early: 0, built: 0, upgrades: 0, gateHits: 0, damageTaken: 0, heroKills: 0, waveBonus: 0 },
     events: [],
     nextId: 1,
     stars: 0,
     lastGateHit: 0,
   };
+  s.upgradesUsed = upgrades || null;
   s.hero = makeHero(s);
   return s;
 }
@@ -116,6 +128,7 @@ export function resetGame(s, opts = {}) {
     difficulty: opts.difficulty || s.difficulty,
     mode: opts.mode || s.mode,
     seed: opts.seed ?? ((s.seed * 7919 + 13) | 0),
+    upgrades: opts.upgrades ?? s.upgradesUsed ?? null,
   });
   Object.assign(s, fresh);
   return s;
@@ -168,7 +181,7 @@ export function drainEvents(s) {
 /* ------------------------------------------------------------------ */
 
 function makeHero(s) {
-  const st = heroStats(1);
+  const st = heroStatsFor(s, 1);
   const sp = s.layout.heroSpawn;
   return {
     id: s.nextId++, kind: "hero", unit: "hero", def: HERO,
@@ -188,10 +201,12 @@ function makeSoldier(s, towerIdx, slot, unitType) {
   const tower = s.towers[towerIdx];
   const def = SOLDIERS[unitType];
   const p = s.layout.plots[towerIdx];
+  const hp = Math.round(def.hp * mul(s, "soldierHp"));
   const u = {
     id: s.nextId++, kind: "soldier", unit: unitType, def, tower: towerIdx, slot,
-    hp: def.hp, maxHp: def.hp, x: p.x, y: p.y + 20, home: null,
+    hp, maxHp: hp, x: p.x, y: p.y + 20, home: null,
     target: null, state: "walk", atkCd: 0, respawnT: 0, face: 1, animT: s.rng() * 3, hitT: 0, deadT: 0,
+    order: null, hold: false, forceTarget: null, abilityCd: 0, abilityT: 0,
   };
   placeSoldierHome(s, u, tower);
   return u;
@@ -201,8 +216,9 @@ function makeLevy(s, x, y, slot) {
   const def = SOLDIERS.reinforcement;
   return {
     id: s.nextId++, kind: "levy", unit: "reinforcement", def, tower: -1, slot,
-    hp: def.hp, maxHp: def.hp, x, y, home: { x, y }, life: def.life,
+    hp: def.hp, maxHp: def.hp, x, y, home: { x, y }, life: def.life + add(s, "levyLife"),
     target: null, state: "idle", atkCd: 0, respawnT: 0, face: 1, animT: s.rng() * 3, hitT: 0, deadT: 0,
+    order: null, hold: false, forceTarget: null, abilityCd: 0, abilityT: 0,
   };
 }
 
@@ -210,14 +226,28 @@ const alive = (u) => u && u.state !== "dead" && u.state !== "respawn";
 const getEnemy = (s, id) => (id == null ? null : s.enemies.find((e) => e.id === id) || null);
 const getUnit = (s, id) => (id == null ? null : (s.hero.id === id ? s.hero : s.units.find((u) => u.id === id)) || null);
 
+/* hero numbers with perk and kingdom modifiers folded in */
+function heroStatsFor(s, level) {
+  const st = heroStats(level);
+  return {
+    ...st,
+    maxHp: Math.round(st.maxHp * mul(s, "heroHp")),
+    dmg: [st.dmg[0] * mul(s, "heroDmg"), st.dmg[1] * mul(s, "heroDmg")],
+    chargeDmg: st.chargeDmg * mul(s, "heroDmg"),
+    chargeCd: st.chargeCd * mul(s, "heroChargeCd"),
+  };
+}
+
 function unitDmg(s, u) {
-  if (u.kind === "hero") { const st = heroStats(u.level); return st.dmg[0] + s.rng() * (st.dmg[1] - st.dmg[0]); }
-  return u.def.dmg[0] + s.rng() * (u.def.dmg[1] - u.def.dmg[0]);
+  if (u.kind === "hero") { const st = heroStatsFor(s, u.level); return st.dmg[0] + s.rng() * (st.dmg[1] - st.dmg[0]); }
+  return (u.def.dmg[0] + s.rng() * (u.def.dmg[1] - u.def.dmg[0])) * mul(s, "soldierDmg");
 }
 
 function unitArmour(s, u) {
-  if (u.kind === "hero") return heroStats(u.level).armour;
-  let a = u.def.armour;
+  if (u.kind === "hero") return heroStatsFor(s, u.level).armour + (s.rallyT > 0 ? 0.1 : 0);
+  let a = u.def.armour + add(s, "soldierArmour") + (s.rallyT > 0 ? POWERS.royalRally.armour : 0);
+  if (u.def.ability && u.def.ability.id === "shieldBrace" && u.abilityT > 0) a += u.def.ability.armour;
+  a = Math.min(0.85, a);
   if (u.def.shieldWall) {
     const buddy = s.units.some((o) => o !== u && o.tower === u.tower && alive(o) && dist2(o.x, o.y, u.x, u.y) < 48 * 48);
     if (buddy) a += u.def.shieldWall;
@@ -233,7 +263,8 @@ function damageUnit(s, u, amount, dtype, src) {
   }
   let armour = unitArmour(s, u);
   if (dtype === "pierce") armour *= 0.5;
-  const a = amount * (1 - armour);
+  let a = amount * (1 - armour);
+  if (u.def.rangedWeakness && (dtype === "arrow" || dtype === "pierce")) a *= u.def.rangedWeakness;
   u.hp -= a;
   u.hitT = 0.28;
   s.events.push({ type: "unitHit", x: u.x, y: u.y, hero: u.kind === "hero", dtype });
@@ -256,7 +287,8 @@ function killUnit(s, u) {
     s.events.push({ type: "heroDown", x: u.x, y: u.y });
   } else if (u.kind === "soldier") {
     const tower = s.towers[u.tower];
-    u.respawnT = tower ? TOWERS.barracks.respawn : 0;
+    u.respawnT = tower ? TOWERS.barracks.respawn * mul(s, "respawn") : 0;
+    u.order = null; u.forceTarget = null; u.hold = false;
     s.events.push({ type: "unitDown", x: u.x, y: u.y });
   } else {
     s.events.push({ type: "unitDown", x: u.x, y: u.y });
@@ -272,10 +304,13 @@ function spawnEnemy(s, type, route, lat) {
   const e = {
     id: s.nextId++, type, def, route, d: 0, lat,
     hp: Math.round(def.hp * s.diff.hp), maxHp: Math.round(def.hp * s.diff.hp),
-    x: 0, y: 0, tx: 1, ty: 0, face: 1, state: "walk",
+    x: 0, y: 0, tx: 1, ty: 0, nx: 0, ny: 1, face: 1, state: "walk",
     blockers: [], blockT: 0, freeT: 0, target: null, atkCd: 0.6 + s.rng() * 0.4,
     stun: 0, hitT: 0, deadT: 0, animT: s.rng() * 3, sway: s.rng() * Math.PI * 2,
     bounty: Math.round(def.bounty * s.diff.gold),
+    /* cavalry: charge windup, run and cooldown */
+    chargeCd: def.charge ? 2 + s.rng() * 2 : 0, chargeT: 0, charging: false, chargeLeft: 0, chargeHits: null,
+    buffT: 0, narrow: false,
   };
   syncEnemyPos(s, e);
   s.enemies.push(e);
@@ -289,14 +324,20 @@ function syncEnemyPos(s, e) {
   const p = sampleRoute(route, e.d);
   e.x = p.x + p.nx * e.lat;
   e.y = p.y + p.ny * e.lat;
-  e.tx = p.tx; e.ty = p.ty;
+  e.tx = p.tx; e.ty = p.ty; e.nx = p.nx; e.ny = p.ny;
   if (Math.abs(p.tx) > 0.25) e.face = p.tx < 0 ? -1 : 1;
   e.progress = e.d / route.length;
+  e.narrow = inNarrow(s, e.x, e.y);
+}
+
+function inNarrow(s, x, y) {
+  for (const z of s.layout.narrow) if (dist2(x, y, z.x, z.y) < z.r * z.r) return true;
+  return false;
 }
 
 function damageEnemy(s, e, amount, dtype, opts = {}) {
   if (e.state === "dead") return 0;
-  let armour = e.def.armour;
+  let armour = e.def.armour + (e.buffT > 0 ? e.buffArmour : 0);
   if (dtype === "pierce") armour *= 1 - (opts.pierceArmour ?? 0.6);
   else if (dtype === "siege") armour *= 0.5;
   else if (dtype === "fire") armour = 0;
@@ -322,7 +363,7 @@ function killEnemy(s, e, src) {
   e.deadT = DEAD_LINGER;
   e.blockers.forEach((id) => { const u = getUnit(s, id); if (u) u.target = null; });
   e.blockers = [];
-  s.gold += e.bounty;
+  s.gold += Math.round(e.bounty * mul(s, "bountyMul"));
   s.stats.kills += 1;
   s.stats.score += e.bounty * 10;
   s.events.push({ type: "die", x: e.x, y: e.y, enemy: e.type, boss: e.def.boss || null });
@@ -341,7 +382,7 @@ function gainXp(s, xp) {
   h.xp += xp;
   while (h.level < HERO.maxLevel && h.xp >= HERO.xpLevels[h.level]) {
     h.level += 1;
-    const st = heroStats(h.level);
+    const st = heroStatsFor(s, h.level);
     h.maxHp = st.maxHp;
     h.hp = Math.min(h.maxHp, h.hp + 80);
     s.events.push({ type: "heroLevel", x: h.x, y: h.y, level: h.level });
@@ -378,6 +419,10 @@ function stepEnemy(s, e, dt) {
   const blocker = e.blockers.length ? getUnit(s, e.blockers[0]) : null;
   const engaged = blocker && dist2(blocker.x, blocker.y, e.x, e.y) < (ENGAGE_DIST + 26) ** 2;
 
+  if (def.kind === "cavalry" && def.charge) {
+    if (stepCharge(s, e, dt, route)) return;
+  }
+
   if (def.kind === "siege") {
     /* nothing stops a ram; soldiers chase it instead */
     e.state = "walk";
@@ -393,7 +438,8 @@ function stepEnemy(s, e, dt) {
     e.face = blocker.x < e.x ? -1 : 1;
     if (def.kind === "cavalry") {
       e.blockT += dt;
-      if (e.blockT > def.blockTime) {
+      const pinned = e.blockers.some((id) => { const u = getUnit(s, id); return u && u.def.spear; });
+      if (e.blockT > def.blockTime * (pinned ? 2.2 : 1)) {
         e.blockers.forEach((id) => { const u = getUnit(s, id); if (u) { damageUnit(s, u, 6, "blade", e); u.target = null; u.staggerT = 0.6; } });
         e.blockers = [];
         e.blockT = 0;
@@ -449,9 +495,107 @@ function stepEnemy(s, e, dt) {
   }
 
   e.state = "walk";
-  e.d += def.speed * dt;
+  e.d += def.speed * (e.buffT > 0 ? e.buffSpeed : 1) * dt;
   syncEnemyPos(s, e);
   if (e.d >= route.length) reachGate(s, e);
+}
+
+/* ------------------------------ cavalry ------------------------------ */
+
+/* Returns true when the charge logic consumed this step. A rider on
+   open ground with defenders ahead winds up (telegraph), then runs
+   at charge speed, striking every defender it meets once. Pikemen who
+   braced take the horse on the point instead and end the charge. */
+function stepCharge(s, e, dt, route) {
+  const ch = e.def.charge;
+  if (e.charging) {
+    const speed = e.def.speed * ch.speedMul * (e.narrow ? 0.6 : 1);
+    const step = speed * dt;
+    e.d += step;
+    e.chargeLeft -= step;
+    syncEnemyPos(s, e);
+    e.state = "charge";
+    if (e.narrow) e.chargeLeft = Math.min(e.chargeLeft, 40);
+    for (const u of s.units.concat([s.hero])) {
+      if (!alive(u) || e.chargeHits.has(u.id)) continue;
+      if (dist2(u.x, u.y, e.x, e.y) > 38 * 38) continue;
+      e.chargeHits.add(u.id);
+      if (u.def.brace && u.bracing) {
+        /* the pike takes the horse */
+        /* the horse's own momentum drives it onto the point: armour does not help */
+        damageEnemy(s, e, ch.spearDmg * (e.def.spearWeakness || 1), "pierce", { src: u, pierceArmour: 1 });
+        damageUnit(s, u, ch.dmg * 0.3, "charge", e);
+        s.events.push({ type: "chargeBroken", x: e.x, y: e.y, by: "pikes", enemy: e.type });
+        endCharge(s, e, true);
+        if (e.state !== "dead") { e.stun = 0.9; e.d = Math.max(0, e.d - 18); syncEnemyPos(s, e); }
+        return true;
+      }
+      const narrowMul = e.narrow ? 0.5 : 1;
+      damageUnit(s, u, ch.dmg * narrowMul, "charge", e);
+      if (alive(u)) {
+        u.staggerT = ch.stun;
+        u.x += e.tx * ch.kb * 0.5 + e.nx * ch.kb * (u.slot % 2 ? 1 : -1);
+        u.y += e.ty * ch.kb * 0.5 + e.ny * ch.kb * (u.slot % 2 ? 1 : -1);
+        if (u.kind === "hero") { u.moveTarget = null; }
+        u.target = null;
+      }
+      s.events.push({ type: "cavImpact", x: u.x, y: u.y, hero: u.kind === "hero" });
+    }
+    if (e.d >= route.length) { reachGate(s, e); return true; }
+    if (e.chargeLeft <= 0) endCharge(s, e, false);
+    return true;
+  }
+  if (e.chargeT > 0) {
+    e.chargeT -= dt;
+    e.state = "rear";
+    if (e.chargeT <= 0) {
+      e.charging = true;
+      e.chargeLeft = ch.dist;
+      e.chargeHits = new Set();
+      e.blockers.forEach((id) => { const u = getUnit(s, id); if (u) u.target = null; });
+      e.blockers = [];
+      s.events.push({ type: "chargeStart", x: e.x, y: e.y, enemy: e.type, tx: e.tx, ty: e.ty });
+    }
+    return true;
+  }
+  if (e.chargeCd > 0) { e.chargeCd -= dt; return false; }
+  if (e.narrow || e.blockers.length) return false;
+  /* defenders ahead within reach and roughly on the road? */
+  let ahead = false;
+  for (const u of s.units.concat([s.hero])) {
+    if (!alive(u)) continue;
+    const dx = u.x - e.x; const dy = u.y - e.y;
+    const along = dx * e.tx + dy * e.ty;
+    const side = Math.abs(dx * e.nx + dy * e.ny);
+    if (along > 60 && along < ch.dist * 0.85 && side < 70) { ahead = true; break; }
+  }
+  if (!ahead) return false;
+  e.chargeT = ch.buildup;
+  e.chargeCd = ch.cd;
+  s.events.push({ type: "chargeWarn", x: e.x, y: e.y, enemy: e.type, tx: e.tx, ty: e.ty, dist: ch.dist, buildup: ch.buildup, id: e.id });
+  return true;
+}
+
+function endCharge(s, e, broken) {
+  e.charging = false;
+  e.chargeT = 0;
+  e.chargeLeft = 0;
+  e.chargeHits = null;
+  e.chargeCd = e.def.charge.cd + (broken ? 4 : 0);
+  e.state = "walk";
+}
+
+/* the commander's banner: nearby cavalry ride harder and shrug off more */
+function stepAuras(s, dt) {
+  for (const e of s.enemies) if (e.buffT > 0) e.buffT -= dt;
+  for (const c of s.enemies) {
+    if (c.state === "dead" || !c.def.aura) continue;
+    const r2 = c.def.aura.radius ** 2;
+    for (const e of s.enemies) {
+      if (e === c || e.state === "dead" || e.def.kind !== "cavalry") continue;
+      if (dist2(e.x, e.y, c.x, c.y) < r2) { e.buffT = 0.4; e.buffArmour = c.def.aura.armour; e.buffSpeed = c.def.aura.speed; }
+    }
+  }
 }
 
 function reachGate(s, e) {
@@ -524,9 +668,18 @@ function stepFighter(s, u, dt, opts) {
   const speed = u.kind === "hero" ? HERO.speed : u.def.speed;
   const atk = u.kind === "hero" ? HERO.atk : u.def.atk;
 
+  /* an ordered attack sticks to its target wherever it goes */
+  if (u.forceTarget != null) {
+    const ft = getEnemy(s, u.forceTarget);
+    if (!ft || ft.state === "dead") { u.forceTarget = null; if (u.order && u.order.kind === "attack") u.order = null; }
+    else if (u.target !== ft.id) {
+      const old = getEnemy(s, u.target); if (old) { const i = old.blockers.indexOf(u.id); if (i >= 0) old.blockers.splice(i, 1); }
+      u.target = ft.id; if (!ft.blockers.includes(u.id)) ft.blockers.push(u.id);
+    }
+  }
   let e = getEnemy(s, u.target);
-  if (e && (e.state === "dead" || e.freeT > 0)) { u.target = null; e = null; }
-  if (e && dist2(e.x, e.y, opts.cx, opts.cy) > (opts.radius + 90) ** 2) {
+  if (e && (e.state === "dead" || (e.freeT > 0 && u.forceTarget == null))) { u.target = null; e = null; }
+  if (e && u.forceTarget == null && dist2(e.x, e.y, opts.cx, opts.cy) > (opts.radius + 90) ** 2) {
     /* enemy pulled us too far from post: let go */
     const i = e.blockers.indexOf(u.id);
     if (i >= 0) e.blockers.splice(i, 1);
@@ -555,7 +708,8 @@ function stepFighter(s, u, dt, opts) {
       if (u.atkCd <= 0) {
         u.atkCd = atk;
         u.attackT = 0.3;
-        damageEnemy(s, e, unitDmg(s, u), "blade", { src: u });
+        const bonus = e.def.kind === "cavalry" && u.def.vsCavalry ? u.def.vsCavalry : 1;
+        damageEnemy(s, e, unitDmg(s, u) * bonus, "blade", { src: u });
         s.events.push({ type: "swing", x: u.x, y: u.y, enemy: false, hero: u.kind === "hero" });
       }
     }
@@ -590,7 +744,15 @@ function stepSoldier(s, u, dt) {
     u.life -= dt;
     if (u.life <= 0) { u.state = "dead"; u.deadT = 0.01; u.fade = true; s.events.push({ type: "levyLeave", x: u.x, y: u.y }); return; }
   }
-  const radius = u.kind === "levy" ? 90 : TOWERS.barracks.rallyRange;
+  const radius = u.hold ? 48 : u.kind === "levy" ? 90 : TOWERS.barracks.rallyRange;
+  if (u.abilityCd > 0) u.abilityCd -= dt;
+  if (u.abilityT > 0) u.abilityT -= dt;
+  if (u.def.brace) {
+    /* pikemen set their feet when a charge is coming their way, or on command */
+    const was = u.bracing;
+    u.bracing = u.abilityT > 0 || s.enemies.some((e) => e.state !== "dead" && e.def.charge && (e.chargeT > 0 || e.charging) && dist2(e.x, e.y, u.x, u.y) < 320 * 320);
+    if (u.bracing && !was) s.events.push({ type: "brace", x: u.x, y: u.y });
+  }
   const busy = stepFighter(s, u, dt, { cx: u.home.x, cy: u.home.y, radius });
   if (busy) return;
   const arrived = dist2(u.x, u.y, u.home.x, u.home.y) < 9;
@@ -625,12 +787,18 @@ function stepHero(s, h, dt) {
     h.x += c.dx * step; h.y += c.dy * step;
     c.left -= step;
     h.state = "charge";
-    const st = heroStats(h.level);
+    const st = heroStatsFor(s, h.level);
     for (const e of s.enemies) {
       if (e.state === "dead" || c.hits.has(e.id)) continue;
       if (dist2(e.x, e.y, h.x, h.y) < (HERO.charge.width) ** 2) {
         c.hits.add(e.id);
-        damageEnemy(s, e, st.chargeDmg, "charge", { src: h });
+        const counter = e.def.charge && (e.charging || e.chargeT > 0);
+        damageEnemy(s, e, st.chargeDmg * (counter ? 1.5 : 1), "charge", { src: h });
+        if (counter && e.state !== "dead") {
+          endCharge(s, e, true);
+          e.stun = 1.5;
+          s.events.push({ type: "chargeBroken", x: e.x, y: e.y, by: "hero", enemy: e.type });
+        }
         if (e.state !== "dead") {
           e.stun = HERO.charge.stun;
           e.d = Math.max(0, e.d - HERO.charge.kb);
@@ -678,11 +846,18 @@ function makeTower(s, plotIdx, type) {
   return t;
 }
 
+function towerRange(s, t, lvl) {
+  let r = lvl.range * (s.boostT > 0 ? 1 + POWERS.watchfire.range : 1);
+  if (t.type === "archer") r *= mul(s, "archerRange");
+  return r;
+}
+
 function towerTarget(s, plotIdx, lvl) {
   const p = s.layout.plots[plotIdx];
   let best = null;
   let bp = -1;
-  const r2 = lvl.range * lvl.range;
+  const range = towerRange(s, s.towers[plotIdx], lvl);
+  const r2 = range * range;
   const min2 = (lvl.minRange || 0) ** 2;
   for (const e of s.enemies) {
     if (e.state === "dead") continue;
@@ -736,7 +911,8 @@ function stepTower(s, i, t, dt) {
   const lvl = towerLevel(t.type, t.level);
   t.cd -= dt;
   let e = getEnemy(s, t.target);
-  if (!e || e.state === "dead" || dist2(e.x, e.y, p.x, p.y) > lvl.range * lvl.range) { e = towerTarget(s, i, lvl); t.target = e ? e.id : null; }
+  const range = towerRange(s, t, lvl);
+  if (!e || e.state === "dead" || dist2(e.x, e.y, p.x, p.y) > range * range) { e = towerTarget(s, i, lvl); t.target = e ? e.id : null; }
   if (e) {
     const want = Math.atan2(e.y - p.y, e.x - p.x);
     let diff = want - t.angle;
@@ -745,22 +921,26 @@ function stepTower(s, i, t, dt) {
     t.angle += diff * Math.min(1, dt * 8);
   }
   if (t.cd > 0 || !e) return;
-  t.cd = lvl.rate;
+  t.cd = lvl.rate / (t.type === "archer" ? mul(s, "archerRate") : 1);
   t.fireT = 0.35;
-  const dmg = lvl.dmg[0] + s.rng() * (lvl.dmg[1] - lvl.dmg[0]);
+  let dmg = lvl.dmg[0] + s.rng() * (lvl.dmg[1] - lvl.dmg[0]);
   if (t.type === "archer") {
+    dmg *= mul(s, "archerDmg");
     t.shooter = (t.shooter + 1) % lvl.shooters;
     const from = { x: p.x + (lvl.shooters > 1 ? (t.shooter ? 12 : -12) : 0), y: p.y - (t.level >= 3 ? 74 : 52) };
-    fireArrow(s, from, e, dmg, "arrow");
-    s.events.push({ type: "arrow", x: from.x, y: from.y });
+    const pierce = add(s, "archerPierce");
+    fireArrow(s, from, e, dmg, pierce > 0 ? "pierce" : "arrow", pierce > 0 ? { pierceArmour: pierce, fire: true } : {});
+    s.events.push({ type: "arrow", x: from.x, y: from.y, fire: pierce > 0 });
   } else if (t.type === "ballista") {
+    dmg *= mul(s, "ballistaDmg");
     const from = { x: p.x + Math.cos(t.angle) * 18, y: p.y - 30 + Math.sin(t.angle) * 10 };
-    fireBolt(s, from, e, dmg, lvl);
+    fireBolt(s, from, e, dmg, { ...lvl, pierceCount: (lvl.pierceCount || 1) + add(s, "ballistaPierce") });
     s.events.push({ type: "bolt", x: from.x, y: from.y });
   } else if (t.type === "catapult") {
+    dmg *= mul(s, "catapultDmg");
     const dur = Math.max(0.7, Math.hypot(e.x - p.x, e.y - p.y) / STONE_SPEED);
     const land = predictLanding(s, e, dur);
-    fireStone(s, { x: p.x, y: p.y - 40 }, land.x, land.y, dmg, lvl);
+    fireStone(s, { x: p.x, y: p.y - 40 }, land.x, land.y, dmg, { ...lvl, radius: lvl.radius * mul(s, "catapultRadius") });
     s.events.push({ type: "catapult", x: p.x, y: p.y });
   }
 }
@@ -822,7 +1002,7 @@ function stepProjectile(s, pr, dt) {
         damageEnemy(s, tgt, pr.dmg, "pierce", { pierceArmour: pr.pierceArmour, from: pr.from });
         if (pr.pierce > 0) { pr.done = false; pr.through = true; pr.left = 150; }
       } else {
-        damageEnemy(s, tgt, pr.dmg, pr.dtype, { from: pr.from });
+        damageEnemy(s, tgt, pr.dmg, pr.dtype, { from: pr.from, pierceArmour: pr.pierceArmour });
       }
     } else {
       damageUnit(s, tgt, pr.dmg, pr.dtype, null);
@@ -849,7 +1029,7 @@ function areaDamage(s, x, y, r, dmg, dtype) {
 /* ------------------------------------------------------------------ */
 
 function waveGroups(s, n) {
-  if (s.mode === "endless") return endlessWave(n, s.rng, s.layout.routes.length);
+  if (s.mode === "endless") return endlessWave(n, s.rng, s.layout.routes.length, s.stage);
   return s.stage.waves[n - 1] || [];
 }
 
@@ -865,14 +1045,17 @@ function beginWave(s) {
   s.waveT = 0;
   s.waveState = "active";
   s.events.push({ type: "wave", n: s.wave, total: s.totalWaves, summary: waveSummary(groups) });
-  if (s.stage.routeOpens && s.wave === s.stage.routeOpens[1] && s.mode !== "endless") {
-    s.events.push({ type: "routeOpen", route: s.stage.routeOpens[0] });
+  for (const [id, def] of Object.entries(POWERS)) {
+    if (def.unlockWave && def.unlockWave === s.wave && !s.unlocks.includes(id)) { s.unlocks.push(id); s.events.push({ type: "unlock", id, name: def.name }); }
+  }
+  if (s.mode !== "endless") {
+    s.layout.routes.forEach((r, i) => { if (i > 0 && r.opensAt === s.wave) s.events.push({ type: "routeOpen", route: i }); });
   }
 }
 
 export function callWave(s) {
-  if (s.phase !== "playing" || s.waveState !== "countdown" || s.wave >= s.totalWaves) return false;
-  const bonus = s.wave === 0 ? 0 : Math.round(60 * (s.countdown / s.countdownMax));
+  if (s.phase !== "playing" || s.waveState !== "countdown" || s.wave >= s.totalWaves || s.perkPending) return false;
+  const bonus = s.wave === 0 ? 0 : Math.round(60 * mul(s, "earlyBonus") * (s.countdown / s.countdownMax));
   if (bonus > 0) {
     s.gold += bonus;
     s.stats.early += bonus;
@@ -886,6 +1069,7 @@ export function callWave(s) {
 function stepWaves(s, dt) {
   if (s.waveState === "countdown") {
     if (s.wave >= s.totalWaves) return;
+    if (s.perkPending) return;          // the clock waits while the player chooses a perk
     s.countdown -= dt;
     if (s.countdown <= 0) beginWave(s);
     return;
@@ -911,7 +1095,92 @@ function stepWaves(s, dt) {
     s.waveState = "countdown";
     s.countdownMax = s.stage.countdown || 20;
     s.countdown = s.countdownMax;
+    if (isPerkWave(s, s.wave)) offerPerks(s);
   }
+}
+
+/* ------------------------------ perks and powers ------------------------------ */
+
+function isPerkWave(s, wave) {
+  if (s.mode === "endless") return wave % 4 === 0;
+  const list = s.stage.perkWaves || [];
+  return list.includes(wave) && wave < s.totalWaves;
+}
+
+/* three distinct perks, weighted by rarity, gated by wave, never a repeat */
+export function offerPerks(s) {
+  const pool = PERKS.filter((p) => !s.perks.includes(p.id) && s.wave >= RARITY[p.rarity].minWave);
+  const offer = [];
+  for (let n = 0; n < 3 && pool.length; n += 1) {
+    const total = pool.reduce((a, p) => a + RARITY[p.rarity].weight, 0);
+    let r = s.rng() * total;
+    let pick = pool[pool.length - 1];
+    for (const p of pool) { r -= RARITY[p.rarity].weight; if (r <= 0) { pick = p; break; } }
+    offer.push(pick.id);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  s.perkOffer = offer;
+  s.perkPending = offer.length > 0;
+  if (s.perkPending) s.events.push({ type: "perkOffer", wave: s.wave, offer: offer.slice() });
+  return offer;
+}
+
+export function choosePerk(s, id) {
+  if (!s.perkPending || !s.perkOffer || !s.perkOffer.includes(id)) return false;
+  const perk = PERK_BY_ID[id];
+  if (!perk) return false;
+  applyMods(s, perk.mods);
+  s.perks.push(id);
+  s.perkOffer = null;
+  s.perkPending = false;
+  s.events.push({ type: "perk", id, name: perk.name, rarity: perk.rarity });
+  return true;
+}
+
+export function skipPerk(s) {
+  if (!s.perkPending) return false;
+  s.perkOffer = null;
+  s.perkPending = false;
+  return true;
+}
+
+function applyMods(s, mods) {
+  for (const [k, v] of Object.entries(mods)) {
+    if (k === "castleBonus") { s.castleMax += v; s.castleHp = Math.min(s.castleMax, s.castleHp + v); continue; }
+    if (k === "goldNow") { s.gold += v; continue; }
+    s.mods[k] = (s.mods[k] || 0) + v;
+  }
+  /* squads already in the field grow with their new health modifiers */
+  s.units.forEach((u) => {
+    if (u.kind !== "soldier") return;
+    const maxHp = Math.round(u.def.hp * mul(s, "soldierHp"));
+    if (maxHp !== u.maxHp) { u.hp = Math.round(u.hp * maxHp / u.maxHp); u.maxHp = maxHp; }
+  });
+  const st = heroStatsFor(s, s.hero.level);
+  if (st.maxHp !== s.hero.maxHp) { s.hero.hp = Math.round(s.hero.hp * st.maxHp / s.hero.maxHp); s.hero.maxHp = st.maxHp; }
+}
+
+export function powerUnlocked(s, id) {
+  const def = POWERS[id];
+  return !!def && s.wave >= (def.unlockWave || 0);
+}
+
+export function castWatchfire(s) {
+  if (s.phase !== "playing" || !powerUnlocked(s, "watchfire") || s.abilities.watchfire > 0) return false;
+  s.abilities.watchfire = POWERS.watchfire.cd * mul(s, "abilityCd");
+  s.boostT = POWERS.watchfire.dur;
+  s.events.push({ type: "watchfire", x: s.layout.castle.gate.x, y: s.layout.castle.gate.y });
+  return true;
+}
+
+export function castRoyalRally(s) {
+  if (s.phase !== "playing" || !powerUnlocked(s, "royalRally") || s.abilities.royalRally > 0) return false;
+  s.abilities.royalRally = POWERS.royalRally.cd * mul(s, "abilityCd");
+  s.rallyT = POWERS.royalRally.dur;
+  for (const u of s.units) if (alive(u)) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * POWERS.royalRally.heal);
+  if (alive(s.hero)) s.hero.hp = Math.min(s.hero.maxHp, s.hero.hp + s.hero.maxHp * 0.25);
+  s.events.push({ type: "royalRally", x: s.hero.x, y: s.hero.y });
+  return true;
 }
 
 export function starsFor(s) {
@@ -928,12 +1197,14 @@ export function starsFor(s) {
 export function stepGame(s, dt) {
   if (s.phase !== "playing") return;
   s.t += dt;
-  if (s.abilities.volley > 0) s.abilities.volley -= dt;
-  if (s.abilities.reinforce > 0) s.abilities.reinforce -= dt;
+  for (const k of Object.keys(s.abilities)) if (s.abilities[k] > 0) s.abilities[k] -= dt;
+  if (s.boostT > 0) s.boostT -= dt;
+  if (s.rallyT > 0) s.rallyT -= dt;
 
   stepWaves(s, dt);
   if (s.phase !== "playing") return;
 
+  stepAuras(s, dt);
   for (const e of s.enemies) {
     if (e.attackT > 0) e.attackT -= dt;
     stepEnemy(s, e, dt);
@@ -986,15 +1257,18 @@ export function plotAt(s, x, y, radius = PLOT_R) {
   return best;
 }
 
+export function buildCost(s, type) { return Math.round(TOWERS[type].cost * mul(s, "towerCost")); }
+export function upgradeCostFor(s, type, level) { const c = upgradeCost(type, level); return c == null ? null : Math.round(c * mul(s, "towerCost")); }
+
 export function canBuild(s, plotIdx, type) {
   if (s.phase !== "playing") return false;
   if (s.towers[plotIdx]) return false;
-  return s.gold >= TOWERS[type].cost;
+  return s.gold >= buildCost(s, type);
 }
 
 export function buildTower(s, plotIdx, type) {
   if (!canBuild(s, plotIdx, type)) return false;
-  s.gold -= TOWERS[type].cost;
+  s.gold -= buildCost(s, type);
   const t = makeTower(s, plotIdx, type);
   s.towers[plotIdx] = t;
   s.stats.built += 1;
@@ -1010,24 +1284,25 @@ export function buildTower(s, plotIdx, type) {
 export function canUpgrade(s, plotIdx) {
   const t = s.towers[plotIdx];
   if (!t || s.phase !== "playing") return false;
-  const cost = upgradeCost(t.type, t.level);
+  const cost = upgradeCostFor(s, t.type, t.level);
   return cost != null && s.gold >= cost;
 }
 
 export function upgradeTower(s, plotIdx) {
   if (!canUpgrade(s, plotIdx)) return false;
   const t = s.towers[plotIdx];
-  s.gold -= upgradeCost(t.type, t.level);
+  s.gold -= upgradeCostFor(s, t.type, t.level);
   t.level += 1;
   t.buildT = 0.7;
   s.stats.upgrades += 1;
   if (t.type === "barracks") {
     const lvl = towerLevel(t.type, t.level);
+    const unit = t.pikes ? PIKE_UNITS[t.level - 1] : lvl.unit;
     s.units.forEach((u) => {
       if (u.tower !== plotIdx) return;
-      u.unit = lvl.unit;
-      u.def = SOLDIERS[lvl.unit];
-      u.maxHp = u.def.hp;
+      u.unit = unit;
+      u.def = SOLDIERS[unit];
+      u.maxHp = Math.round(u.def.hp * mul(s, "soldierHp"));
       u.hp = u.maxHp;
     });
   }
@@ -1067,8 +1342,36 @@ export function setRally(s, plotIdx, x, y) {
   const R = TOWERS.barracks.rallyRange;
   if (d > R) { x = p.x + (dx / d) * R; y = p.y + (dy / d) * R; }
   t.rally = { x, y };
-  s.units.forEach((u) => { if (u.tower === plotIdx) placeSoldierHome(s, u, t); });
+  s.units.forEach((u) => { if (u.tower === plotIdx) { placeSoldierHome(s, u, t); u.order = null; u.hold = false; u.forceTarget = null; } });
   s.events.push({ type: "rally", x, y });
+  return true;
+}
+
+/* Pike Drill: swap a barracks squad between swords and pikes. */
+export function canDrill(s, plotIdx) {
+  const t = s.towers[plotIdx];
+  return !!(t && t.type === "barracks" && s.stage.pikes && s.phase === "playing");
+}
+
+export function setDrill(s, plotIdx, pikes) {
+  if (!canDrill(s, plotIdx)) return false;
+  const t = s.towers[plotIdx];
+  if (!!t.pikes === !!pikes) return true;
+  if (s.gold < DRILL_COST) return false;
+  s.gold -= DRILL_COST;
+  t.pikes = !!pikes;
+  const unit = pikes ? PIKE_UNITS[t.level - 1] : towerLevel("barracks", t.level).unit;
+  s.units.forEach((u) => {
+    if (u.tower !== plotIdx) return;
+    const ratio = u.maxHp ? u.hp / u.maxHp : 1;
+    u.unit = unit;
+    u.def = SOLDIERS[unit];
+    u.maxHp = Math.round(u.def.hp * mul(s, "soldierHp"));
+    u.hp = Math.max(1, Math.round(u.maxHp * ratio));
+    u.bracing = false;
+  });
+  const p = s.layout.plots[plotIdx];
+  s.events.push({ type: "drill", x: p.x, y: p.y, pikes: !!pikes });
   return true;
 }
 
@@ -1135,7 +1438,7 @@ export function heroCharge(s, x, y) {
   if (dy > 0) dist = Math.min(dist, (Hh - m - h.y) / dy);
   if (dist < 20) return false;
   h.charge = { dx, dy, left: dist, hits: new Set() };
-  h.chargeCd = heroStats(h.level).chargeCd;
+  h.chargeCd = heroStatsFor(s, h.level).chargeCd;
   h.moveTarget = null; h.target = null;
   h.face = dx < 0 ? -1 : 1;
   s.events.push({ type: "charge", x: h.x, y: h.y, dx, dy });
@@ -1145,8 +1448,8 @@ export function heroCharge(s, x, y) {
 export function castVolley(s, x, y) {
   if (s.phase !== "playing" || s.abilities.volley > 0) return false;
   const ab = ABILITIES.volley;
-  s.abilities.volley = ab.cd;
-  s.strikes.push({ id: s.nextId++, x, y, r: ab.radius, dmg: ab.dmg, dtype: "arrow", t: ab.delay, kind: "volley" });
+  s.abilities.volley = ab.cd * mul(s, "abilityCd");
+  s.strikes.push({ id: s.nextId++, x, y, r: ab.radius * mul(s, "volleyRadius"), dmg: ab.dmg * mul(s, "volleyDmg"), dtype: "arrow", t: ab.delay, kind: "volley" });
   s.events.push({ type: "volley", x, y });
   return true;
 }
@@ -1154,19 +1457,130 @@ export function castVolley(s, x, y) {
 export function castReinforce(s, x, y) {
   if (s.phase !== "playing" || s.abilities.reinforce > 0) return false;
   const ab = ABILITIES.reinforce;
-  s.abilities.reinforce = ab.cd;
+  s.abilities.reinforce = ab.cd * mul(s, "abilityCd");
   for (let i = 0; i < ab.count; i += 1) s.units.push(makeLevy(s, x + (i ? 18 : -18), y + (i ? 6 : -6), i));
   s.events.push({ type: "reinforce", x, y });
   return true;
 }
 
+export function repairCost(s) { return Math.max(10, Math.round(ABILITIES.repair.cost * mul(s, "repairCost"))); }
+
 export function repairCastle(s) {
   const ab = ABILITIES.repair;
-  if (s.phase !== "playing" || s.gold < ab.cost || s.castleHp >= s.castleMax) return false;
-  s.gold -= ab.cost;
+  if (s.phase !== "playing" || s.gold < repairCost(s) || s.castleHp >= s.castleMax) return false;
+  s.gold -= repairCost(s);
   s.castleHp = Math.min(s.castleMax, s.castleHp + ab.hp);
   s.events.push({ type: "repair", amount: ab.hp });
   return true;
+}
+
+/* ------------------------------------------------------------------ */
+/*                           soldier orders                            */
+/* ------------------------------------------------------------------ */
+
+/* nearest living soldier or levy to a world point (the hero is his own) */
+export function unitAt(s, x, y, radius = 26) {
+  let best = null;
+  let bd = radius * radius;
+  for (const u of s.units) {
+    if (!alive(u)) continue;
+    const d = dist2(u.x, u.y - 18, x, y);
+    if (d < bd) { bd = d; best = u; }
+  }
+  return best;
+}
+
+export function squadOf(s, plotIdx) {
+  return s.units.filter((u) => u.tower === plotIdx && u.state !== "respawn").map((u) => u.id);
+}
+
+/* True when the selection is exactly one whole barracks squad (two or
+   more soldiers), so the HUD and renderer can show it differently. */
+export function isFullSquad(s, ids) {
+  if (!ids || ids.length < 2) return false;
+  const first = getUnit(s, ids[0]);
+  if (!first || first.tower == null || first.tower < 0) return false;
+  const sq = squadOf(s, first.tower);
+  return sq.length >= 2 && sq.length === ids.length && sq.every((id) => ids.includes(id));
+}
+
+/* order: { kind: "move"|"hold"|"attack"|"gate"|"tower"|"rally", x, y, enemyId, plot } */
+export function orderUnits(s, ids, order) {
+  if (s.phase !== "playing" || !ids || !ids.length) return false;
+  const units = ids.map((id) => getUnit(s, id)).filter((u) => u && u.kind !== "hero" && alive(u));
+  if (!units.length) return false;
+  const spread = (x, y) => units.map((u, i) => { const off = SOLDIER_OFFSETS[i % SOLDIER_OFFSETS.length]; return { u, x: x + off[0], y: y + off[1] }; });
+  const clampX = (x) => clamp(x, 20, s.layout.w - 20);
+  const clampY = (y) => clamp(y, 20, s.layout.h - 20);
+  let ev;
+  switch (order.kind) {
+    case "move": {
+      for (const p of spread(order.x, order.y)) { p.u.home = { x: clampX(p.x), y: clampY(p.y) }; p.u.order = { kind: "move" }; p.u.hold = false; p.u.forceTarget = null; p.u.target = null; }
+      ev = { type: "order", kind: "move", x: order.x, y: order.y };
+      break;
+    }
+    case "hold": {
+      for (const u of units) { u.home = { x: u.x, y: u.y }; u.order = { kind: "hold" }; u.hold = true; u.forceTarget = null; }
+      ev = { type: "order", kind: "hold", x: units[0].x, y: units[0].y };
+      break;
+    }
+    case "attack": {
+      const e = getEnemy(s, order.enemyId);
+      if (!e || e.state === "dead") return false;
+      for (const u of units) { u.forceTarget = e.id; u.order = { kind: "attack" }; u.hold = false; }
+      ev = { type: "order", kind: "attack", x: e.x, y: e.y };
+      break;
+    }
+    case "gate": {
+      const g = s.layout.heroSpawn;
+      for (const p of spread(g.x - 30, g.y + 10)) { p.u.home = { x: clampX(p.x), y: clampY(p.y) }; p.u.order = { kind: "gate" }; p.u.hold = false; p.u.forceTarget = null; p.u.target = null; }
+      ev = { type: "order", kind: "gate", x: g.x, y: g.y };
+      break;
+    }
+    case "tower": {
+      if (order.plot == null || order.plot < 0) return false;
+      const r = defaultRally(s, order.plot);
+      for (const p of spread(r.x, r.y)) { p.u.home = { x: clampX(p.x), y: clampY(p.y) }; p.u.order = { kind: "tower", plot: order.plot }; p.u.hold = false; p.u.forceTarget = null; p.u.target = null; }
+      ev = { type: "order", kind: "tower", x: r.x, y: r.y };
+      break;
+    }
+    case "rally": {
+      for (const u of units) {
+        const t = s.towers[u.tower];
+        if (u.kind === "soldier" && t) placeSoldierHome(s, u, t);
+        u.order = null; u.hold = false; u.forceTarget = null; u.target = null;
+      }
+      ev = { type: "order", kind: "rally", x: units[0].home.x, y: units[0].home.y };
+      break;
+    }
+    default: return false;
+  }
+  if (ev) s.events.push(ev);
+  return true;
+}
+
+/* the ability every selected unit shares, or null */
+export function sharedAbility(s, ids) {
+  const units = ids.map((id) => getUnit(s, id)).filter((u) => u && alive(u));
+  if (!units.length) return null;
+  const ab = units[0].def.ability;
+  if (!ab || !units.every((u) => u.def.ability && u.def.ability.id === ab.id)) return null;
+  const ready = units.some((u) => u.abilityCd <= 0);
+  return { ...ab, ready, cd: Math.max(...units.map((u) => u.abilityCd)) };
+}
+
+export function triggerUnitAbility(s, ids) {
+  if (s.phase !== "playing") return false;
+  let used = false;
+  for (const id of ids) {
+    const u = getUnit(s, id);
+    if (!u || !alive(u) || !u.def.ability || u.abilityCd > 0) continue;
+    u.abilityCd = u.def.ability.cd;
+    u.abilityT = u.def.ability.dur;
+    used = true;
+    s.events.push({ type: "unitAbility", id: u.def.ability.id, x: u.x, y: u.y });
+  }
+  return used;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1179,6 +1593,7 @@ export function summarise(s) {
     mode: s.mode,
     difficulty: s.difficulty,
     won: s.phase === "victory",
+    finished: s.phase === "victory" || s.phase === "defeat",
     wave: s.wave,
     totalWaves: s.totalWaves === Infinity ? null : s.totalWaves,
     castleHp: s.castleHp,
@@ -1191,4 +1606,99 @@ export function summarise(s) {
     time: s.t,
     early: s.stats.early,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*                        save and restore a battle                     */
+/* ------------------------------------------------------------------ */
+
+export const BATTLE_FORMAT = 2;
+
+/* A compact, plain-JSON picture of a battle in progress. Transient
+   things (projectiles, particles, strikes) are dropped; everything that
+   matters to the player — wave, gold, castle, towers, squads, hero,
+   living enemies, perks — is kept. */
+export function serializeGame(s) {
+  const unitOf = (u) => ({
+    kind: u.kind, unit: u.unit, tower: u.tower, slot: u.slot, hp: Math.round(u.hp * 10) / 10, maxHp: u.maxHp,
+    x: Math.round(u.x), y: Math.round(u.y), home: u.home ? { x: Math.round(u.home.x), y: Math.round(u.home.y) } : null,
+    state: u.state === "dead" || u.state === "respawn" ? u.state : "idle", respawnT: u.respawnT || 0, deadT: u.deadT || 0,
+    life: u.life, face: u.face, order: u.order || null, hold: !!u.hold, abilityCd: u.abilityCd || 0,
+  });
+  return {
+    v: BATTLE_FORMAT,
+    stageId: s.stage.id, layout: s.layout.name, difficulty: s.difficulty, mode: s.mode,
+    seed: ((s.seed * 31 + Math.floor(s.t * 977)) | 0) || 1,
+    t: s.t, gold: s.gold, castleHp: s.castleHp, castleMax: s.castleMax,
+    wave: s.wave, waveState: s.waveState, countdown: s.countdown, countdownMax: s.countdownMax, waveT: s.waveT,
+    queue: s.queue.map((q) => ({ ...q })),
+    stats: { ...s.stats }, abilities: { ...s.abilities }, nextId: s.nextId,
+    towers: s.towers.map((t) => (t ? { type: t.type, level: t.level, cd: t.cd, abilityCd: t.abilityCd, rally: t.rally ? { ...t.rally } : null, pikes: !!t.pikes, shooter: t.shooter || 0, angle: t.angle || 0 } : null)),
+    units: s.units.filter((u) => !u.remove).map(unitOf),
+    hero: { level: s.hero.level, xp: s.hero.xp, hp: Math.round(s.hero.hp), maxHp: s.hero.maxHp, x: Math.round(s.hero.x), y: Math.round(s.hero.y), post: { ...s.hero.post }, state: s.hero.state === "dead" || s.hero.state === "respawn" ? s.hero.state : "idle", respawnT: s.hero.respawnT || 0, deadT: s.hero.deadT || 0, chargeCd: Math.max(0, s.hero.chargeCd || 0) },
+    enemies: s.enemies.filter((e) => e.state !== "dead").map((e) => ({ type: e.type, route: e.route, d: Math.round(e.d * 10) / 10, lat: e.lat, hp: Math.round(e.hp), maxHp: e.maxHp, chargeCd: Math.max(0, e.chargeCd || 0), stun: e.stun || 0 })),
+    zones: s.zones.map((z) => ({ x: z.x, y: z.y, r: z.r, t: z.t, dps: z.dps })),
+    perks: (s.perks || []).slice(), mods: { ...(s.mods || {}) }, perkOffer: s.perkOffer ? s.perkOffer.slice() : null, perkPending: !!s.perkPending, unlocks: (s.unlocks || []).slice(),
+  };
+}
+
+/* Rebuilds a playing game from serializeGame() output. Throws on a
+   format it does not understand; callers treat that as "no save". */
+export function restoreGame(data, opts = {}) {
+  if (!data || data.v !== BATTLE_FORMAT) throw new Error("unsupported battle format");
+  const s = makeGame({ stageId: data.stageId, layout: opts.layout || data.layout, difficulty: data.difficulty, mode: data.mode, seed: data.seed || 1 });
+  s.phase = "playing";
+  s.t = data.t || 0; s.gold = data.gold; s.castleHp = data.castleHp; s.castleMax = data.castleMax || s.castleMax;
+  s.wave = data.wave; s.waveState = data.waveState; s.countdown = data.countdown; s.countdownMax = data.countdownMax; s.waveT = data.waveT || 0;
+  s.queue = (data.queue || []).map((q) => ({ ...q }));
+  s.stats = { ...s.stats, ...(data.stats || {}) };
+  s.abilities = { ...s.abilities, ...(data.abilities || {}) };
+  s.perks = (data.perks || []).slice(); s.mods = { ...(data.mods || {}) };
+  s.perkOffer = data.perkOffer ? data.perkOffer.slice() : null; s.perkPending = !!data.perkPending; s.unlocks = (data.unlocks || []).slice();
+  /* towers */
+  (data.towers || []).forEach((t, i) => {
+    if (!t || i >= s.towers.length) return;
+    const tower = makeTower(s, i, t.type);
+    tower.level = t.level; tower.cd = t.cd || 0; tower.abilityCd = t.abilityCd || 0; tower.buildT = 0;
+    tower.pikes = !!t.pikes; tower.shooter = t.shooter || 0; tower.angle = t.angle || tower.angle;
+    if (t.type === "barracks") tower.rally = t.rally && s.layout.name === data.layout ? { ...t.rally } : defaultRally(s, i);
+    s.towers[i] = tower;
+  });
+  /* squads and levies */
+  const sameLayout = s.layout.name === data.layout;
+  for (const u of data.units || []) {
+    if (!SOLDIERS[u.unit]) continue;
+    let unit;
+    if (u.kind === "levy") unit = makeLevy(s, u.x, u.y, u.slot || 0);
+    else {
+      if (!s.towers[u.tower] || s.towers[u.tower].type !== "barracks") continue;
+      unit = makeSoldier(s, u.tower, u.slot || 0, u.unit);
+    }
+    unit.hp = Math.min(u.hp, unit.maxHp); unit.respawnT = u.respawnT || 0; unit.deadT = u.deadT || 0; unit.face = u.face || 1;
+    if (u.life != null) unit.life = u.life;
+    unit.order = u.order || null; unit.hold = !!u.hold; unit.abilityCd = u.abilityCd || 0;
+    if (sameLayout) { unit.x = u.x; unit.y = u.y; if (u.home) unit.home = { ...u.home }; }
+    else { unit.x = unit.home.x; unit.y = unit.home.y; unit.order = null; unit.hold = false; }
+    unit.state = u.state === "dead" || u.state === "respawn" ? u.state : "idle";
+    if (unit.state === "dead" && unit.deadT <= 0) unit.state = "respawn";
+    s.units.push(unit);
+  }
+  /* the hero */
+  const h = s.hero; const hd = data.hero || {};
+  h.level = hd.level || 1; h.xp = hd.xp || 0;
+  const st = heroStats(h.level); h.maxHp = st.maxHp; h.hp = Math.min(h.maxHp, hd.hp ?? h.maxHp);
+  h.chargeCd = hd.chargeCd || 0; h.respawnT = hd.respawnT || 0; h.deadT = hd.deadT || 0;
+  h.state = hd.state === "dead" || hd.state === "respawn" ? hd.state : "idle";
+  if (sameLayout && hd.post) { h.x = hd.x; h.y = hd.y; h.post = { ...hd.post }; }
+  /* living enemies keep their road distance, so any layout works */
+  for (const e of data.enemies || []) {
+    if (!ENEMIES[e.type]) continue;
+    const en = spawnEnemy(s, e.type, e.route || 0, e.lat || 0);
+    en.d = e.d; en.hp = Math.min(e.hp, en.maxHp); en.chargeCd = e.chargeCd || 0; en.stun = e.stun || 0;
+    syncEnemyPos(s, en);
+  }
+  s.events = [];
+  s.zones = (data.zones || []).map((z) => ({ id: s.nextId++, x: z.x, y: z.y, r: z.r, t: z.t, dps: z.dps, tick: 0 }));
+  s.nextId = Math.max(s.nextId, data.nextId || 0);
+  return s;
 }

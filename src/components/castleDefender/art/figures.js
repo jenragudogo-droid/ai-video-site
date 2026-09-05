@@ -38,6 +38,17 @@ export const FIGURES = {
   crossbow:   { body: "leather", bodyColor: PAL.black, trim: PAL.rust, helmet: "kettle", helmetColor: PAL.black, shield: "none", weapon: "crossbow", legs: PAL.blackDark, boots: "#111", enemy: true, h: 57 },
   rider:      { body: "leather", bodyColor: "#5a3d28", trim: PAL.rust, helmet: "cap", helmetColor: PAL.blackDark, shield: "buckler", shieldColor: PAL.rust, boss: PAL.iron, weapon: "spear", legs: PAL.blackDark, boots: "#111", enemy: true, h: 56 },
   crew:       { body: "tunic", bodyColor: "#7a6a58", trim: PAL.blackDark, helmet: "none", shield: "none", weapon: "none", legs: PAL.blackDark, boots: "#111", enemy: true, h: 54 },
+
+  /* Stage II riders (drawn on their horses) */
+  scoutRider: { body: "leather", bodyColor: "#6e4a2c", trim: PAL.blackDark, helmet: "cap", helmetColor: PAL.blackDark, shield: "buckler", shieldColor: PAL.rust, boss: PAL.iron, weapon: "sword", legs: "#3a3540", boots: "#1a1618", enemy: true, h: 56 },
+  knightRider: { body: "plate", bodyColor: "#4c4c58", trim: PAL.rust, tabard: PAL.blackDark, helmet: "greatHelm", helmetColor: PAL.black, shield: "kite", shieldColor: PAL.rust, emblem: "boss", emblemColor: PAL.iron, weapon: "lance", cape: null, legs: "#3a3a44", boots: "#1a1618", enemy: true, h: 60 },
+  commanderRider: { body: "plate", bodyColor: "#2c2c34", trim: PAL.red, tabard: PAL.black, tabardTrim: PAL.red, helmet: "greatHelm", helmetColor: "#1c1c22", plume: PAL.red, shield: "heater", shieldColor: PAL.black, emblem: "chevron", emblemColor: PAL.red, weapon: "lance", cape: PAL.redDark, legs: "#2a2a32", boots: "#111", enemy: true, scale: 1.08, h: 64, banner: true },
+
+  /* the realm's pike drill */
+  pikeMilitia:   { body: "tunic", bodyColor: PAL.cloth, trim: PAL.clothDark, helmet: "kettle", helmetColor: PAL.mail, shield: "buckler", shieldColor: PAL.wood, boss: PAL.iron, weapon: "pike", legs: "#4a4a55", boots: PAL.leatherDark, h: 56 },
+  pikeManAtArms: { body: "mail", bodyColor: PAL.mail, trim: PAL.red, helmet: "nasal", helmetColor: PAL.plateDark, shield: "buckler", shieldColor: PAL.red, boss: PAL.gold, weapon: "pike", legs: PAL.mailDark, boots: PAL.leatherDark, h: 58 },
+  pikeKnight:    { body: "plate", bodyColor: PAL.plate, trim: PAL.gold, tabard: PAL.red, helmet: "bascinet", helmetColor: PAL.plate, shield: "buckler", shieldColor: PAL.red, boss: PAL.gold, weapon: "pike", legs: PAL.plateDark, boots: PAL.iron, h: 60 },
+  pikeRoyal:     { body: "plate", bodyColor: PAL.plateLight, trim: PAL.gold, tabard: PAL.gold, helmet: "greatHelm", helmetColor: PAL.plate, plume: PAL.red, shield: "buckler", shieldColor: PAL.gold, boss: PAL.red, weapon: "pike", cape: PAL.red, legs: PAL.plateDark, boots: PAL.iron, h: 62 },
 };
 
 /* --------------------------------- poses --------------------------------- */
@@ -119,6 +130,38 @@ export function figurePose(anim, t, opts = {}) {
       p.armW.sh = -10; p.armS.sh = 10; p.legN.hip = 8; p.legF.hip = -8; p.legN.knee = 10; p.legF.knee = 10;
       break;
     }
+    case "brace": {
+      /* feet set wide, pike levelled at the horse, shield up */
+      p.legN.hip = 34; p.legN.knee = 30; p.legF.hip = -26; p.legF.knee = 10;
+      p.lean = 16; p.bob = 2;
+      p.armW.sh = 96; p.armW.el = -6; p.weaponRot = -100;
+      p.armS.sh = 55; p.armS.el = 30; p.shieldUp = 0.8;
+      break;
+    }
+    case "ride": {
+      /* seated on a horse: legs hang forward, weapon carried level */
+      const c = Math.sin(t * Math.PI * 2);
+      p.legN.hip = 34; p.legN.knee = 46; p.legF.hip = 34; p.legF.knee = 46;
+      p.bob = -Math.abs(c) * 1.2; p.lean = 8;
+      p.armW.sh = 70; p.armW.el = -10; p.weaponRot = -60;
+      p.armS.sh = 30; p.armS.el = 40;
+      break;
+    }
+    case "rideCharge": {
+      const c = Math.sin(t * Math.PI * 2);
+      p.legN.hip = 40; p.legN.knee = 40; p.legF.hip = 40; p.legF.knee = 40;
+      p.bob = -Math.abs(c) * 2; p.lean = 24;
+      p.armW.sh = 92; p.armW.el = 0; p.weaponRot = -92;
+      p.armS.sh = 60; p.armS.el = 30; p.shieldUp = 1;
+      break;
+    }
+    case "rideRear": {
+      p.legN.hip = 40; p.legN.knee = 40; p.legF.hip = 40; p.legF.knee = 40;
+      p.lean = -16; p.bob = -3;
+      p.armW.sh = 40; p.armW.el = -40; p.weaponRot = -30;
+      p.armS.sh = 20; p.armS.el = 30;
+      break;
+    }
     case "idle":
     default: {
       p.bob = Math.sin(t * 2.2) * 0.7;
@@ -179,6 +222,20 @@ function drawWeapon(ctx, kind, x, y, angle) {
     case "spear": {
       outlined(ctx, PAL.wood, () => ctx.rect(-1.3, -18, 2.6, 46));
       outlined(ctx, metal, () => { ctx.moveTo(-3, 28); ctx.lineTo(3, 28); ctx.lineTo(0, 40); ctx.closePath(); });
+      break;
+    }
+    case "pike": {
+      outlined(ctx, PAL.wood, () => ctx.rect(-1.4, -14, 2.8, 62));
+      outlined(ctx, PAL.iron, () => ctx.rect(-2.2, 40, 4.4, 4));
+      outlined(ctx, metal, () => { ctx.moveTo(-3.2, 44); ctx.lineTo(3.2, 44); ctx.lineTo(0, 60); ctx.closePath(); });
+      break;
+    }
+    case "lance": {
+      outlined(ctx, PAL.woodLight, () => { ctx.moveTo(-2.4, -12); ctx.lineTo(2.4, -12); ctx.lineTo(1.2, 66); ctx.lineTo(-1.2, 66); ctx.closePath(); });
+      outlined(ctx, PAL.iron, () => ctx.arc(0, -4, 4, 0, Math.PI * 2), 1);            // vamplate
+      outlined(ctx, metal, () => { ctx.moveTo(-2.2, 62); ctx.lineTo(2.2, 62); ctx.lineTo(0, 74); ctx.closePath(); });
+      /* pennon */
+      outlined(ctx, PAL.rust, () => { ctx.moveTo(1, 46); ctx.lineTo(12, 50); ctx.lineTo(1, 58); ctx.closePath(); }, 1);
       break;
     }
     case "axe": {
@@ -472,43 +529,71 @@ export function drawFigure(ctx, spec, pose, variant = 0) {
 /* ------------------------------ the horse ------------------------------ */
 
 export function drawHorse(ctx, t, color, opts = {}) {
-  /* feet at y=0, facing +x, canter cycle from t (0..1) */
+  /* feet at y=0, facing +x. `t` is the cycle phase. opts: gallop (charge
+     stride), rear (0..1 rearing up), barding colour, plume, size */
   const dark = shade(color, -0.3);
+  const gallop = !!opts.gallop;
+  const rear = opts.rear || 0;
   const c = Math.sin(t * Math.PI * 2);
   const c2 = Math.sin(t * Math.PI * 2 + Math.PI * 0.5);
-  const bob = -Math.abs(c) * 2;
+  const bob = gallop ? -Math.abs(c) * 3.5 : -Math.abs(c) * 2;
+  const stride = gallop ? 1.6 : 1;
+  const bard = opts.barding || null;
   ctx.save();
+  ctx.scale(opts.size || 1, opts.size || 1);
+  if (rear > 0) { ctx.translate(-14 * rear, 0); ctx.rotate(-0.55 * rear); }
   ctx.translate(0, bob);
   const leg = (x, y, a1, a2) => {
     const kx = x + Math.sin(a1 * RAD) * 12; const ky = y + Math.cos(a1 * RAD) * 12;
     const ex = kx + Math.sin((a1 + a2) * RAD) * 13; const ey = ky + Math.cos((a1 + a2) * RAD) * 13;
-    ctx.strokeStyle = OUT; ctx.lineWidth = 6.4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke();
-    ctx.strokeStyle = dark; ctx.lineWidth = 4.4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke();
-    ctx.fillStyle = "#1a1512"; ctx.beginPath(); ctx.ellipse(ex + 1, ey, 3.4, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = OUT; ctx.lineWidth = 7.6; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.strokeStyle = dark; ctx.lineWidth = 5.4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.strokeStyle = rgba("#ffffff", 0.14); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - 1, y); ctx.lineTo(kx - 1, ky); ctx.stroke();
+    ctx.fillStyle = "#1a1512"; ctx.beginPath(); ctx.ellipse(ex + 1, ey, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
   };
+  const frontLift = rear * 70;
   /* far legs */
-  leg(-16, -25, -c * 30 - 5, Math.max(0, c) * 40);
-  leg(16, -25, c * 32 + 5, Math.max(0, -c) * 30);
+  leg(-16, -25, -c * 30 * stride - 5, Math.max(0, c) * 40);
+  leg(16, -25, c * 32 * stride + 5 + frontLift, Math.max(0, -c) * 30);
   /* tail */
-  ctx.strokeStyle = OUT; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-26, -34); ctx.quadraticCurveTo(-36, -30 + c * 3, -34, -14); ctx.stroke();
-  ctx.strokeStyle = "#1e1a17"; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(-26, -34); ctx.quadraticCurveTo(-36, -30 + c * 3, -34, -14); ctx.stroke();
+  ctx.strokeStyle = OUT; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-26, -34); ctx.quadraticCurveTo(-36 - (gallop ? 8 : 0), -30 + c * 3, -34 - (gallop ? 10 : 0), -14 + (gallop ? -8 : 0)); ctx.stroke();
+  ctx.strokeStyle = "#1e1a17"; ctx.lineWidth = 3.4; ctx.beginPath(); ctx.moveTo(-26, -34); ctx.quadraticCurveTo(-36 - (gallop ? 8 : 0), -30 + c * 3, -34 - (gallop ? 10 : 0), -14 + (gallop ? -8 : 0)); ctx.stroke();
   /* body */
-  outlined(ctx, color, () => ctx.ellipse(0, -32, 27, 12, 0, 0, Math.PI * 2), 1.5);
+  outlined(ctx, color, () => ctx.ellipse(0, -32, 27, 12, 0, 0, Math.PI * 2), 1.8);
   ctx.fillStyle = rgba("#000000", 0.16); ctx.beginPath(); ctx.ellipse(0, -30, 27, 12, 0, 0, Math.PI); ctx.fill();
+  ctx.fillStyle = rgba("#ffffff", 0.14); ctx.beginPath(); ctx.ellipse(-4, -37, 16, 4, 0, 0, Math.PI * 2); ctx.fill();
+  if (!bard && opts.cloth) {
+    /* saddle cloth with a fringed edge */
+    outlined(ctx, opts.cloth, () => { ctx.moveTo(-14, -42); ctx.lineTo(10, -42); ctx.lineTo(12, -24); ctx.lineTo(-16, -24); ctx.closePath(); }, 1.2);
+    ctx.fillStyle = rgba("#000000", 0.14); ctx.fillRect(-2, -42, 14, 18);
+    ctx.strokeStyle = PAL.gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-15, -26); ctx.lineTo(11, -26); ctx.stroke();
+  }
+  if (bard) {
+    /* caparison over the back and flanks, trimmed */
+    outlined(ctx, bard, () => { ctx.moveTo(-24, -40); ctx.quadraticCurveTo(0, -46, 22, -40); ctx.lineTo(24, -20); ctx.quadraticCurveTo(0, -16, -24, -20); ctx.closePath(); }, 1.3);
+    ctx.fillStyle = rgba("#000000", 0.16); ctx.beginPath(); ctx.moveTo(0, -44); ctx.lineTo(22, -40); ctx.lineTo(24, -20); ctx.lineTo(0, -17); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = opts.trim || PAL.gold; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-23, -22); ctx.quadraticCurveTo(0, -18, 23, -22); ctx.stroke();
+    for (let i = -18; i <= 18; i += 9) { ctx.fillStyle = opts.trim || PAL.gold; ctx.beginPath(); ctx.moveTo(i - 3, -21); ctx.lineTo(i, -16); ctx.lineTo(i + 3, -21); ctx.fill(); }
+  }
   /* neck + head */
   outlined(ctx, color, () => { ctx.moveTo(16, -40); ctx.lineTo(32, -58); ctx.lineTo(40, -52); ctx.lineTo(26, -30); ctx.closePath(); }, 1.4);
+  if (bard) { outlined(ctx, bard, () => { ctx.moveTo(18, -42); ctx.lineTo(31, -56); ctx.lineTo(36, -52); ctx.lineTo(26, -34); ctx.closePath(); }, 1); }
   outlined(ctx, color, () => { ctx.moveTo(30, -60); ctx.lineTo(46, -56); ctx.lineTo(48, -48); ctx.lineTo(36, -46); ctx.closePath(); }, 1.4);
+  if (bard) {
+    /* chamfron */
+    outlined(ctx, opts.chamfron || PAL.iron, () => { ctx.moveTo(31, -60); ctx.lineTo(44, -57); ctx.lineTo(45, -52); ctx.lineTo(34, -53); ctx.closePath(); }, 1);
+  }
   ctx.fillStyle = "#1a1512"; ctx.beginPath(); ctx.arc(39, -55, 1.3, 0, Math.PI * 2); ctx.fill();
   /* mane */
   ctx.strokeStyle = "#1e1a17"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(18, -42); ctx.quadraticCurveTo(26, -52, 33, -60); ctx.stroke();
-  /* ear */
   ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(32, -60); ctx.lineTo(34, -66); ctx.lineTo(37, -60); ctx.fill();
+  if (opts.plume) plume(ctx, opts.plume, 33, -64);
   /* saddle */
   outlined(ctx, opts.saddle || PAL.leatherDark, () => ctx.ellipse(-2, -42, 10, 4, 0, 0, Math.PI * 2), 1.2);
   ctx.strokeStyle = opts.saddle || PAL.leatherDark; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-2, -40); ctx.lineTo(-2, -24); ctx.stroke();
   /* near legs */
-  leg(-12, -25, c2 * 30 - 5, Math.max(0, -c2) * 40);
-  leg(20, -25, -c2 * 32 + 5, Math.max(0, c2) * 30);
+  leg(-12, -25, c2 * 30 * stride - 5, Math.max(0, -c2) * 40);
+  leg(20, -25, -c2 * 32 * stride + 5 + frontLift, Math.max(0, c2) * 30);
   /* reins */
   ctx.strokeStyle = PAL.leatherDark; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(4, -46); ctx.quadraticCurveTo(24, -40, 44, -50); ctx.stroke();
   ctx.restore();

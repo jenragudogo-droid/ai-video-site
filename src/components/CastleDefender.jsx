@@ -3,15 +3,26 @@ import {
   makeGame, startStage, stepGame, drainEvents, summarise, setLayout,
   buildTower, upgradeTower, sellTower, sellValue, setRally, fireTowerAbility, towerAbility,
   moveHero, heroCharge, castVolley, castReinforce, repairCastle, callWave,
-  plotAt, canBuild, canUpgrade, nextWaveSummary, towerLevel, upgradeCost, PLOT_R,
+  plotAt, canBuild, canUpgrade, nextWaveSummary, towerLevel, PLOT_R,
+  canDrill, setDrill, DRILL_COST,
+  serializeGame, restoreGame, orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility,
+  choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, upgradeCostFor, repairCost,
 } from "./castleDefender/engine/engine.js";
 import { createRenderer } from "./castleDefender/render.js";
 import { createCastleAudio } from "./castleDefender/audio.js";
-import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked } from "./castleDefender/save.js";
+import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked, saveBattle, clearBattle, saveDifficulty, buyUpgrade } from "./castleDefender/save.js";
+import { PERK_BY_ID, RARITY, POWERS } from "./castleDefender/data/perks.js";
+import { CATEGORIES, KINGDOM_UPGRADES, upgradeCost as kingdomCost } from "./castleDefender/data/progression.js";
 import { STAGES } from "./castleDefender/data/stages.js";
 import { KINGDOMS } from "./castleDefender/data/kingdoms.js";
-import { TOWERS, TOWER_ORDER, ABILITIES, HERO, heroStats, DIFFICULTY, SOLDIERS } from "./castleDefender/data/towers.js";
+import { TOWERS, TOWER_ORDER, ABILITIES, HERO, heroStats, DIFFICULTY, SOLDIERS, PIKE_UNITS } from "./castleDefender/data/towers.js";
 import { ENEMIES } from "./castleDefender/data/enemies.js";
+import { fullscreenElement, onFullscreenChange, toggleGameFullscreen, unlockPageScroll } from "./fullscreen.js";
+import { displayWave, waveCard, plural } from "./castleDefender/hudText.js";
+
+const PERK_ICON = { archer: ["tower", "archer"], barracks: ["tower", "barracks"], catapult: ["tower", "catapult"], ballista: ["tower", "ballista"], hero: ["figure", "hero"], castle: ["tower", "barracks"], gold: ["figure", "militia"], ability: ["figure", "bowman"] };
+const SAVE_DEBOUNCE = 1200;
+const SAVE_PERIOD = 10;
 import "./CastleDefender.css";
 
 /* ------------------------------------------------------------------ *
@@ -86,6 +97,7 @@ export default function CastleDefender() {
   const pointerRef = useRef(null);
   const ringRef = useRef(null);
   const waveBtnRef = useRef(null);
+  const topRef = useRef(null);
   const sheetRef = useRef(null);
   const modeRef = useRef(null);
   const selRef = useRef(-1);
@@ -94,6 +106,11 @@ export default function CastleDefender() {
   const bannerId = useRef(0);
   const holdRef = useRef(null);
   const introStartedRef = useRef(false);
+  const saveTimerRef = useRef(null);
+  const lastSaveRef = useRef(0);
+  const selUnitsRef = useRef([]);
+  const multiRef = useRef(false);
+  const shiftHeld = useRef(false);
 
   const [screen, setScreenState] = useState("menu");
   const [game, setGame] = useState(null);
@@ -105,8 +122,13 @@ export default function CastleDefender() {
   const [banners, setBanners] = useState([]);
   const [results, setResults] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pseudoFull, setPseudoFull] = useState(false);
   const [howPage, setHowPage] = useState(0);
-  const [difficulty, setDifficulty] = useState("normal");
+  const [difficulty, setDifficultyState] = useState(() => readSave().difficulty || "normal");
+  const [selUnits, setSelUnits] = useState([]);
+  const [multi, setMulti] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [introPhase, setIntroPhase] = useState(0);
   const [confirmReset, setConfirmReset] = useState(false);
   const [starsShown, setStarsShown] = useState(0);
@@ -119,6 +141,9 @@ export default function CastleDefender() {
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { selRef.current = selected; }, [selected]);
   useEffect(() => { heroSelRef.current = heroSel; }, [heroSel]);
+  useEffect(() => { selUnitsRef.current = selUnits; const s = gameRef.current; rendererRef.current?.setSelection({ units: new Set(selUnits), squad: !!s && isFullSquad(s, selUnits) }); }, [selUnits]);
+  useEffect(() => { multiRef.current = multi; }, [multi]);
+  const setDifficulty = useCallback((d) => { setDifficultyState(d); setProfile((p) => saveDifficulty(p, d)); }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
@@ -132,7 +157,9 @@ export default function CastleDefender() {
 
   const banner = useCallback((text, sub, kind = "wave", ms = 2600) => {
     const id = ++bannerId.current;
-    setBanners((b) => [...b.slice(-2), { id, text, sub, kind }]);
+    /* a wave-start card stands alone: it replaces cleared/early-call notices */
+    const waveKind = kind === "wave" || kind === "waveBig" || kind === "final";
+    setBanners((b) => (waveKind ? [{ id, text, sub, kind }] : [...b.slice(-2), { id, text, sub, kind }]));
     setTimeout(() => setBanners((b) => b.filter((x) => x.id !== id)), ms);
   }, []);
 
@@ -220,6 +247,42 @@ export default function CastleDefender() {
     return null;
   }, []);
 
+  /* ------------------------------ autosave ------------------------------ */
+
+  /* Writes the battle to the save slot. Called directly at the moments
+     that matter (wave cleared, build, leaving) and through a debounce
+     for everything else, never per frame. */
+  const saveNow = useCallback(() => {
+    const s = gameRef.current;
+    if (!s || s.phase !== "playing") return false;
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    try {
+      const next = saveBattle(readSave(), serializeGame(s));
+      setProfile(next);
+      lastSaveRef.current = s.t;
+      return true;
+    } catch { return false; }
+  }, []);
+
+  const scheduleSave = useCallback(() => {
+    if (saveTimerRef.current) return;
+    saveTimerRef.current = setTimeout(() => { saveTimerRef.current = null; saveNow(); }, SAVE_DEBOUNCE);
+  }, [saveNow]);
+
+  useEffect(() => {
+    const leave = () => { saveNow(); };
+    const vis = () => { if (document.visibilityState === "hidden") saveNow(); };
+    window.addEventListener("pagehide", leave);
+    window.addEventListener("beforeunload", leave);
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      window.removeEventListener("beforeunload", leave);
+      document.removeEventListener("visibilitychange", vis);
+    };
+  }, [saveNow]);
+  useEffect(() => () => { saveNow(); if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, [saveNow]);
+
   /* ------------------------------ results ------------------------------ */
 
   const bankRun = useCallback(() => {
@@ -241,7 +304,7 @@ export default function CastleDefender() {
     const sum = summarise(s);
     const res = recordResult(readSave(), sum);
     setProfile(res.save);
-    setResults({ ...sum, newBest: res.newBest, newStars: res.newStars, newWave: res.newWave });
+    setResults({ ...sum, newBest: res.newBest, newStars: res.newStars, newWave: res.newWave, crowns: res.crowns });
     setSelected(-1); setMode(null); setHeroSel(false);
     rendererRef.current?.setSelection({ plot: -1, hover: -1, range: null, target: null });
     setStarsShown(0);
@@ -280,37 +343,55 @@ export default function CastleDefender() {
         case "heroDown": a?.play("heroDown"); banner("Sir Edric has fallen", "He returns at the gate in 12 seconds", "alert", 2400); break;
         case "heroReturn": a?.play("heroReturn"); break;
         case "heroLevel": a?.play("heroLevel"); banner(`Sir Edric reaches level ${e.level}`, "More health, harder blows, a faster charge", "good", 2200); break;
-        case "build": a?.play("build"); break;
-        case "upgrade": a?.play("upgrade"); break;
-        case "sell": a?.play("sell"); break;
+        case "build": a?.play("build"); scheduleSave(); break;
+        case "upgrade": a?.play("upgrade"); scheduleSave(); break;
+        case "sell": a?.play("sell"); scheduleSave(); break;
         case "rally": a?.play("select"); break;
         case "wave": {
+          const card = waveCard(e.n, e.total, s.stage.waveTitles, e.summary);
+          scheduleSave();
           a?.play("wave");
-          const list = e.summary.map((g) => `${g.count} ${g.name}${g.count > 1 ? "s" : ""}`).join(" · ");
-          banner(`Wave ${e.n}${e.total === Infinity ? "" : ` of ${e.total}`}`, list, "wave", 3000);
+          if (card.kind === "final") a?.play("march");
+          banner(card.title, card.sub, card.kind, card.ms);
           break;
         }
-        case "waveClear": a?.play("waveClear"); banner(`Wave ${e.n} cleared`, `+${e.bonus} gold`, "good", 2000); break;
+        case "waveClear": a?.play("waveClear"); banner(`Wave ${e.n} cleared`, `+${e.bonus} gold`, "good", 2000); saveNow(); break;
         case "earlyBonus": a?.play("earlyBonus"); banner(`Early call  +${e.amount} gold`, "", "good", 1600); break;
         case "gateHit": a?.play(e.siege ? "gateHitSiege" : "gateHit"); break;
-        case "spawn": if (e.enemy === "outrider") a?.play("hooves"); else if (e.enemy === "ram") a?.play("spawnRam"); break;
-        case "miniboss": a?.play("miniboss"); banner("Battering Ram", "Nothing blocks it. Ballistas and catapults, now.", "boss", 3200); break;
-        case "minibossDown": a?.play("minibossDown"); banner("The ram is broken", "", "good", 2000); break;
+        case "spawn": if (e.enemy === "outrider" || e.enemy === "scoutCav") a?.play("hooves"); else if (e.enemy === "knightCav") a?.play("gallop"); else if (e.enemy === "ram") a?.play("spawnRam"); break;
+        case "miniboss":
+          if (e.enemy === "cavCommander") { a?.play("commanderEnter"); banner("Captain Malric rides", "The Black Rider. He charges with a horn's warning and rallies the cavalry.", "boss", 3600); }
+          else { a?.play("miniboss"); banner("Battering Ram", "Nothing blocks it. Ballistas and catapults, now.", "boss", 3200); }
+          break;
+        case "minibossDown": a?.play("minibossDown"); banner(s.stage.id === "stonebridge" && s.wave >= 10 ? "Captain Malric falls" : "The ram is broken", "", "good", 2000); break;
         case "charge": a?.play("charge"); break;
         case "chargeHit": a?.play("chargeHit"); break;
         case "routeOpen": a?.play("routeOpen"); banner("A new road has opened", "The warband is coming from the north too", "alert", 3400); break;
         case "volley": a?.play("volley"); break;
         case "strike": a?.play("strike"); break;
         case "reinforce": a?.play("reinforce"); break;
-        case "repair": a?.play("repair"); if (s) s.lastRepair = s.t; break;
+        case "repair": a?.play("repair"); if (s) s.lastRepair = s.t; scheduleSave(); break;
         case "breakFree": a?.play("breakFree"); break;
+        case "chargeWarn": a?.play(e.enemy === "cavCommander" ? "chargeHorn" : "rear"); if (e.enemy !== "cavCommander") a?.play("chargeHorn"); break;
+        case "chargeStart": a?.play("chargeGo"); a?.play("gallop"); break;
+        case "cavImpact": a?.play("cavImpact"); a?.play("armour"); break;
+        case "chargeBroken": a?.play("chargeBroken"); if (e.by === "hero") banner("Charge broken", "Royal Charge stopped the rider", "good", 1600); break;
+        case "brace": a?.play("brace"); break;
+        case "drill": a?.play("drill"); scheduleSave(); break;
+        case "order": a?.play("order"); saveNow(); break;
+        case "unitAbility": a?.play(e.id === "braceSpears" ? "brace" : "shieldBrace"); saveNow(); break;
+        case "perkOffer": a?.play("perk"); saveNow(); break;
+        case "perk": a?.play("perk"); banner(e.name, `${RARITY[e.rarity]?.name || ""} perk chosen`, "good", 2000); saveNow(); break;
+        case "unlock": a?.play("unlock"); banner(`New power: ${e.name}`, POWERS[e.id]?.desc || "", "good", 3000); scheduleSave(); break;
+        case "watchfire": a?.play("watchfire"); break;
+        case "royalRally": a?.play("royalRally"); break;
         case "towerAbility": a?.play(e.id === "skewer" ? "bolt" : e.id === "barrage" ? "catapult" : "volley"); break;
         case "victory": finishRun(true); break;
         case "defeat": finishRun(false); break;
         default: break;
       }
     }
-  }, [banner, finishRun]);
+  }, [banner, finishRun, saveNow, scheduleSave]);
 
   /* ------------------------------ HUD snapshot ------------------------------ */
 
@@ -330,9 +411,14 @@ export default function CastleDefender() {
       heroHp: h.hp, heroMax: h.maxHp, heroLevel: h.level, heroState: h.state, heroRespawn: h.respawnT,
       chargeCd: h.chargeCd, chargeMax: st.chargeCd,
       volley: s.abilities.volley, reinforce: s.abilities.reinforce,
-      canRepair: s.gold >= ABILITIES.repair.cost && s.castleHp < s.castleMax,
+      canRepair: s.gold >= repairCost(s) && s.castleHp < s.castleMax,
       boss: boss ? { name: boss.def.name, ratio: boss.hp / boss.maxHp } : null,
-      tower: t ? { type: t.type, level: t.level, abilityCd: t.abilityCd, canUp: canUpgrade(s, sel), upCost: upgradeCost(t.type, t.level), sell: sellValue(s, sel) } : null,
+      tower: t ? { type: t.type, level: t.level, abilityCd: t.abilityCd, canUp: canUpgrade(s, sel), upCost: upgradeCostFor(s, t.type, t.level), sell: sellValue(s, sel), pikes: !!t.pikes, canDrill: canDrill(s, sel), squad: t.type === "barracks" ? squadOf(s, sel).length : 0 } : null,
+      repairCost: repairCost(s),
+      buildCosts: Object.fromEntries(TOWER_ORDER.map((k) => [k, buildCost(s, k)])),
+      powers: { watchfire: { cd: s.abilities.watchfire, unlocked: powerUnlocked(s, "watchfire"), active: s.boostT > 0 }, royalRally: { cd: s.abilities.royalRally, unlocked: powerUnlocked(s, "royalRally"), active: s.rallyT > 0 } },
+      perkPending: s.perkPending, perkOffer: s.perkOffer ? s.perkOffer.slice() : null, perks: s.perks.slice(),
+      selection: (() => { const ids = selUnitsRef.current.filter((id) => s.units.some((u) => u.id === id && u.state !== "respawn")); if (ids.length !== selUnitsRef.current.length) setSelUnits(ids); const ab = ids.length ? sharedAbility(s, ids) : null; const first = ids.length ? s.units.find((u) => u.id === ids[0]) : null; return { count: ids.length, ability: ab, unit: first ? first.def.name : null, tower: first ? first.tower : -1, squad: isFullSquad(s, ids), holding: ids.length > 0 && ids.every((id) => s.units.find((u) => u.id === id)?.hold) }; })(),
       earlyBonus: s.wave === 0 ? 0 : Math.round(60 * (s.countdown / s.countdownMax)),
       phase: s.phase,
       score: s.stats.score,
@@ -425,15 +511,26 @@ export default function CastleDefender() {
       const sp = r.toScreen(f.x, f.y);
       const el = waveBtnRef.current;
       const ew = el.offsetWidth || 160;
+      const eh = el.offsetHeight || 60;
       const x = Math.max(8, Math.min(w - ew - 8, sp.x - ew / 2 + 40));
-      const y = Math.max(52, Math.min(h - 120, sp.y - 116));
+      const topBottom = topRef.current ? (topRef.current.getBoundingClientRect().bottom - wrapRef.current.getBoundingClientRect().top) + 6 : 52;
+      let y = Math.max(topBottom, Math.min(h - 120, sp.y - 116));
+      /* never sit on an open tower sheet: slide above it when they overlap */
+      const sh = sheetRef.current;
+      if (sh && coarse) {
+        const wr = wrapRef.current.getBoundingClientRect();
+        const sr = sh.getBoundingClientRect();
+        const sl = sr.left - wr.left; const st = sr.top - wr.top; const srr = sr.right - wr.left; const sb = sr.bottom - wr.top;
+        if (x < srr && x + ew > sl && y < sb && y + eh > st) y = Math.max(topBottom, st - eh - 8);
+      }
       el.style.transform = `translate(${x}px, ${y}px)`;
     }
 
     hudClock.current += dt;
     if (hudClock.current >= HUD_INTERVAL) { hudClock.current = 0; snapshot(); }
+    if (scr === "playing" && s.t - lastSaveRef.current > SAVE_PERIOD) scheduleSave();
     if (a && (scr === "playing")) { const want = musicFor(); if (want !== a.mode) a.music(want); }
-  }, [handleEvents, snapshot, musicFor, setScreen, banner, coarse]);
+  }, [handleEvents, snapshot, musicFor, setScreen, banner, coarse, scheduleSave]);
 
   useEffect(() => {
     let raf = 0;
@@ -445,21 +542,27 @@ export default function CastleDefender() {
   /* ------------------------------ flow ------------------------------ */
 
   const startRun = useCallback((stageId, opts = {}) => {
+    /* a saved battle is precious: ask before replacing it */
+    if (!opts.force && readSave().battle && !(gameRef.current && gameRef.current.phase === "playing")) { setConfirmNew({ stageId, opts }); return; }
     const { w, h } = viewRef.current;
-    const g = makeGame({ stageId, layout: layoutFor(w, h), difficulty: opts.difficulty || difficulty, mode: opts.mode || "campaign", seed: (Math.random() * 0x7fffffff) | 0 });
+    const save = readSave();
+    const g = makeGame({ stageId, layout: layoutFor(w, h), difficulty: opts.difficulty || difficulty, mode: opts.mode || "campaign", seed: (Math.random() * 0x7fffffff) | 0, upgrades: save.meta?.upgrades || null });
     gameRef.current = g;
     setGame(g);
+    setProfile(clearBattle(save));
     rendererRef.current?.reset();
     bankedRef.current = false;
     fpsRef.current = { frames: 0, t: 0, decided: false };
     introStartedRef.current = false;
-    setResults(null); setSelected(-1); setMode(null); setHeroSel(false); setBanners([]);
+    lastSaveRef.current = 0;
+    setConfirmNew(null);
+    setResults(null); setSelected(-1); setMode(null); setHeroSel(false); setSelUnits([]); setMulti(false); setBanners([]);
     lastRef.current = 0;
     hudClock.current = 1;
     const a = audioRef.current;
     a?.unlock();
     if (coarse && wrapRef.current && !document.fullscreenElement) {
-      wrapRef.current.requestFullscreen?.().catch(() => {});
+      toggleGameFullscreen(wrapRef.current, { real: false, pseudo: false }, (st) => { setPseudoFull(st.pseudo); setTimeout(resize, 60); setTimeout(resize, 400); });
     }
     if (opts.mode === "endless" || opts.skipIntro) {
       startStage(g);
@@ -470,7 +573,35 @@ export default function CastleDefender() {
       setIntroPhase(0);
       setScreen("intro");
     }
-  }, [coarse, difficulty, handleEvents, layoutFor, setScreen, banner]);
+  }, [coarse, difficulty, handleEvents, layoutFor, setScreen, banner, resize]);
+
+  /* Continue: rebuild the saved battle and drop straight in */
+  const continueBattle = useCallback(() => {
+    const save = readSave();
+    if (!save.battle) return;
+    const { w, h } = viewRef.current;
+    let g;
+    try { g = restoreGame(save.battle, { layout: layoutFor(w, h) }); }
+    catch { setProfile(clearBattle(save)); banner("Saved battle could not be loaded", "It was from an older version. Progress and stars are safe.", "alert", 3600); return; }
+    gameRef.current = g;
+    setGame(g);
+    rendererRef.current?.reset();
+    bankedRef.current = false;
+    fpsRef.current = { frames: 0, t: 0, decided: false };
+    introStartedRef.current = true;
+    lastSaveRef.current = g.t;
+    setConfirmNew(null); setResults(null); setSelected(-1); setMode(null); setHeroSel(false); setSelUnits([]); setMulti(false); setBanners([]);
+    lastRef.current = 0; hudClock.current = 1;
+    audioRef.current?.unlock();
+    if (coarse && wrapRef.current && !document.fullscreenElement) {
+      toggleGameFullscreen(wrapRef.current, { real: false, pseudo: false }, (st) => { setPseudoFull(st.pseudo); setTimeout(resize, 60); setTimeout(resize, 400); });
+    }
+    handleEvents();
+    setScreen("playing");
+    const dw = displayWave(g.wave, g.waveState, g.totalWaves);
+    banner("Battle resumed", `${g.stage.name} · Wave ${dw.counter}`, "good", 3000);
+    audioRef.current?.play("resume");
+  }, [banner, coarse, handleEvents, layoutFor, resize, setScreen]);
 
   const skipIntro = useCallback(() => {
     const r = rendererRef.current;
@@ -482,20 +613,22 @@ export default function CastleDefender() {
   const togglePause = useCallback(() => { if (screenRef.current === "playing") pauseGame(); else if (screenRef.current === "paused") resumeGame(); }, [pauseGame, resumeGame]);
 
   const quitToMenu = useCallback(() => {
+    saveNow();
     bankRun();
     gameRef.current = null;
     setGame(null);
     rendererRef.current?.reset();
     setSelected(-1); setMode(null); setHeroSel(false); setBanners([]);
+    setSelUnits([]); setMulti(false);
     setScreen("menu");
     audioRef.current?.play("close");
-  }, [bankRun, setScreen]);
+  }, [bankRun, saveNow, setScreen]);
 
   const restart = useCallback(() => {
     const s = gameRef.current;
     if (!s) return;
     bankRun();
-    startRun(s.stage.id, { mode: s.mode, difficulty: s.difficulty, skipIntro: true });
+    startRun(s.stage.id, { mode: s.mode, difficulty: s.difficulty, skipIntro: true, force: true });
   }, [bankRun, startRun]);
 
   const patchSettings = useCallback((patch) => setProfile((p) => saveSettings(p, patch)), []);
@@ -506,6 +639,7 @@ export default function CastleDefender() {
     setSelected(idx);
     setMode(null);
     setHeroSel(false);
+    if (idx >= 0) setSelUnits([]);
     const r = rendererRef.current;
     const s = gameRef.current;
     if (!r || !s) return;
@@ -529,10 +663,72 @@ export default function CastleDefender() {
     r.setSelection({ range: { x: p.x, y: p.y, r: type === "barracks" ? TOWERS.barracks.rallyRange : lvl.range, min: lvl.minRange || 0 } });
   }, []);
 
+  /* ------------------------------ soldiers ------------------------------ */
+
+  const selectUnits = useCallback((ids) => {
+    setSelUnits(ids);
+    if (ids.length) { setSelected(-1); setHeroSel(false); setMode(null); rendererRef.current?.setSelection({ plot: -1, range: null, target: null }); }
+    audioRef.current?.play(ids.length ? "select" : "close");
+  }, []);
+
+  const giveOrder = useCallback((order) => {
+    const s = gameRef.current; const ids = selUnitsRef.current;
+    if (!s || !ids.length) return false;
+    const ok = orderUnits(s, ids, order);
+    if (!ok) audioRef.current?.play("error");
+    handleEvents(); snapshot();
+    return ok;
+  }, [handleEvents, snapshot]);
+
+  const unitAbilityNow = useCallback(() => {
+    const s = gameRef.current; const ids = selUnitsRef.current;
+    if (!s || !ids.length) return;
+    if (!triggerUnitAbility(s, ids)) audioRef.current?.play("error");
+    handleEvents(); snapshot();
+  }, [handleEvents, snapshot]);
+
+  const selectSquad = useCallback((plot) => {
+    const s = gameRef.current;
+    if (!s) return;
+    const ids = squadOf(s, plot);
+    if (ids.length) selectUnits(ids);
+  }, [selectUnits]);
+
+  const doBuyUpgrade = useCallback((id) => {
+    const save = readSave();
+    const level = save.meta?.upgrades?.[id] || 0;
+    const cost = kingdomCost(id, level);
+    if (cost == null) return;
+    const next = buyUpgrade(save, id, cost);
+    if (!next) { audioRef.current?.play("error"); return; }
+    setProfile(next);
+    audioRef.current?.play("upgrade");
+  }, []);
+
+  const doChoosePerk = useCallback((id) => {
+    const s = gameRef.current;
+    if (!s) return;
+    if (choosePerk(s, id)) { handleEvents(); snapshot(); }
+  }, [handleEvents, snapshot]);
+
+  const doSkipPerk = useCallback(() => {
+    const s = gameRef.current;
+    if (!s) return;
+    if (skipPerk(s)) { audioRef.current?.play("close"); snapshot(); saveNow(); }
+  }, [snapshot, saveNow]);
+
+  const castPower = useCallback((id) => {
+    const s = gameRef.current;
+    if (!s) return;
+    const ok = id === "watchfire" ? castWatchfire(s) : castRoyalRally(s);
+    if (!ok) audioRef.current?.play("error");
+    handleEvents(); snapshot();
+  }, [handleEvents, snapshot]);
+
   const doBuild = useCallback((type) => {
     const s = gameRef.current; const idx = selRef.current;
     if (!s || idx < 0) return;
-    if (!buildTower(s, idx, type)) { audioRef.current?.play("error"); banner("Not enough gold", `${TOWERS[type].name} costs ${TOWERS[type].cost}`, "alert", 1400); return; }
+    if (!buildTower(s, idx, type)) { audioRef.current?.play("error"); banner("Not enough gold", `${TOWERS[type].name} costs ${buildCost(s, type)}`, "alert", 1400); return; }
     handleEvents();
     snapshot();
     select(idx);
@@ -550,6 +746,13 @@ export default function CastleDefender() {
     if (!s || idx < 0) return;
     if (sellTower(s, idx)) { handleEvents(); snapshot(); select(-1); }
   }, [handleEvents, select, snapshot]);
+
+  const doDrill = useCallback((pikes) => {
+    const s = gameRef.current; const idx = selRef.current;
+    if (!s || idx < 0) return;
+    if (!setDrill(s, idx, pikes)) { audioRef.current?.play("error"); banner("Not enough gold", `Drill costs ${DRILL_COST}`, "alert", 1400); return; }
+    handleEvents(); snapshot(); select(idx);
+  }, [banner, handleEvents, select, snapshot]);
 
   const enterMode = useCallback((m) => {
     setMode((cur) => (cur === m ? null : m));
@@ -578,13 +781,20 @@ export default function CastleDefender() {
     handleEvents(); snapshot();
   }, [handleEvents, snapshot]);
 
+  const toggleHold = useCallback(() => {
+    const s = gameRef.current; const ids = selUnitsRef.current;
+    if (!s || !ids.length) return;
+    const allHold = ids.every((id) => s.units.find((u) => u.id === id)?.hold);
+    giveOrder({ kind: allHold ? "rally" : "hold" });
+  }, [giveOrder]);
+
   /* a tap or click on the battlefield in world coordinates */
   const worldTap = useCallback((x, y, right = false) => {
     const s = gameRef.current; const r = rendererRef.current;
     if (!s || !r || screenRef.current !== "playing") return;
     const m = modeRef.current;
     const idx = selRef.current;
-    if (right) { if (moveHero(s, x, y)) handleEvents(); return; }
+    if (right) { if (selUnitsRef.current.length) giveOrder({ kind: "move", x, y }); else if (moveHero(s, x, y)) handleEvents(); return; }
     if (m === "rally") { if (idx >= 0) setRally(s, idx, x, y); handleEvents(); setMode(null); return; }
     if (m === "volley") { if (castVolley(s, x, y)) { handleEvents(); setMode(null); snapshot(); } else audioRef.current?.play("error"); return; }
     if (m === "reinforce") { if (castReinforce(s, x, y)) { handleEvents(); setMode(null); snapshot(); } else audioRef.current?.play("error"); return; }
@@ -594,6 +804,29 @@ export default function CastleDefender() {
       return;
     }
     if (m === "charge") { if (heroCharge(s, x, y)) { handleEvents(); setMode(null); setHeroSel(false); } else audioRef.current?.play("error"); return; }
+    if (m === "unitMove") { if (giveOrder({ kind: "move", x, y })) setMode(null); return; }
+    if (m === "unitAttack") {
+      let best = null; let bd = Math.max(40, 30 / r.fit.scale) ** 2;
+      for (const e of s.enemies) { if (e.state === "dead") continue; const d = (e.x - x) ** 2 + (e.y - 20 - y) ** 2; if (d < bd) { bd = d; best = e; } }
+      if (best && giveOrder({ kind: "attack", enemyId: best.id })) setMode(null);
+      else { audioRef.current?.play("error"); banner("No enemy there", "Tap an enemy on the road", "alert", 1200); }
+      return;
+    }
+    if (m === "unitTower") {
+      const plot = plotAt(s, x, y, Math.max(PLOT_R, 26 / r.fit.scale));
+      if (plot >= 0 && s.towers[plot] && giveOrder({ kind: "tower", plot })) setMode(null);
+      else { audioRef.current?.play("error"); banner("Tap a tower", "The squad will guard its stretch of road", "alert", 1200); }
+      return;
+    }
+    /* soldiers first: they are small and stand on the road */
+    const unitR = Math.max(26, 22 / r.fit.scale);
+    const uHit = unitAt(s, x, y, unitR);
+    if (uHit) {
+      const cur = selUnitsRef.current;
+      if (multiRef.current || shiftHeld.current) selectUnits(cur.includes(uHit.id) ? cur.filter((id) => id !== uHit.id) : [...cur, uHit.id]);
+      else selectUnits([uHit.id]);
+      return;
+    }
     const tapR = Math.max(PLOT_R, 26 / r.fit.scale);
     const plot = plotAt(s, x, y, tapR);
     if (plot >= 0) { select(plot); return; }
@@ -602,11 +835,14 @@ export default function CastleDefender() {
     if (heroSelRef.current) { if (moveHero(s, x, y)) { handleEvents(); if (coarse) setHeroSel(false); } return; }
     const f = s.layout.flags[0];
     if (Math.hypot(f.x - x, f.y - 40 - y) < 70 && s.waveState === "countdown") { doCallWave(); return; }
+    /* selected soldiers walk to a tapped spot on the ground */
+    if (selUnitsRef.current.length) { giveOrder({ kind: "move", x, y }); return; }
     if (idx >= 0) select(-1);
-  }, [banner, coarse, doCallWave, handleEvents, select, snapshot, toggleHero]);
+  }, [banner, coarse, doCallWave, giveOrder, handleEvents, select, selectUnits, snapshot, toggleHero]);
 
   const onPointerDown = useCallback((e) => {
     if (e.button === 2) return;
+    shiftHeld.current = !!e.shiftKey;
     pointerRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
     audioRef.current?.unlock();
   }, []);
@@ -628,6 +864,9 @@ export default function CastleDefender() {
     } else {
       const hov = plotAt(s, wpt.x, wpt.y, Math.max(PLOT_R, 22 / r.fit.scale));
       if (r.selection.hover !== hov) r.setSelection({ hover: hov });
+      const hu = unitAt(s, wpt.x, wpt.y, Math.max(26, 22 / r.fit.scale));
+      const huId = hu ? hu.id : null;
+      if (r.selection.hoverUnit !== huId) r.setSelection({ hoverUnit: huId });
     }
     wrap.dataset.cursor = m ? "target" : "";
   }, [coarse]);
@@ -683,7 +922,7 @@ export default function CastleDefender() {
       if (k === "m") { patchSettings({ sound: !readSave().settings.sound }); return; }
       if (k === "p" || k === "escape") {
         if (scr === "playing") {
-          if (modeRef.current || selRef.current >= 0 || heroSelRef.current) { setMode(null); select(-1); return; }
+          if (modeRef.current || selRef.current >= 0 || heroSelRef.current || selUnitsRef.current.length) { setMode(null); select(-1); setSelUnits([]); return; }
           e.preventDefault(); pauseGame();
         } else if (scr === "paused") { e.preventDefault(); resumeGame(); }
         else if (scr === "intro") skipIntro();
@@ -703,12 +942,15 @@ export default function CastleDefender() {
       if (k === "v") { enterMode("volley"); return; }
       if (k === "r") { enterMode("reinforce"); return; }
       if (k === "f") { doRepair(); return; }
+      if (k === "g") { castPower("watchfire"); return; }
+      if (k === "b") { castPower("royalRally"); return; }
+      if (k === "escape" && selUnitsRef.current.length) { setSelUnits([]); return; }
       if (k === "e") { if (idx >= 0 && towerAbility(s, idx)) enterMode("ability"); return; }
       if (k === "t") { if (idx >= 0 && s.towers[idx]?.type === "barracks") enterMode("rally"); }
     };
     window.addEventListener("keydown", down);
     return () => window.removeEventListener("keydown", down);
-  }, [chargeNow, doBuild, doCallWave, doRepair, doSell, doUpgrade, enterMode, patchSettings, pauseGame, resumeGame, select, skipIntro, toggleHero]);
+  }, [castPower, chargeNow, doBuild, doCallWave, doRepair, doSell, doUpgrade, enterMode, patchSettings, pauseGame, resumeGame, select, skipIntro, toggleHero]);
 
   useEffect(() => () => { bankRun(); }, [bankRun]);
 
@@ -728,17 +970,17 @@ export default function CastleDefender() {
   }, [pauseGame]);
 
   const toggleFullscreen = useCallback(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-    else el.requestFullscreen?.().catch(() => {});
-  }, []);
+    toggleGameFullscreen(wrapRef.current, { real: !!fullscreenElement(), pseudo: pseudoFull }, (st) => {
+      setPseudoFull(st.pseudo);
+      setTimeout(resize, 60); setTimeout(resize, 400);
+    });
+  }, [pseudoFull, resize]);
 
   useEffect(() => {
-    const onFs = () => { setFullscreen(!!document.fullscreenElement); setTimeout(resize, 60); setTimeout(resize, 400); };
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
+    const onFs = () => { setFullscreen(!!fullscreenElement()); setTimeout(resize, 60); setTimeout(resize, 400); };
+    return onFullscreenChange(onFs);
   }, [resize]);
+  useEffect(() => () => { if (pseudoFull) unlockPageScroll(); }, [pseudoFull]);
 
   /* ------------------------------ derived ------------------------------ */
 
@@ -747,8 +989,11 @@ export default function CastleDefender() {
   const live = screen === "playing";
   const inGame = live || screen === "paused";
   const s = game;
-  const selTower = live && selected >= 0 && s ? s.towers[selected] : null;
-  const selPlotFree = live && selected >= 0 && s ? !s.towers[selected] : false;
+  /* rings and sheets collapse while a targeting mode is active so the
+     "tap where…" prompt and the combat controls are never covered */
+  const targeting = !!mode || heroSel;
+  const selTower = live && selected >= 0 && s && !targeting ? s.towers[selected] : null;
+  const selPlotFree = live && selected >= 0 && s && !targeting ? !s.towers[selected] : false;
   const stars = totalStars(profile);
   const controlList = coarse ? TOUCH : KEYS;
   const sheetTop = !coarse;
@@ -761,15 +1006,22 @@ export default function CastleDefender() {
     if (mode === "reinforce") return `${tap} where the levies should stand`;
     if (mode === "ability") return `${tap} a target inside the tower's range`;
     if (mode === "charge") return `${tap} where Sir Edric should charge`;
+    if (mode === "unitMove") return `${tap} where the soldiers should go`;
+    if (mode === "unitAttack") return `${tap} the enemy to attack`;
+    if (mode === "unitTower") return `${tap} the tower to defend`;
     if (heroSel) return `${tap} where Sir Edric should go`;
     return null;
   }, [mode, heroSel, coarse]);
+  const battle = profile.battle;
+  const battleWave = battle ? displayWave(battle.wave, battle.waveState, battle.mode === "endless" ? Infinity : (STAGES.find((st) => st.id === battle.stageId)?.waves.length || 0)) : null;
+  const battleStage = battle ? STAGES.find((st) => st.id === battle.stageId) : null;
+  const crowns = profile.meta?.crowns || 0;
 
   /* ------------------------------ view ------------------------------ */
 
   return (
     <div
-      className={`cd ${live ? "is-live" : ""} ${fullscreen ? "is-full" : ""} ${coarse ? "is-coarse" : ""} ${inGame ? "is-ingame" : ""}`}
+      className={`cd ${live ? "is-live" : ""} ${fullscreen || pseudoFull ? "is-full" : ""} ${pseudoFull ? "is-pseudo" : ""} ${coarse ? "is-coarse" : ""} ${inGame ? "is-ingame" : ""}`}
       ref={wrapRef}
     >
       <canvas ref={canvasRef} className="cdCanvas" />
@@ -788,22 +1040,25 @@ export default function CastleDefender() {
       {/* ------------------------------ HUD ------------------------------ */}
       {inGame && hud && (
         <>
-          <div className="cdTop">
+          <div className="cdTop" ref={topRef}>
             <div className="cdStat cdStat--gold" title="Gold"><span className="cdCoin" />{fmt(hud.gold)}</div>
             <div className="cdStat cdStat--castle" title="Castle health">
               <span className="cdCastleIcon" />
               <span className="cdBar"><span className={`cdBarFill ${hud.castleHp / hud.castleMax < 0.35 ? "is-low" : ""}`} style={{ width: `${(hud.castleHp / hud.castleMax) * 100}%` }} /></span>
               <span className="cdBarText">{hud.castleHp}/{hud.castleMax}</span>
             </div>
-            <div className="cdStat cdStat--wave">
-              <span className="cdWaveLabel">Wave</span>
-              <strong>{hud.wave}{hud.total !== Infinity ? ` / ${hud.total}` : ""}</strong>
-              {hud.waveState === "countdown" && hud.wave < hud.total && <span className="cdTimer">{Math.ceil(hud.countdown)}s</span>}
-            </div>
+            {(() => { const dw = displayWave(hud.wave, hud.waveState, hud.total); return (
+              <div className={`cdStat cdStat--wave ${dw.final ? "is-final" : ""}`} title={dw.endless ? "Endless siege" : `${dw.left} ${dw.left === 1 ? "wave" : "waves"} remaining after this one`}>
+                <span className="cdWaveLabel">{dw.final ? "Final" : "Wave"}</span>
+                <strong>{dw.counter}</strong>
+                <em className="cdWaveLeft">{dw.note}</em>
+                {hud.waveState === "countdown" && hud.wave < hud.total && <span className="cdTimer">{Math.ceil(hud.countdown)}s</span>}
+              </div>
+            ); })()}
             <div className="cdQuick">
               <button type="button" onClick={() => patchSettings({ sound: !settings.sound })} aria-label={settings.sound ? "Mute sound" : "Unmute sound"} title="Sound (M)">{settings.sound ? "🔊" : "🔇"}</button>
               <button type="button" onClick={() => patchSettings({ music: !settings.music })} aria-label={settings.music ? "Music off" : "Music on"} title="Music">{settings.music ? "♪" : "♪̶"}</button>
-              <button type="button" onClick={toggleFullscreen} aria-label="Fullscreen" title="Fullscreen">{fullscreen ? "⤡" : "⤢"}</button>
+              <button type="button" onClick={toggleFullscreen} aria-label="Fullscreen" title="Fullscreen">{fullscreen || pseudoFull ? "⤡" : "⤢"}</button>
               <button type="button" onClick={togglePause} aria-label="Pause" title="Pause (P)">{live ? "❚❚" : "▶"}</button>
             </div>
           </div>
@@ -821,7 +1076,7 @@ export default function CastleDefender() {
               <span className="cdWaveBtnBody">
                 <strong>{hud.wave === 0 ? "Begin the siege" : "Next wave"}</strong>
                 <span className="cdWaveNext">
-                  {hud.next.map((g) => <em key={g.type}>{g.count} {g.name}{g.count > 1 ? "s" : ""}</em>)}
+                  {hud.next.map((g) => <em key={g.type}>{plural(g.name, g.count)}</em>)}
                 </span>
                 {hud.earlyBonus > 0 && <small>+{hud.earlyBonus} gold now</small>}
               </span>
@@ -867,9 +1122,48 @@ export default function CastleDefender() {
             </button>
             <button type="button" className={`cdAbility cdAbility--repair ${hud.canRepair ? "is-ready" : ""}`} onClick={doRepair} disabled={!hud.canRepair} title="Repair the castle (F)">
               <span className="cdAbilityIcon">⚒</span><span className="cdAbilityLabel">Repair</span>
-              <span className="cdCost"><span className="cdCoin cdCoin--s" />{ABILITIES.repair.cost}</span>
+              <span className="cdCost"><span className="cdCoin cdCoin--s" />{hud.repairCost}</span>
             </button>
+            {["watchfire", "royalRally"].map((id) => {
+              const pw = hud.powers[id]; const def = POWERS[id];
+              if (!pw.unlocked) return <div key={id} className="cdAbility cdAbility--locked" title={`${def.name}: unlocks on wave ${def.unlockWave}`}><span className="cdAbilityIcon">🔒</span><span className="cdAbilityLabel">W{def.unlockWave}</span></div>;
+              return (
+                <button type="button" key={id} className={`cdAbility ${pw.cd <= 0 ? "is-ready" : ""} ${pw.active ? "is-on" : ""}`} onClick={() => castPower(id)} disabled={pw.cd > 0} title={`${def.name} (${def.key}): ${def.desc}`}>
+                  <span className="cdCd" style={{ "--p": Math.max(0, pw.cd) / def.cd }} />
+                  <span className="cdAbilityIcon">{id === "watchfire" ? "🔥" : "🏴"}</span><span className="cdAbilityLabel">{id === "watchfire" ? "Watchfire" : "Rally"}</span>
+                  {pw.cd > 0 && <span className="cdCdText">{Math.ceil(pw.cd)}</span>}
+                </button>
+              );
+            })}
           </div>
+
+          {/* soldier command bar */}
+          {live && hud.selection.count > 0 && !targeting && (
+            <div className={`cdCmd ${hud.selection.squad ? "is-squad" : ""}`} onPointerDown={(e) => e.stopPropagation()}>
+              <div className="cdCmdHead">
+                <strong>
+                  {hud.selection.squad && <em className="cdCmdBadge">Squad</em>}
+                  {hud.selection.count === 1 ? hud.selection.unit : hud.selection.squad ? `Whole squad · ${hud.selection.count} soldiers` : `${hud.selection.count} soldiers picked`}
+                </strong>
+                <button type="button" className={`cdCmdMini ${multi ? "is-on" : ""}`} onClick={() => setMulti((v) => !v)} title="Add or remove soldiers with each tap">Multi</button>
+                {hud.selection.tower >= 0 && <button type="button" className="cdCmdMini" onClick={() => selectSquad(hud.selection.tower)} title="Select the whole squad">Squad</button>}
+                <button type="button" className="cdCmdMini cdCmdClose" onClick={() => setSelUnits([])} aria-label="Deselect">✕</button>
+              </div>
+              <div className="cdCmdRow">
+                <button type="button" onClick={() => enterMode("unitMove")} title="Walk to a spot you tap"><i>➜</i>Move</button>
+                <button type="button" className={hud.selection.holding ? "is-on" : ""} onClick={toggleHold} title="Stand fast where they are"><i>⛨</i>{hud.selection.holding ? "Release" : "Hold"}</button>
+                <button type="button" onClick={() => enterMode("unitAttack")} title="Attack an enemy you tap"><i>⚔</i>Attack</button>
+                <button type="button" onClick={() => giveOrder({ kind: "gate" })} title="Guard the castle gate"><i>🏰</i>Defend Gate</button>
+                <button type="button" onClick={() => enterMode("unitTower")} title="Guard a tower you tap"><i>🗼</i>Defend Tower</button>
+                <button type="button" onClick={() => giveOrder({ kind: "rally" })} title="Return to the barracks rally flag"><i>⚑</i>Rally</button>
+                {hud.selection.ability && (
+                  <button type="button" className={`cdCmdAbility ${hud.selection.ability.ready ? "is-ready" : ""}`} disabled={!hud.selection.ability.ready} onClick={unitAbilityNow} title={hud.selection.ability.desc}>
+                    <i>✦</i>{hud.selection.ability.name}{!hud.selection.ability.ready && <small>{Math.ceil(hud.selection.ability.cd)}s</small>}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {modeHint && live && (
             <div className="cdModeHint">
@@ -884,6 +1178,7 @@ export default function CastleDefender() {
               {TOWER_ORDER.map((type, i) => {
                 const def = TOWERS[type];
                 const ok = s && canBuild(s, selected, type);
+                const cost = hud.buildCosts ? hud.buildCosts[type] : def.cost;
                 return (
                   <button
                     type="button"
@@ -896,7 +1191,7 @@ export default function CastleDefender() {
                   >
                     <IconCanvas kind="tower" id={type} w={44} h={44} renderer={rendererRef} />
                     <span className="cdRingName">{def.short}</span>
-                    <span className="cdRingCost"><span className="cdCoin cdCoin--s" />{def.cost}</span>
+                    <span className="cdRingCost"><span className="cdCoin cdCoin--s" />{cost}</span>
                     {!coarse && <span className="cdKey">{i + 1}</span>}
                   </button>
                 );
@@ -912,11 +1207,11 @@ export default function CastleDefender() {
                 <IconCanvas kind="tower" id={selTower.type} w={44} h={44} renderer={rendererRef} />
                 <div>
                   <strong>{TOWERS[selTower.type].name}</strong>
-                  <span>Level {selTower.level} · {towerLevel(selTower.type, selTower.level).label}</span>
+                  <span>Level {selTower.level} · {hud.tower.pikes ? SOLDIERS[PIKE_UNITS[selTower.level - 1]].name : towerLevel(selTower.type, selTower.level).label}</span>
                 </div>
                 <button type="button" className="cdSheetClose" onClick={() => select(-1)} aria-label="Close">✕</button>
               </div>
-              <p className="cdSheetStats">{towerStatLine(selTower.type, selTower.level)}</p>
+              <p className="cdSheetStats">{towerStatLine(selTower.type, selTower.level, hud.tower.pikes)}</p>
               <div className="cdSheetRow">
                 {hud.tower.upCost != null ? (
                   <button type="button" className={`cdBtn cdBtn--gold ${hud.tower.canUp ? "" : "is-off"}`} onClick={doUpgrade}>
@@ -925,9 +1220,18 @@ export default function CastleDefender() {
                 ) : <span className="cdMax">Fully upgraded</span>}
                 <button type="button" className="cdBtn cdBtn--ghost" onClick={doSell}>Sell <span className="cdCost"><span className="cdCoin cdCoin--s" />{hud.tower.sell}</span>{!coarse && <span className="cdKey">S</span>}</button>
               </div>
+              {selTower.type === "barracks" && hud.tower.canDrill && (
+                <div className="cdSheetRow cdDrill">
+                  <button type="button" className={`cdBtn ${!hud.tower.pikes ? "is-on" : ""}`} onClick={() => doDrill(false)} title="Swords: armour and shields, steady against infantry">Swords{hud.tower.pikes && <span className="cdCost"><span className="cdCoin cdCoin--s" />{DRILL_COST}</span>}</button>
+                  <button type="button" className={`cdBtn ${hud.tower.pikes ? "is-on" : ""}`} onClick={() => doDrill(true)} title="Pikes: brace against cavalry, weak to archers">Pikes{!hud.tower.pikes && <span className="cdCost"><span className="cdCoin cdCoin--s" />{DRILL_COST}</span>}</button>
+                </div>
+              )}
               <div className="cdSheetRow">
                 {selTower.type === "barracks" && (
                   <button type="button" className={`cdBtn ${mode === "rally" ? "is-on" : ""}`} onClick={() => enterMode("rally")}>Rally point{!coarse && <span className="cdKey">T</span>}</button>
+                )}
+                {selTower.type === "barracks" && hud.tower.squad > 0 && (
+                  <button type="button" className="cdBtn" onClick={() => selectSquad(selected)} title="Select the squad to give it orders">Select squad</button>
                 )}
                 {towerAbility(s, selected) && (
                   <button type="button" className={`cdBtn cdBtn--ability ${hud.tower.abilityCd <= 0 ? "is-ready" : "is-off"} ${mode === "ability" ? "is-on" : ""}`} onClick={() => hud.tower.abilityCd <= 0 && enterMode("ability")}>
@@ -939,6 +1243,42 @@ export default function CastleDefender() {
             </div>
           )}
         </>
+      )}
+
+      {/* perk choice at milestone waves */}
+      {inGame && hud && hud.perkPending && hud.perkOffer && (
+        <div className="cdOverlay cdOverlay--perk">
+          <div className="cdPerkPanel">
+            <p className="cdEyebrow">Wave {hud.wave} held · choose a perk</p>
+            <h3>The realm rewards you</h3>
+            <div className="cdPerks">
+              {hud.perkOffer.map((id) => { const pk = PERK_BY_ID[id]; if (!pk) return null; const ic = PERK_ICON[pk.icon] || PERK_ICON.castle; return (
+                <button type="button" key={id} className={`cdPerk cdPerk--${pk.rarity}`} onClick={() => doChoosePerk(id)}>
+                  <span className="cdPerkSeal">{RARITY[pk.rarity].name}</span>
+                  <IconCanvas kind={ic[0]} id={ic[1]} w={64} h={64} renderer={rendererRef} />
+                  <strong>{pk.name}</strong>
+                  <span>{pk.desc}</span>
+                </button>
+              ); })}
+            </div>
+            <button type="button" className="cdBtn cdBtn--ghost cdPerkSkip" onClick={doSkipPerk}>Skip for now</button>
+          </div>
+        </div>
+      )}
+
+      {confirmNew && (
+        <div className="cdOverlay cdOverlay--modal">
+          <div className="cdCard cdCard--slim">
+            <p className="cdEyebrow">Saved battle</p>
+            <h3>Replace it?</h3>
+            <p className="cdResultLine">Starting a new battle will replace your current saved battle{battleStage ? ` (${battleStage.name}, wave ${battleWave?.counter})` : ""}.</p>
+            <div className="cdCol">
+              <button type="button" className="cdBtn cdBtn--main" onClick={continueBattle}>Continue saved battle</button>
+              <button type="button" className="cdBtn" onClick={() => startRun(confirmNew.stageId, { ...confirmNew.opts, force: true })}>Start new battle</button>
+              <button type="button" className="cdBtn cdBtn--ghost" onClick={() => setConfirmNew(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* banners */}
@@ -960,7 +1300,7 @@ export default function CastleDefender() {
           <div className="cdLetterbox cdLetterbox--bottom" />
           <div className={`cdIntroText cdIntroText--${introPhase}`}>
             {introPhase === 0 && (<><p className="cdEyebrow">The Realm of Ashford</p><h3>Stage {game?.stage.numeral} · {game?.stage.name}</h3></>)}
-            {introPhase === 1 && (<><p className="cdEyebrow">From the west</p><h3>The Blackmoor Warband approaches</h3></>)}
+            {introPhase === 1 && (<><p className="cdEyebrow">From the west</p><h3>{game?.stage.id === "stonebridge" ? "The warband rides on Stonebridge" : "The Blackmoor Warband approaches"}</h3></>)}
             {introPhase >= 2 && (<>{(game?.stage.intro || []).map((l) => <h3 key={l} className="cdIntroLine">{l}</h3>)}</>)}
           </div>
           <button type="button" className="cdSkip" onClick={(e) => { e.stopPropagation(); skipIntro(); }}>Skip ▸</button>
@@ -976,7 +1316,13 @@ export default function CastleDefender() {
             <p className="cdTagline">Hold the Realm of Ashford against the Blackmoor Warband</p>
           </div>
           <nav className="cdMenu">
-            <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(stage0.id)}>Play</button>
+            {battle && battleStage && (
+              <button type="button" className="cdBtn cdBtn--main cdBtn--continue" onClick={continueBattle}>
+                <span>Continue</span>
+                <small>{battleStage.name} · {battleWave?.endless ? `Wave ${battleWave.current} · Endless` : `Wave ${battleWave?.current} of ${battleWave?.total}`}</small>
+              </button>
+            )}
+            <button type="button" className={`cdBtn ${battle ? "" : "cdBtn--main"}`} onClick={() => startRun(stageRecord(profile, STAGES[1].id).completed ? STAGES[1].id : stageRecord(profile, stage0.id).completed && STAGES[1].available ? STAGES[1].id : stage0.id)}>Play</button>
             <button type="button" className="cdBtn" onClick={() => { setScreen("campaign"); audioRef.current?.unlock(); audioRef.current?.play("open"); }}>Campaign</button>
             <button type="button" className="cdBtn" onClick={() => { setScreen("kingdoms"); audioRef.current?.unlock(); audioRef.current?.play("open"); }}>Kingdoms</button>
             <button type="button" className="cdBtn" onClick={() => { setHowPage(0); setScreen("howto"); audioRef.current?.unlock(); audioRef.current?.play("open"); }}>How to Play</button>
@@ -985,7 +1331,8 @@ export default function CastleDefender() {
           <div className="cdMenuFoot">
             <span><Stars n={rec0.stars} /> Greenhollow</span>
             <span>{stars} {stars === 1 ? "star" : "stars"} earned</span>
-            <button type="button" className="cdIconBtn" onClick={toggleFullscreen} aria-label="Fullscreen">{fullscreen ? "⤡" : "⤢"}</button>
+            <span title="Crowns buy kingdom upgrades on the Campaign page">👑 {crowns}</span>
+            <button type="button" className="cdIconBtn" onClick={toggleFullscreen} aria-label="Fullscreen">{fullscreen || pseudoFull ? "⤡" : "⤢"}</button>
           </div>
         </div>
       )}
@@ -996,6 +1343,7 @@ export default function CastleDefender() {
             <div className="cdPageHead">
               <button type="button" className="cdBack" onClick={() => setScreen("menu")}>‹ Back</button>
               <h3>The Realm of Ashford</h3>
+              <button type="button" className="cdBack cdCrownBtn" onClick={() => { setScreen("kingdom"); audioRef.current?.play("open"); }} title="Spend crowns on permanent upgrades">👑 {crowns} · Kingdom upgrades</button>
               <div className="cdDiff">
                 {Object.entries(DIFFICULTY).map(([id, d]) => (
                   <button type="button" key={id} className={difficulty === id ? "is-on" : ""} onClick={() => setDifficulty(id)} title={d.desc}>{d.name}</button>
@@ -1032,6 +1380,36 @@ export default function CastleDefender() {
                   </article>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {screen === "kingdom" && (
+        <div className="cdOverlay cdOverlay--page">
+          <div className="cdPage">
+            <div className="cdPageHead">
+              <button type="button" className="cdBack" onClick={() => setScreen("campaign")}>‹ Back</button>
+              <h3>Kingdom Upgrades</h3>
+              <span className="cdPageNote">👑 {crowns} crowns · earn one per star and three for a first victory</span>
+            </div>
+            <div className="cdUpgrades">
+              {CATEGORIES.map((cat) => (
+                <section key={cat.id} className="cdUpgradeCat">
+                  <h4>{cat.name}</h4>
+                  <p>{cat.desc}</p>
+                  {KINGDOM_UPGRADES.filter((u) => u.cat === cat.id).map((u) => {
+                    const level = profile.meta?.upgrades?.[u.id] || 0; const cost = kingdomCost(u.id, level);
+                    return (
+                      <div key={u.id} className="cdUpgrade">
+                        <div><strong>{u.name}</strong><span>{u.desc}</span></div>
+                        <span className="cdPips">{[1, 2, 3].map((i) => <i key={i} className={i <= level ? "is-on" : ""} />)}</span>
+                        {cost == null ? <span className="cdMax">Max</span> : <button type="button" className={`cdBtn cdBtn--gold ${crowns >= cost ? "" : "is-off"}`} onClick={() => doBuyUpgrade(u.id)}>👑 {cost}</button>}
+                      </div>
+                    );
+                  })}
+                </section>
+              ))}
             </div>
           </div>
         </div>
@@ -1111,11 +1489,11 @@ export default function CastleDefender() {
             {howPage === 2 && (
               <div className="cdHow">
                 <h4>Know the warband</h4>
-                <p>Arrows shred bandits but bounce off men-at-arms. Shield bearers block arrows from the front; catapults land behind them. Outriders break free from soldiers. Nothing blocks a battering ram, so bring ballistas.</p>
+                <p>Arrows shred bandits but bounce off men-at-arms. Shield bearers block arrows from the front; catapults land behind them. Outriders break free from soldiers. Nothing blocks a battering ram, so bring ballistas. From Stonebridge on, knights charge on open ground: a red arrow shows where, and braced pikemen or a Royal Charge stop them.</p>
                 <div className="cdHowGrid cdHowGrid--enemies">
-                  {["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "ram"].map((e) => (
+                  {["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "ram", "scoutCav", "knightCav", "cavCommander"].map((e) => (
                     <div key={e} className="cdHowCard">
-                      <IconCanvas kind={e === "outrider" ? "horse" : e === "ram" ? "ram" : "figure"} id={e === "manAtArms" ? "manAtArmsE" : e} w={e === "ram" ? 84 : 64} h={72} renderer={rendererRef} />
+                      <IconCanvas kind={ENEMIES[e].horse ? "horse" : e === "ram" ? "ram" : "figure"} id={ENEMIES[e].horse ? ENEMIES[e].horse : e === "manAtArms" ? "manAtArmsE" : e} w={e === "ram" ? 84 : 64} h={72} renderer={rendererRef} />
                       <strong>{ENEMIES[e].name}</strong>
                       <span>{ENEMIES[e].desc}</span>
                     </div>
@@ -1165,6 +1543,14 @@ export default function CastleDefender() {
                   {["auto", "high", "low"].map((q) => <button type="button" key={q} className={settings.quality === q ? "is-on" : ""} onClick={() => patchSettings({ quality: q })}>{q[0].toUpperCase() + q.slice(1)}</button>)}
                 </div>
               </div>
+              {battle && battleStage && (
+                <div className="cdChoice">
+                  <span>Saved battle: {battleStage.name}, wave {battleWave?.counter}</span>
+                  {confirmClear
+                    ? <div><button type="button" className="cdBtn cdBtn--danger" onClick={() => { setProfile(clearBattle(readSave())); setConfirmClear(false); }}>Yes, clear it</button><button type="button" className="cdBtn" onClick={() => setConfirmClear(false)}>Keep it</button></div>
+                    : <div><button type="button" className="cdBtn cdBtn--ghost" onClick={() => setConfirmClear(true)}>Clear saved battle</button></div>}
+                </div>
+              )}
               <div className="cdChoice">
                 <span>Progress</span>
                 {confirmReset
@@ -1200,7 +1586,7 @@ export default function CastleDefender() {
             <p className="cdEyebrow">{results.mode === "endless" ? "The siege ends" : `Stage ${game?.stage.numeral} complete`}</p>
             <h3>Victory</h3>
             <Stars n={starsShown} big />
-            <p className="cdResultLine">{results.stars === 3 ? "The walls barely scratched. Ashford salutes you." : results.stars === 2 ? "The gate held, though the masons have work to do." : "Won by a thread. The castle needs rebuilding."}</p>
+            <p className="cdResultLine">{results.stars === 3 ? "The walls barely scratched. Ashford salutes you." : results.stars === 2 ? "The gate held, though the masons have work to do." : "Won by a thread. The castle needs rebuilding."}{results.crowns ? ` +${results.crowns} crowns for the kingdom.` : ""}</p>
             <div className="cdResultGrid">
               <div><strong>{fmt(results.score)}</strong><span>Score{results.newBest ? " · new best" : ""}</span></div>
               <div><strong>{results.castleHp}/{results.castleMax}</strong><span>Castle health</span></div>
@@ -1208,14 +1594,15 @@ export default function CastleDefender() {
               <div><strong>{results.heroLevel}</strong><span>Sir Edric's level</span></div>
             </div>
             <div className="cdCol">
-              {STAGES[1].available
-                ? <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(STAGES[1].id)}>Next stage</button>
-                : <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(results.stageId, { mode: "endless" })}>Endless siege on this map</button>}
+              {(() => { const idx = STAGES.findIndex((st) => st.id === results.stageId); const next = STAGES[idx + 1]; return next && next.available && results.mode !== "endless"
+                ? <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(next.id)}>Next stage · {next.name}</button>
+                : <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(results.stageId, { mode: "endless" })}>Endless siege on this map</button>; })()}
               <div className="cdRow">
                 <button type="button" className="cdBtn" onClick={() => startRun(results.stageId, { skipIntro: true })}>Play again</button>
                 <button type="button" className="cdBtn cdBtn--ghost" onClick={quitToMenu}>Main menu</button>
               </div>
-              {!STAGES[1].available && <p className="cdNote">Stage II, Stonebridge Ford, is in development.</p>}
+              {results.stageId === "greenhollow" && !STAGES[1].available && <p className="cdNote">Stage II, Stonebridge Ford, is in development.</p>}
+              {results.stageId === "stonebridge" && <p className="cdNote">Stage III, The Siege of Ashford, is in development.</p>}
             </div>
           </div>
         </div>
@@ -1247,9 +1634,9 @@ export default function CastleDefender() {
   );
 }
 
-function towerStatLine(type, level) {
+function towerStatLine(type, level, pikes) {
   const l = towerLevel(type, level);
-  if (type === "barracks") { const u = SOLDIERS[l.unit]; return `3 × ${u.name} · ${u.hp} health · ${u.dmg[0]}–${u.dmg[1]} damage · ${Math.round(u.armour * 100)}% armour`; }
+  if (type === "barracks") { const u = SOLDIERS[pikes ? PIKE_UNITS[level - 1] : l.unit]; return `3 × ${u.name} · ${u.hp} health · ${u.dmg[0]}–${u.dmg[1]} damage · ${Math.round(u.armour * 100)}% armour${u.spear ? " · braces and breaks cavalry charges · weak to arrows" : ""}`; }
   const base = `${l.dmg[0]}–${l.dmg[1]} damage · every ${l.rate}s · range ${l.range}`;
   if (type === "catapult") return `${base} · blast ${l.radius}${l.fire ? " · burning ground" : ""}`;
   if (type === "ballista") return `${base} · ignores ${Math.round(l.pierceArmour * 100)}% armour${l.pierceCount ? ` · pierces ${l.pierceCount}` : ""}`;

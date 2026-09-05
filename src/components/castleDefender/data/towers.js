@@ -25,7 +25,7 @@ export const TOWERS = {
     levels: [
       { soldiers: 3, unit: "militia", label: "Militia" },
       { unit: "manAtArms", label: "Men-at-Arms" },
-      { unit: "knight", label: "Knights" },
+      { unit: "knight", label: "Foot Knights" },
       { unit: "royalGuard", label: "Royal Guard" },
     ],
   },
@@ -89,10 +89,21 @@ export function towerValue(type, level) {
 export const SOLDIERS = {
   militia:     { name: "Militia",       hp: 80,  dmg: [4, 6],   armour: 0,    atk: 1.0, speed: 95, r: 12 },
   manAtArms:   { name: "Man-at-Arms",   hp: 130, dmg: [7, 10],  armour: 0.2,  atk: 1.0, speed: 92, r: 13 },
-  knight:      { name: "Knight",        hp: 200, dmg: [10, 14], armour: 0.35, atk: 0.95, speed: 90, r: 14, block: 0.2 },
-  royalGuard:  { name: "Royal Guard",   hp: 260, dmg: [12, 18], armour: 0.45, atk: 0.9, speed: 90, r: 14, block: 0.2, shieldWall: 0.15 },
+  knight:      { name: "Foot Knight",   hp: 200, dmg: [10, 14], armour: 0.35, atk: 0.95, speed: 90, r: 14, block: 0.2, ability: { id: "shieldBrace", name: "Shield Brace", cd: 14, dur: 4, armour: 0.3, desc: "Raise shields: +30% armour for 4 seconds." } },
+  royalGuard:  { name: "Royal Guard",   hp: 260, dmg: [12, 18], armour: 0.45, atk: 0.9, speed: 90, r: 14, block: 0.2, shieldWall: 0.15, ability: { id: "shieldBrace", name: "Shield Brace", cd: 14, dur: 4, armour: 0.3, desc: "Raise shields: +30% armour for 4 seconds." } },
   reinforcement: { name: "Levy",        hp: 70,  dmg: [4, 6],   armour: 0,    atk: 1.0, speed: 100, r: 12, life: 15 },
+  /* Pike drill (Stage II onward): the same barracks squad with pikes.
+     `spear` units brace against a charge, break it and deal `vsCavalry`
+     times damage to riders; in return they take `rangedWeakness` times
+     damage from arrows and bolts and wear lighter armour. */
+  pikeMilitia:   { name: "Levy Pikemen",  hp: 85,  dmg: [5, 7],   armour: 0,    atk: 1.05, speed: 92, r: 12, spear: true, brace: true, vsCavalry: 1.6, rangedWeakness: 1.5, ability: { id: "braceSpears", name: "Brace Spears", cd: 12, dur: 4, desc: "Set the pikes for 4 seconds, whether or not a charge is coming." } },
+  pikeManAtArms: { name: "Pikemen",       hp: 135, dmg: [8, 11],  armour: 0.12, atk: 1.05, speed: 90, r: 13, spear: true, brace: true, vsCavalry: 1.6, rangedWeakness: 1.5, ability: { id: "braceSpears", name: "Brace Spears", cd: 12, dur: 4, desc: "Set the pikes for 4 seconds, whether or not a charge is coming." } },
+  pikeKnight:    { name: "Halberdiers",   hp: 195, dmg: [11, 15], armour: 0.25, atk: 1.0, speed: 88, r: 14, spear: true, brace: true, vsCavalry: 1.7, rangedWeakness: 1.4, ability: { id: "braceSpears", name: "Brace Spears", cd: 12, dur: 4, desc: "Set the pikes for 4 seconds, whether or not a charge is coming." } },
+  pikeRoyal:     { name: "Royal Pikes",   hp: 250, dmg: [13, 19], armour: 0.35, atk: 0.95, speed: 88, r: 14, spear: true, brace: true, vsCavalry: 1.8, rangedWeakness: 1.3, ability: { id: "braceSpears", name: "Brace Spears", cd: 12, dur: 4, desc: "Set the pikes for 4 seconds, whether or not a charge is coming." }, shieldWall: 0.1 },
 };
+
+export const PIKE_UNITS = ["pikeMilitia", "pikeManAtArms", "pikeKnight", "pikeRoyal"];
+export const DRILL_COST = 40;
 
 export const HERO = {
   id: "edric", name: "Sir Edric", title: "Knight of Ashford",

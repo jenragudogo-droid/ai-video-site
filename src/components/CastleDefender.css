@@ -112,13 +112,14 @@
 /* ------------------------------ overlays ------------------------------ */
 
 .cdOverlay {
-  position: absolute; inset: 0; z-index: 6;
+  position: absolute; inset: 0; z-index: 8;
   display: grid; place-items: center; padding: 16px;
   background: radial-gradient(ellipse at center, rgba(20, 16, 10, 0.35), rgba(12, 10, 6, 0.78));
   backdrop-filter: blur(1px);
   overflow: hidden;
 }
 .cdOverlay--thin { background: rgba(10, 8, 6, 0.55); }
+.cdOverlay--modal { z-index: 9; background: rgba(10, 8, 6, 0.7); }   /* confirmations sit above the menu */
 .cdOverlay--menu { background: linear-gradient(180deg, rgba(20, 14, 8, 0.3), rgba(20, 14, 8, 0.6) 60%, rgba(12, 8, 4, 0.85)); align-content: center; grid-template-rows: auto auto auto; gap: 18px; }
 .cdOverlay--page { place-items: stretch; padding: 0; background: rgba(14, 11, 8, 0.86); }
 
@@ -222,7 +223,7 @@
 /* ------------------------------ HUD ------------------------------ */
 
 .cdTop {
-  position: absolute; left: 10px; right: 10px; top: 10px; z-index: 5;
+  position: absolute; left: 10px; right: 10px; top: 10px; z-index: 6;
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   pointer-events: none;
 }
@@ -243,6 +244,10 @@
 .cdBarFill.is-boss { background: linear-gradient(180deg, #ff6b57, #8a1c10); }
 .cdBarText { font-size: 12px; color: var(--cd-dim); }
 .cdWaveLabel { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cd-dim); }
+.cdStat--wave strong { font-size: 16px; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.cdWaveLeft { font-size: 11px; font-style: normal; color: var(--cd-dim); padding-left: 8px; border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.cdStat--wave.is-final { border-color: rgba(255, 120, 100, 0.55); background: rgba(60, 12, 10, 0.9); }
+.cdStat--wave.is-final .cdWaveLabel, .cdStat--wave.is-final .cdWaveLeft { color: #ffb59a; }
 .cdTimer { font-size: 12px; color: var(--cd-gold-2); }
 .cdQuick { margin-left: auto; display: flex; gap: 6px; }
 .cdQuick button { min-width: 38px; height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--cd-line); background: var(--cd-panel); color: var(--cd-ink); font: 600 13px/1 var(--cd-serif); cursor: pointer; }
@@ -250,7 +255,7 @@
 @keyframes cdPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
 .cdBoss {
-  position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 5;
+  position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 6;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 6px 14px; border-radius: 10px; background: rgba(60, 12, 10, 0.85); border: 1px solid rgba(255, 120, 100, 0.4);
   font: 600 12px var(--cd-serif); letter-spacing: 0.18em; text-transform: uppercase; color: #ffd0c0;
@@ -259,7 +264,7 @@
 .cdBar--boss { width: min(320px, 46vw); height: 9px; }
 
 .cdWaveBtn {
-  position: absolute; left: 0; top: 0; z-index: 5;
+  position: absolute; left: 0; top: 0; z-index: 6;
   display: flex; align-items: center; gap: 8px;
   padding: 8px 12px 8px 8px; border-radius: 12px;
   border: 1px solid var(--cd-gold); background: var(--cd-panel-2);
@@ -276,10 +281,13 @@
 .cdWaveNext { display: flex; flex-wrap: wrap; gap: 4px 8px; }
 .cdWaveNext em { font-style: normal; font-size: 11px; color: var(--cd-dim); }
 .cdWaveBtnBody small { font-size: 11px; color: #9fe58a; }
-@keyframes cdRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+/* `translate`, not `transform`, so centred elements keep their translateX(-50%) while rising */
+@keyframes cdRise { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
 
-.cdBottomLeft { position: absolute; left: 10px; bottom: 10px; z-index: 5; display: flex; gap: 8px; align-items: flex-end; }
-.cdBottomRight { position: absolute; right: 10px; bottom: 10px; z-index: 5; display: flex; gap: 8px; align-items: flex-end; }
+/* Combat controls (hero, charge, abilities, targeting hint) always sit
+   above build rings and tower sheets: z 6 vs 5. Overlays are 8. */
+.cdBottomLeft { position: absolute; left: 10px; bottom: 10px; z-index: 6; display: flex; gap: 8px; align-items: flex-end; }
+.cdBottomRight { position: absolute; right: 10px; bottom: 10px; z-index: 6; display: flex; gap: 8px; align-items: flex-end; }
 .cdHero {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 12px 6px 6px; border-radius: 12px;
@@ -319,7 +327,7 @@
 .cdAbility--charge .cdAbilityLabel::before { content: "⚡"; display: block; font-size: 18px; margin-bottom: 2px; }
 
 .cdModeHint {
-  position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 5;
+  position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 6;
   display: flex; align-items: center; gap: 12px;
   padding: 8px 8px 8px 16px; border-radius: 999px;
   background: var(--cd-panel-2); border: 1px solid var(--cd-gold);
@@ -370,8 +378,9 @@
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
   animation: cdRise 0.2s ease;
 }
-.cdSheet--float { position: absolute; left: 0; top: 0; }
-.cdSheet--bottom { position: absolute; left: 50%; bottom: 82px; transform: translateX(-50%); width: min(340px, calc(100% - 20px)); }
+.cdSheet--float { position: absolute; left: 0; top: 0; max-height: calc(100% - 16px); overflow-y: auto; }
+.cdSheet--bottom { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(340px, calc(100% - 20px)); max-height: calc(100% - 160px); overflow-y: auto; }
+
 .cdSheetHead { display: flex; align-items: center; gap: 10px; }
 .cdSheetHead > div { display: flex; flex-direction: column; }
 .cdSheetHead strong { font-size: 14px; letter-spacing: 0.06em; }
@@ -383,13 +392,14 @@
 .cdSheetRow .cdBtn { flex: 1; min-height: 40px; padding: 0 10px; font-size: 12px; }
 .cdSheetRow .cdBtn .cdKey { position: absolute; right: 5px; top: 4px; }
 .cdSheetRow .cdBtn:has(.cdKey) { padding-right: 30px; }
+.cdDrill .cdBtn { font-size: 11px; }
 .cdMax { flex: 1; display: grid; place-items: center; font: 600 12px var(--cd-serif); letter-spacing: 0.1em; text-transform: uppercase; color: var(--cd-gold-2); }
 .cdSheetNext { margin: 0; font-size: 11px; color: var(--cd-dim); font-style: italic; }
 .cdBtn--ability.is-ready { border-color: var(--cd-gold-2); background: linear-gradient(180deg, rgba(120, 90, 30, 0.95), rgba(60, 44, 18, 0.95)); }
 
 /* ------------------------------ banners ------------------------------ */
 
-.cdBanners { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 6; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; width: min(92%, 520px); }
+.cdBanners { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 7; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; width: min(92%, 520px); }
 .cdBanner {
   display: flex; flex-direction: column; align-items: center; text-align: center;
   padding: 8px 20px; border-radius: 10px;
@@ -404,11 +414,19 @@
 .cdBanner--alert strong { color: #ffb59a; }
 .cdBanner--boss { border-color: rgba(255, 90, 70, 0.6); background: rgba(60, 12, 10, 0.92); }
 .cdBanner--boss strong { color: #ff8f7a; font-size: 20px; }
+/* wave-start cards: a bigger, cinematic version for named waves and the final wave */
+.cdBanner--waveBig, .cdBanner--final { padding: 12px 30px; border-color: var(--cd-gold); background: linear-gradient(180deg, rgba(40, 32, 22, 0.94), rgba(22, 18, 14, 0.94)); }
+.cdBanner--waveBig strong { font-size: 24px; letter-spacing: 0.18em; }
+.cdBanner--waveBig span { font-size: 14px; color: var(--cd-gold-2); font-style: italic; }
+.cdBanner--final { border-color: rgba(255, 110, 90, 0.7); background: linear-gradient(180deg, rgba(70, 14, 10, 0.95), rgba(28, 10, 8, 0.95)); box-shadow: 0 0 0 1px rgba(255, 120, 100, 0.25), 0 14px 40px rgba(0, 0, 0, 0.55); animation: cdBanner 0.5s cubic-bezier(0.2, 1.2, 0.4, 1), cdFinalPulse 1.4s ease-in-out 0.5s 2; }
+.cdBanner--final strong { font-size: 28px; letter-spacing: 0.22em; color: #ff9f8a; }
+.cdBanner--final span { font-size: 15px; color: #ffd9c9; letter-spacing: 0.06em; }
+@keyframes cdFinalPulse { 0%, 100% { box-shadow: 0 0 0 1px rgba(255, 120, 100, 0.25), 0 14px 40px rgba(0, 0, 0, 0.55); } 50% { box-shadow: 0 0 0 3px rgba(255, 120, 100, 0.55), 0 14px 46px rgba(120, 20, 10, 0.6); } }
 @keyframes cdBanner { from { opacity: 0; transform: translateY(-10px) scale(0.96); } to { opacity: 1; } }
 
 /* ------------------------------ intro ------------------------------ */
 
-.cdIntro { position: absolute; inset: 0; z-index: 6; cursor: pointer; }
+.cdIntro { position: absolute; inset: 0; z-index: 7; cursor: pointer; }
 .cdLetterbox { position: absolute; left: 0; right: 0; height: 11%; background: #07060a; }
 .cdLetterbox--top { top: 0; }
 .cdLetterbox--bottom { bottom: 0; }
@@ -418,6 +436,15 @@
 .cdIntroLine + .cdIntroLine { margin-top: 6px !important; }
 .cdSkip { position: absolute; right: 14px; bottom: calc(11% + 10px); min-height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--cd-line); background: rgba(20, 16, 12, 0.7); color: var(--cd-ink); font: 600 12px var(--cd-serif); letter-spacing: 0.1em; cursor: pointer; }
 @keyframes cdFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* fullscreen on notched devices: keep controls out of the rounded corners */
+.cd.is-full .cdTop { top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); }
+.cd.is-full .cdBottomLeft { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); }
+.cd.is-full .cdBottomRight { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); }
+.cd.is-full .cdModeHint { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.cd.is-full .cdSheet--bottom { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+/* pseudo fullscreen for browsers without the Fullscreen API (iPhone Safari) */
+.cd.is-pseudo { position: fixed; inset: 0; z-index: 1000; width: 100vw; height: 100dvh; max-height: none; aspect-ratio: auto; border-radius: 0; min-height: 0; }
 
 /* ------------------------------ responsive ------------------------------ */
 
@@ -461,11 +488,14 @@
   .cdBottomLeft { left: 8px; flex-direction: column-reverse; align-items: flex-start; }
   .cdBottomRight { right: 8px; }
   .cdStat { height: 30px; padding: 0 8px; font-size: 12px; gap: 5px; }
-  .cdStat--wave .cdWaveLabel { display: none; }
+  .cdStat--wave .cdWaveLabel { font-size: 9px; letter-spacing: 0.1em; }
+  .cdStat--wave strong { font-size: 14px; }
+  .cdWaveLeft { display: none; }
+  .cdBanner--waveBig strong { font-size: 18px; } .cdBanner--final strong { font-size: 22px; }
   .cdBar { width: 52px; height: 8px; }
   .cdQuick button { min-width: 30px; height: 30px; padding: 0 7px; font-size: 12px; }
-  .cdSheet--bottom { bottom: 70px; }
-  .cdModeHint { bottom: 66px; }
+  .cdSheet--bottom { bottom: 80px; max-height: calc(100% - 140px); }
+  .cdModeHint { bottom: 132px; }
   .cdRingBtn { width: 64px; height: 70px; margin: -35px 0 0 -32px; }
   .cd.is-coarse .cdRingBtn { width: 68px; height: 74px; margin: -37px 0 0 -34px; }
   .cdRingBtn--0, .cd.is-coarse .cdRingBtn--0 { transform: translate(-52px, -58px); }
@@ -487,6 +517,125 @@
   .cdMenu .cdBtn--main { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cdRingBtn, .cdBanner, .cdWaveBtn, .cdSheet, .cdModeHint { animation: none; }
+  .cdRingBtn, .cdBanner, .cdWaveBtn, .cdSheet, .cdModeHint, .cdBanner--final { animation: none; }
   .cdBarFill.is-low { animation: none; }
 }
+
+/* short screens (phone or tablet landscape): the sheet becomes a side
+   panel and the targeting hint sits under the top bar, so neither can
+   cover the hero card or the ability tiles. Last in the file so it
+   wins over the width-based rules above. */
+@media (max-height: 560px) {
+  .cdSheet--bottom { left: auto; right: 12px; top: 54px; bottom: auto; transform: none; width: min(300px, calc(100% - 200px)); max-height: calc(100% - 130px); }
+  .cdModeHint { bottom: auto; top: 54px; }
+  .cd.is-full .cdModeHint { bottom: auto; top: calc(54px + env(safe-area-inset-top, 0px)); }
+}
+
+/* ------------------------------ continue / crowns ------------------------------ */
+
+.cdBtn--continue { flex-direction: column; gap: 2px; min-height: 60px; line-height: 1.1; }
+.cdBtn--continue { min-height: 64px; }
+.cdBtn--continue small { font: 600 12.5px var(--cd-body); letter-spacing: 0.02em; text-transform: none; color: rgba(255, 244, 226, 0.95); }
+.cdCrownBtn { color: var(--cd-gold-2); }
+
+/* ------------------------------ soldier command bar ------------------------------ */
+
+.cdCmd {
+  position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 6;
+  width: min(600px, calc(100% - 20px));
+  padding: 6px 8px 8px; border-radius: 12px;
+  border: 1px solid var(--cd-gold); background: rgba(24, 19, 13, 0.82);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  animation: cdRise 0.2s ease;
+}
+.cdCmd.is-squad { border-color: #5fb4ee; box-shadow: 0 0 0 1px rgba(95, 180, 238, 0.35), 0 10px 28px rgba(0, 0, 0, 0.5); }
+.cdCmdHead { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cdCmdHead strong { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 0.06em; color: var(--cd-gold-2); margin-right: auto; }
+.cdCmd.is-squad .cdCmdHead strong { color: #bfe6ff; }
+.cdCmdBadge { font: 700 10px var(--cd-serif); font-style: normal; letter-spacing: 0.16em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: #5fb4ee; color: #0e2233; }
+.cdCmdMini { min-height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--cd-line); background: rgba(0, 0, 0, 0.35); color: var(--cd-ink); font: 600 11px var(--cd-serif); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.cdCmdMini.is-on { background: var(--cd-gold); color: #2a1f0e; border-color: var(--cd-gold); }
+.cdCmdClose { min-width: 30px; padding: 0; }
+.cdCmdRow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.cdCmdRow button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 48px; padding: 4px 2px; border-radius: 10px;
+  border: 1px solid var(--cd-line); background: rgba(20, 16, 12, 0.6); color: var(--cd-ink);
+  font: 600 10px var(--cd-serif); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  line-height: 1.15; text-align: center;
+}
+.cdCmdRow button i { font-style: normal; font-size: 17px; line-height: 1; }
+.cdCmdRow button:hover { border-color: var(--cd-gold); }
+.cdCmdRow button.is-on { border-color: var(--cd-gold-2); box-shadow: 0 0 0 2px rgba(241, 210, 122, 0.45); }
+.cdCmdRow button:disabled { opacity: 0.5; cursor: not-allowed; }
+.cdCmdAbility { grid-column: span 2; background: linear-gradient(180deg, rgba(120, 90, 30, 0.5), rgba(60, 44, 18, 0.6)) !important; }
+.cdCmdAbility.is-ready { border-color: var(--cd-gold-2) !important; }
+.cdCmdAbility small { font-size: 10px; color: var(--cd-gold-2); }
+@media (max-width: 480px) {
+  .cdCmd { bottom: 132px; padding: 6px 8px 8px; }
+  .cdCmdRow { grid-template-columns: repeat(3, 1fr); }
+  .cdCmdRow button { min-height: 46px; }
+  .cdCmdAbility { grid-column: span 3; }
+  .cdCmdHead strong { font-size: 12px; }
+}
+
+/* locked powers */
+.cdAbility--locked { opacity: 0.45; border-style: dashed; cursor: default; }
+@media (max-width: 480px) {
+  .cdBottomRight { flex-wrap: wrap; justify-content: flex-end; max-width: 176px; }
+}
+
+/* ------------------------------ perk choice ------------------------------ */
+
+.cdOverlay--perk { background: radial-gradient(ellipse at center, rgba(30, 22, 12, 0.5), rgba(12, 10, 6, 0.85)); }
+.cdPerkPanel { width: min(720px, 100%); text-align: center; }
+.cdPerkPanel h3 { margin: 0 0 16px; font-size: clamp(22px, 3.4vw, 30px); letter-spacing: 0.08em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdPerks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.cdPerk {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 26px 14px 16px; border-radius: 12px;
+  border: 1px solid var(--cd-line); background: linear-gradient(180deg, rgba(60, 50, 36, 0.96), rgba(30, 25, 18, 0.96));
+  color: var(--cd-ink); cursor: pointer; text-align: center;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.cdPerk { min-height: 168px; justify-content: center; }
+.cdPerk:hover, .cdPerk:focus-visible { transform: translateY(-4px); border-color: var(--cd-gold-2); }
+.cdPerk:active { transform: translateY(0) scale(0.98); }
+@media (max-width: 560px) {
+  .cdPerks { grid-template-columns: 1fr; gap: 10px; }
+  .cdPerk { flex-direction: row; text-align: left; align-items: center; min-height: 72px; padding: 14px 14px 14px 18px; gap: 12px; }
+  .cdPerk .cdPerkSeal { left: auto; right: 12px; transform: none; top: -9px; }
+  .cdPerk > span:last-child { flex: 1; }
+}
+.cdPerk strong { font-size: 15px; letter-spacing: 0.06em; }
+.cdPerk span:last-child { font-size: 13px; color: var(--cd-dim); line-height: 1.4; }
+.cdPerkSeal { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); padding: 3px 12px; border-radius: 999px; font: 600 10px var(--cd-serif); letter-spacing: 0.16em; text-transform: uppercase; color: #fff; background: #6a6558; border: 1px solid rgba(255, 255, 255, 0.25); }
+.cdPerk--common { border-color: rgba(200, 190, 170, 0.35); }
+.cdPerk--rare .cdPerkSeal { background: #3d6f8a; }
+.cdPerk--rare { border-color: rgba(111, 166, 196, 0.6); }
+.cdPerk--epic .cdPerkSeal { background: #9c7a2c; color: #2a1f0e; }
+.cdPerk--epic { border-color: var(--cd-gold); box-shadow: 0 0 0 1px rgba(217, 168, 58, 0.35), 0 12px 34px rgba(0, 0, 0, 0.5); }
+.cdPerk--legendary .cdPerkSeal { background: linear-gradient(90deg, #9b2a2a, #d9a83a); }
+.cdPerk--legendary { border-color: #ff9f8a; box-shadow: 0 0 0 2px rgba(255, 159, 138, 0.45), 0 12px 40px rgba(120, 20, 10, 0.5); }
+.cdPerkSkip { margin-top: 14px; min-height: 38px; font-size: 12px; }
+@media (max-width: 560px) {
+  .cdPerks { grid-template-columns: 1fr; gap: 14px; }
+  .cdPerk { flex-direction: row; text-align: left; padding: 16px 12px 12px; }
+  .cdPerk canvas { width: 48px !important; height: 48px !important; }
+  .cdPerk strong { display: block; }
+  .cdPerkPanel { max-height: 100%; overflow-y: auto; }
+}
+
+/* ------------------------------ kingdom upgrades ------------------------------ */
+
+.cdUpgrades { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.cdUpgradeCat { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--cd-line); background: var(--cd-panel); }
+.cdUpgradeCat h4 { margin: 0; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdUpgradeCat > p { margin: 2px 0 10px; font-size: 12px; color: var(--cd-dim); }
+.cdUpgrade { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.cdUpgrade > div { display: flex; flex-direction: column; }
+.cdUpgrade strong { font-size: 13px; }
+.cdUpgrade span { font-size: 12px; color: var(--cd-dim); }
+.cdUpgrade .cdBtn { min-height: 36px; padding: 0 12px; font-size: 12px; }

@@ -24,8 +24,17 @@ import { sampleRoute } from "./engine/path.js";
 
 const FIG_BOX = { w: 110, h: 132, ax: 48, ay: 122 };
 const DEAD_BOX = { w: 150, h: 70, ax: 105, ay: 52 };
-const FRAMES = { walk: 8, idle: 6, attack: 8, shoot: 8, dead: 6, stun: 4, charge: 6, push: 8 };
+const FRAMES = { walk: 8, idle: 6, attack: 8, shoot: 8, dead: 6, stun: 4, charge: 6, push: 8, brace: 1 };
+
+/* horse kinds: colours, rider, barding and size */
+const HORSES = {
+  outrider: { color: "#5a3c26", rider: "rider", size: 1.12, cloth: "#7a3c2a" },
+  scout: { color: "#8a5a32", rider: "scoutRider", size: 1.14, cloth: "#6a2e22" },
+  knight: { color: "#3c3c46", rider: "knightRider", size: 1.24, barding: "#7a2e22", trim: "#b8b8c0", chamfron: "#5a5a64" },
+  commander: { color: "#1f1e24", rider: "commanderRider", size: 1.46, barding: "#1a1a20", trim: "#c04040", chamfron: "#2a2a32", plume: "#c04040" },
+};
 const IDLE_PERIOD = 2.856;      // matches sin(t * 2.2)
+const dist2 = (ax, ay, bx, by) => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 
 /* which figure spec an entity uses */
 function figureKey(kind, unit, enemy) {
@@ -47,7 +56,7 @@ export function createRenderer() {
   let quality = 1;
   let time = 0;
   let intro = null;
-  let sel = { plot: -1, hover: -1, range: null, rallyPick: false, heroPick: false, target: null };
+  let sel = { plot: -1, hover: -1, range: null, rallyPick: false, heroPick: false, target: null, units: null, squad: false, hoverUnit: null };
   let gateShake = 0;
   const trails = new Map();
   let heroMark = null;
@@ -55,6 +64,8 @@ export function createRenderer() {
   let zoneFlicker = 0;
   let waveFlash = [0, 0];
   const blockText = new Map();
+  const warnings = new Map();
+  let lastChargeText = -9;
 
   /* ------------------------------ camera ------------------------------ */
 
@@ -99,27 +110,45 @@ export function createRenderer() {
     });
   }
 
-  function horseSprite(anim, frame) {
-    const n = anim === "dead" ? 6 : 8;
+  function horseSprite(kind, anim, frame) {
+    const H = HORSES[kind] || HORSES.outrider;
+    const n = anim === "dead" ? 6 : anim === "rear" ? 4 : 8;
     const f = ((frame % n) + n) % n;
-    return cache.get(`horse:${anim}:${f}`, 150, 120, 66, 108, (ctx) => {
+    const box = { w: Math.round(190 * H.size), h: Math.round(160 * H.size), ax: Math.round(84 * H.size), ay: Math.round(146 * H.size) };
+    return cache.get(`horse:${kind}:${anim}:${f}`, box.w, box.h, box.ax, box.ay, (ctx) => {
+      const spec = FIGURES[H.rider] || FIGURES.rider;
+      const opts = { barding: H.barding, trim: H.trim, chamfron: H.chamfron, plume: H.plume, size: H.size, cloth: H.cloth };
+      const riderAt = (pose) => {
+        ctx.save(); ctx.scale(H.size, H.size); ctx.translate(-4, -40); ctx.scale(0.9, 0.9);
+        drawFigure(ctx, spec, pose, 0);
+        ctx.restore();
+      };
       if (anim === "dead") {
         const k = (f + 0.5) / n;
         ctx.globalAlpha = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
         ctx.rotate(-k * 1.2);
-        drawHorse(ctx, 0.1, "#4a3323");
-        ctx.save(); ctx.translate(-4, -40); ctx.scale(0.9, 0.9);
-        drawFigure(ctx, FIGURES.rider, figurePose("idle", 0.5), 0);
+        drawHorse(ctx, 0.1, H.color, opts);
+        riderAt(figurePose("idle", 0.5));
+        return;
+      }
+      if (anim === "rear") {
+        const k = 0.35 + (f / (n - 1)) * 0.65;
+        drawHorse(ctx, 0.15, H.color, { ...opts, rear: k });
+        ctx.save(); ctx.scale(H.size, H.size); ctx.translate(-14 * k, 0); ctx.rotate(-0.55 * k); ctx.scale(1 / H.size, 1 / H.size);
+        riderAt(figurePose("rideRear", 0));
         ctx.restore();
         return;
       }
-      const t = anim === "walk" ? f / n : 0.1;
-      drawHorse(ctx, t, "#4a3323");
-      const rp = anim === "attack" ? figurePose("attack", (f + 0.5) / n) : figurePose("idle", (f / n) * IDLE_PERIOD);
-      rp.legN.hip = 30; rp.legN.knee = 40; rp.legF.hip = 30; rp.legF.knee = 40;
-      ctx.save(); ctx.translate(-4, -40); ctx.scale(0.9, 0.9);
-      drawFigure(ctx, FIGURES.rider, rp, 0);
-      ctx.restore();
+      const t = f / n;
+      if (anim === "charge") {
+        drawHorse(ctx, t, H.color, { ...opts, gallop: true });
+        riderAt(figurePose("rideCharge", t));
+        return;
+      }
+      drawHorse(ctx, anim === "walk" ? t : 0.1, H.color, opts);
+      const rp = anim === "attack" ? figurePose("attack", (f + 0.5) / n) : figurePose("ride", anim === "walk" ? t : 0);
+      if (anim === "attack") { rp.legN.hip = 34; rp.legN.knee = 46; rp.legF.hip = 34; rp.legF.knee = 46; }
+      riderAt(rp);
     });
   }
 
@@ -253,6 +282,21 @@ export function createRenderer() {
       case "wave": waveFlash = waveFlash.map((v, i) => (e.summary && i === 0 ? 1.6 : v)); if (s) waveFlash = [1.6, s.layout.routes.length > 1 ? 1.6 : 0]; break;
       case "routeOpen": waveFlash[e.route] = 3; break;
       case "breakFree": fx.spawn("dust", e.x, e.y, { n: 8 }); fx.spawn("text", e.x, e.y - 60, { text: "BREAKS FREE", size: 10, color: "#ffd0a0", max: 1 }); break;
+      case "chargeWarn":
+        warnings.set(e.id, { x: e.x, y: e.y, t: e.buildup, max: e.buildup, dist: e.dist });
+        if (time - lastChargeText > 0.9) { lastChargeText = time; fx.spawn("text", e.x, e.y - 90, { text: e.enemy === "cavCommander" ? "MALRIC CHARGES!" : "CHARGE!", size: 13, color: "#ff8f7a", max: 1.2, bold: true }); }
+        fx.spawn("ring", e.x, e.y, { size: 60, color: "rgba(255,90,60,0.8)", width: 4, max: 0.6 });
+        break;
+      case "chargeStart": fx.spawn("dust", e.x, e.y, { n: 10 }); fx.spawn("ring", e.x, e.y, { size: 50, color: rgba(PAL.redLight, 0.7), max: 0.5 }); break;
+      case "cavImpact": fx.spawn("flash", e.x, e.y - 26, { size: 18, color: "rgba(255,220,180,0.9)" }); fx.spawn("spark", e.x, e.y - 24, { n: 8, color: "#ffe0b0" }); fx.spawn("dust", e.x, e.y, { n: 6 }); gateShake = Math.max(gateShake, 0.14); break;
+      case "chargeBroken": fx.spawn("ring", e.x, e.y, { size: 70, color: rgba(PAL.goldLight, 0.9), width: 4, max: 0.6 }); fx.spawn("spark", e.x, e.y - 30, { n: 12, color: PAL.goldLight }); fx.spawn("text", e.x, e.y - 90, { text: e.by === "hero" ? "CHARGE BROKEN" : "PIKES HOLD", size: 12, color: PAL.goldLight, max: 1.4, bold: true }); fx.spawn("dust", e.x, e.y, { n: 8 }); break;
+      case "brace": fx.spawn("ring", e.x, e.y, { size: 26, color: rgba(PAL.goldLight, 0.6), max: 0.35 }); break;
+      case "order": fx.spawn("ring", e.x, e.y, { size: e.kind === "attack" ? 40 : 34, color: e.kind === "attack" ? "rgba(255,120,90,0.9)" : rgba(PAL.goldLight, 0.9), max: 0.5 }); break;
+      case "unitAbility": fx.spawn("ring", e.x, e.y, { size: 36, color: e.id === "braceSpears" ? "rgba(255,224,138,0.9)" : "rgba(191,224,255,0.9)", max: 0.5 }); fx.spawn("spark", e.x, e.y - 30, { n: 6, color: e.id === "braceSpears" ? "#ffe08a" : "#dff0ff" }); break;
+      case "perk": fx.spawn("text", s.layout.castle.gate.x, s.layout.castle.gate.y - 80, { text: e.name.toUpperCase(), size: 13, color: PAL.goldLight, max: 1.8, bold: true }); fx.spawn("spark", s.layout.castle.gate.x, s.layout.castle.gate.y - 60, { n: 16, color: PAL.goldLight }); break;
+      case "watchfire": s.towers.forEach((t, i) => { if (t && t.type !== "barracks") { const p = s.layout.plots[i]; fx.spawn("fire", p.x, p.y - 70, { n: 6, spread: 20 }); fx.spawn("ember", p.x, p.y - 60, { n: 6 }); } }); break;
+      case "royalRally": fx.spawn("ring", e.x, e.y, { size: 160, color: rgba(PAL.goldLight, 0.8), width: 4, max: 0.9 }); s.units.forEach((u) => { if (u.state !== "dead") fx.spawn("spark", u.x, u.y - 30, { n: 4, color: PAL.goldLight }); }); break;
+      case "drill": fx.spawn("ring", e.x, e.y, { size: 60, color: rgba(PAL.goldLight, 0.8) }); fx.spawn("text", e.x, e.y - 70, { text: e.pikes ? "PIKE DRILL" : "SWORD DRILL", size: 11, color: PAL.goldLight, max: 1.3, bold: true }); break;
       case "miniboss": fx.spawn("ring", e.x, e.y, { size: 120, color: rgba(PAL.red, 0.7), max: 1.2, width: 4 }); break;
       case "minibossDown": break;
       case "spawn": fx.spawn("dust", e.x, e.y, { n: 2 }); break;
@@ -267,6 +311,7 @@ export function createRenderer() {
   function unitAnim(u, enemy) {
     const def = u.def;
     if (u.state === "dead") return { anim: "dead", frame: Math.floor((1 - Math.max(0, u.deadT) / 1.5) * FRAMES.dead) };
+    if (!enemy && u.bracing && (u.state === "idle" || u.state === "fight")) return { anim: "brace", frame: 0 };
     if (u.state === "stun") return { anim: "stun", frame: Math.floor(u.animT * 6) };
     if (u.state === "charge") return { anim: "charge", frame: Math.floor(u.animT * 14) };
     if (u.state === "fight") {
@@ -298,10 +343,18 @@ export function createRenderer() {
     const flip = e.face < 0;
     let sp;
     let ay = 0;
-    if (e.type === "outrider") {
-      const a = e.state === "dead" ? "dead" : e.state === "fight" ? "attack" : e.state === "walk" ? "walk" : "idle";
-      const frame = a === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 6) : a === "walk" ? Math.floor(e.animT * def.speed / 60 * 8) : Math.floor(e.animT * 6);
-      sp = horseSprite(a, frame);
+    if (def.horse) {
+      const a = e.state === "dead" ? "dead" : e.state === "charge" ? "charge" : e.state === "rear" ? "rear" : e.state === "fight" ? "attack" : e.state === "walk" ? "walk" : "idle";
+      let frame;
+      if (a === "dead") frame = Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 6);
+      else if (a === "rear") frame = Math.floor(Math.min(0.999, 1 - e.chargeT / (def.charge ? def.charge.buildup : 1)) * 4);
+      else if (a === "charge") frame = Math.floor(e.animT * 14);
+      else if (a === "walk") frame = Math.floor(e.animT * def.speed / 60 * 8);
+      else frame = Math.floor(e.animT * 6);
+      sp = horseSprite(def.horse, a, frame);
+      if (e.state === "charge") { fx.spawn("dust", e.x - e.face * 18, e.y + 2, { n: 2 }); if (Math.random() < 0.5) fx.spawn("dust", e.x + e.face * 10, e.y + 4, { n: 1 }); }
+      else if (e.state === "walk" && Math.random() < 0.3) fx.spawn("dust", e.x - e.face * 16, e.y + 3, { n: 1 });
+      if (e.buffT > 0) { ctx.fillStyle = rgba(PAL.redLight, 0.18); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 26, 11, 0, 0, Math.PI * 2); ctx.fill(); }
     } else if (e.type === "ram") {
       sp = ramSprite(e.state === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 8) : Math.floor(e.d / 14), e.state === "dead");
       if (e.state !== "dead" && Math.random() < 0.08) fx.spawn("dust", e.x - 30 * e.face, e.y + 4, { n: 1 });
@@ -317,7 +370,7 @@ export function createRenderer() {
       ctx.restore();
     }
     if (e.state !== "dead" && e.hp < e.maxHp) {
-      const w = def.boss ? 60 : 24;
+      const w = def.boss ? 64 : def.horse ? 30 : 24;
       hpBar(ctx, e.x, e.y - def.h - 8, w, e.hp / e.maxHp, true, !!def.boss);
     }
     if (e.stun > 0) {
@@ -341,6 +394,10 @@ export function createRenderer() {
       ctx.restore();
     }
     if (u.state === "charge" && Math.random() < 0.6) fx.spawn("dust", u.x - u.face * 10, u.y, { n: 1 });
+    if (u.abilityT > 0 && u.state !== "dead") {
+      ctx.strokeStyle = rgba(u.def.brace ? "#ffe08a" : "#bfe0ff", 0.5 + Math.sin(time * 8) * 0.2); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(u.x, u.y - 30, 16, 26, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     const h = u.kind === "hero" ? 70 : 60;
     if (u.state !== "dead" && u.state !== "respawn" && u.hp < u.maxHp) hpBar(ctx, u.x, u.y - h - 6, u.kind === "hero" ? 34 : 22, u.hp / u.maxHp, false, false);
     if (u.kind === "hero" && u.state !== "dead" && u.state !== "respawn") {
@@ -512,6 +569,43 @@ export function createRenderer() {
     }
     fx.drawGround(ctx);
 
+    /* cavalry charge warnings: a pulsing dashed arrow along the road ahead */
+    for (const [id, wn] of warnings) {
+      const e = s.enemies.find((x) => x.id === id);
+      if (!e || e.state === "dead" || (!e.charging && e.chargeT <= 0)) { warnings.delete(id); continue; }
+      const route = layout.routes[e.route];
+      const k = e.chargeT > 0 ? 1 - e.chargeT / wn.max : 1;
+      const pulse = 0.65 + Math.sin(time * 14) * 0.3;
+      const len = e.charging ? Math.max(30, e.chargeLeft) : wn.dist;
+      const pathAhead = () => { ctx.beginPath(); for (let d = 0; d <= len; d += 12) { const p = sampleRoute(route, e.d + d); if (d === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); } };
+      /* wide translucent band, then the dashed arrow on top */
+      ctx.lineCap = "round";
+      ctx.strokeStyle = rgba("#ff5a3c", (e.charging ? 0.14 : 0.1 + k * 0.12) * pulse); ctx.lineWidth = 34; pathAhead(); ctx.stroke();
+      ctx.setLineDash([14, 10]); ctx.lineDashOffset = -time * 80;
+      ctx.strokeStyle = rgba("#ff3b1e", (e.charging ? 0.7 : 0.5 + k * 0.4) * pulse); ctx.lineWidth = 6; pathAhead(); ctx.stroke();
+      ctx.strokeStyle = rgba("#fff0d0", 0.5 * pulse); ctx.lineWidth = 2; pathAhead(); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      const tip = sampleRoute(route, e.d + len);
+      ctx.fillStyle = rgba("#ff3b1e", 0.95 * pulse);
+      ctx.beginPath(); ctx.moveTo(tip.x + tip.tx * 22, tip.y + tip.ty * 22); ctx.lineTo(tip.x + tip.nx * 14, tip.y + tip.ny * 14); ctx.lineTo(tip.x - tip.nx * 14, tip.y - tip.ny * 14); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = rgba("#fff0d0", 0.7 * pulse); ctx.lineWidth = 1.5; ctx.stroke();
+      if (!e.charging) {
+        const g = ctx.createRadialGradient(e.x, e.y + 2, 6, e.x, e.y + 2, 60);
+        g.addColorStop(0, rgba("#ff5a3c", 0.45 * pulse)); g.addColorStop(1, rgba("#ff5a3c", 0));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 60, 28, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = rgba("#ff3b1e", 0.95 * pulse); ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 36 + k * 10, 16 + k * 5, 0, 0, Math.PI * 2); ctx.stroke();
+        /* countdown pip above the rider */
+        ctx.fillStyle = rgba("#ff3b1e", 0.9); ctx.font = "bold 16px Cinzel, Georgia, serif"; ctx.textAlign = "center";
+        ctx.lineWidth = 3; ctx.strokeStyle = "rgba(20,10,5,0.8)"; ctx.strokeText("!", e.x, e.y - 96); ctx.fillText("!", e.x, e.y - 96);
+      }
+    }
+    for (const c of s.enemies) {
+      if (c.state === "dead" || !c.def.aura) continue;
+      ctx.strokeStyle = rgba(PAL.redLight, 0.28 + Math.sin(time * 3) * 0.08); ctx.lineWidth = 2; ctx.setLineDash([6, 10]);
+      ctx.beginPath(); ctx.ellipse(c.x, c.y + 2, c.def.aura.radius, c.def.aura.radius * 0.5, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+
     if (!opts.menu && !intro) {
       /* hover / selection rings on plots */
       layout.plots.forEach((p, i) => {
@@ -555,6 +649,78 @@ export function createRenderer() {
         ctx.strokeStyle = rgba(PAL.goldLight, heroMark.t); ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(heroMark.x, heroMark.y, 14 * (1.6 - heroMark.t), 7 * (1.6 - heroMark.t), 0, 0, Math.PI * 2); ctx.stroke();
       }
+      /* selected soldiers: a bright double ring, a bobbing chevron over the
+         head, and a dashed line back to the post. One soldier gets a name
+         tag; a whole squad is drawn in banner blue with a hull around the
+         group and a SQUAD tag so it reads differently from a hand-picked
+         group. */
+      if (sel.units && sel.units.size) {
+        const picked = s.units.filter((u) => sel.units.has(u.id) && u.state !== "dead" && u.state !== "respawn");
+        const squad = !!sel.squad && picked.length > 1;
+        const c1 = squad ? "#bfe6ff" : PAL.goldLight;
+        const c2 = squad ? "#5fb4ee" : PAL.gold;
+        const pulse = 1 + Math.sin(time * 6) * 0.06;
+        const bob = Math.sin(time * 5) * 3;
+        for (const u of picked) {
+          ctx.save();
+          ctx.shadowColor = rgba(c1, 0.9); ctx.shadowBlur = 10;
+          ctx.strokeStyle = rgba(c1, 1); ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 19 * pulse, 8.5 * pulse, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+          ctx.strokeStyle = rgba(c2, 0.7); ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 25 * pulse, 11 * pulse, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = rgba(c1, 0.14); ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 19 * pulse, 8.5 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+          /* chevron above the head */
+          const ty = u.y - 62 + bob;
+          ctx.fillStyle = rgba(c1, 0.95); ctx.strokeStyle = "rgba(20,14,8,0.85)"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(u.x - 7, ty - 9); ctx.lineTo(u.x + 7, ty - 9); ctx.lineTo(u.x, ty); ctx.closePath(); ctx.stroke(); ctx.fill();
+          if (u.home && (u.order || u.hold) && dist2(u.home.x, u.home.y, u.x, u.y) > 30 * 30) {
+            ctx.setLineDash([4, 6]); ctx.strokeStyle = rgba(c1, 0.45); ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(u.home.x, u.home.y); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = rgba(c1, 0.7); ctx.beginPath(); ctx.ellipse(u.home.x, u.home.y, 10, 5, 0, 0, Math.PI * 2); ctx.stroke();
+          }
+          if (u.hold) {
+            ctx.fillStyle = rgba(c1, 0.95); ctx.font = "bold 11px Cinzel, Georgia, serif"; ctx.textAlign = "center";
+            ctx.lineWidth = 3; ctx.strokeStyle = "rgba(20,14,8,0.8)"; ctx.strokeText("HOLD", u.x, u.y + 22); ctx.fillText("HOLD", u.x, u.y + 22);
+          }
+        }
+        if (picked.length === 1) {
+          const u = picked[0];
+          const name = (u.def && u.def.name) || "Soldier";
+          ctx.font = "bold 12px Cinzel, Georgia, serif"; ctx.textAlign = "center";
+          const w = ctx.measureText(name).width + 16;
+          ctx.fillStyle = "rgba(20,14,8,0.78)"; ctx.strokeStyle = rgba(c1, 0.9); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.roundRect(u.x - w / 2, u.y - 92 + bob, w, 18, 6); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = rgba(c1, 1); ctx.fillText(name, u.x, u.y - 79 + bob);
+        } else if (picked.length > 1) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const u of picked) { minX = Math.min(minX, u.x); maxX = Math.max(maxX, u.x); minY = Math.min(minY, u.y); maxY = Math.max(maxY, u.y); }
+          const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+          const rx = (maxX - minX) / 2 + 34, ry = (maxY - minY) / 2 + 20;
+          ctx.setLineDash([6, 6]); ctx.lineDashOffset = -time * 20;
+          ctx.strokeStyle = rgba(c2, squad ? 0.9 : 0.55); ctx.lineWidth = squad ? 2.5 : 1.5;
+          ctx.beginPath(); ctx.ellipse(cx, cy + 2, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]); ctx.lineDashOffset = 0;
+          const tag = squad ? `SQUAD · ${picked.length}` : `${picked.length} SELECTED`;
+          ctx.font = "bold 12px Cinzel, Georgia, serif"; ctx.textAlign = "center";
+          const w = ctx.measureText(tag).width + 18;
+          const ty = minY - 100 + bob;
+          ctx.fillStyle = squad ? "rgba(18,40,60,0.85)" : "rgba(20,14,8,0.78)"; ctx.strokeStyle = rgba(c1, 0.9); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.roundRect(cx - w / 2, ty, w, 18, 6); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = rgba(c1, 1); ctx.fillText(tag, cx, ty + 13);
+        }
+      }
+      if (sel.hoverUnit != null) {
+        const u = s.units.find((x) => x.id === sel.hoverUnit);
+        if (u && u.state !== "dead") { ctx.strokeStyle = rgba("#ffffff", 0.6); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 18, 8, 0, 0, Math.PI * 2); ctx.stroke(); }
+      }
+      /* watchfire and royal rally glows */
+      if (s.boostT > 0) {
+        s.towers.forEach((t, i) => { if (!t || t.type === "barracks") return; const p = layout.plots[i]; const k = Math.min(1, s.boostT); ctx.strokeStyle = rgba("#ffb347", 0.35 * k + Math.sin(time * 5) * 0.1); ctx.lineWidth = 2; ctx.setLineDash([8, 8]); ctx.beginPath(); ctx.arc(p.x, p.y, 60 + Math.sin(time * 3) * 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); });
+      }
+      if (s.rallyT > 0) {
+        for (const u of s.units) { if (u.state === "dead" || u.state === "respawn") continue; ctx.fillStyle = rgba(PAL.goldLight, 0.16 + Math.sin(time * 6) * 0.05); ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 20, 9, 0, 0, Math.PI * 2); ctx.fill(); }
+      }
       /* strike telegraphs */
       for (const st of s.strikes) {
         const k = 1 - Math.max(0, Math.min(1, st.t / 0.9));
@@ -578,7 +744,7 @@ export function createRenderer() {
     /* shadows */
     ctx.fillStyle = PAL.shadow;
     const shadow = (x, y, r) => { ctx.beginPath(); ctx.ellipse(x + 3, y + 2, r, r * 0.42, 0, 0, Math.PI * 2); ctx.fill(); };
-    for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.type === "ram" ? 44 : e.type === "outrider" ? 26 : 12);
+    for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.type === "ram" ? 44 : e.def.horse ? 26 * (HORSES[e.def.horse]?.size || 1) : 12);
     for (const u of s.units) if (u.state !== "dead" && u.state !== "respawn") shadow(u.x, u.y, 11);
     if (s.hero.state !== "dead" && s.hero.state !== "respawn") shadow(s.hero.x, s.hero.y, 13);
     for (const pr of s.projectiles) { ctx.fillStyle = rgba("#000000", 0.22); ctx.beginPath(); ctx.ellipse(pr.x, pr.y + 2, pr.kind === "stone" ? 5 : 4, 2, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -727,10 +893,11 @@ export function createRenderer() {
       ctx.translate(w / 2, h * 0.9); const k = Math.min(w / 80, h / 90); ctx.scale(k, k);
       drawFigure(ctx, FIGURES[id] || FIGURES.militia, figurePose("idle", 0.4, { bow: (FIGURES[id] || {}).weapon === "bow" }), 0);
     } else if (kind === "horse") {
-      ctx.translate(w / 2, h * 0.9); const k = Math.min(w / 110, h / 90); ctx.scale(k, k);
-      drawHorse(ctx, 0.2, "#4a3323");
-      ctx.translate(-4, -40); ctx.scale(0.9, 0.9); const rp = figurePose("idle", 0.3); rp.legN.hip = 30; rp.legF.hip = 30; rp.legN.knee = 40; rp.legF.knee = 40;
-      drawFigure(ctx, FIGURES.rider, rp, 0);
+      const H = HORSES[id] || HORSES.outrider;
+      ctx.translate(w / 2, h * 0.92); const k = Math.min(w / (120 * H.size), h / (100 * H.size)); ctx.scale(k, k);
+      drawHorse(ctx, 0.2, H.color, { barding: H.barding, trim: H.trim, chamfron: H.chamfron, plume: H.plume, size: H.size, cloth: H.cloth });
+      ctx.scale(H.size, H.size); ctx.translate(-4, -40); ctx.scale(0.9, 0.9);
+      drawFigure(ctx, FIGURES[H.rider] || FIGURES.rider, figurePose("ride", 0), 0);
     } else if (kind === "ram") {
       ctx.translate(w / 2, h * 0.9); const k = Math.min(w / 140, h / 110); ctx.scale(k, k);
       drawRam(ctx, 0.2);
@@ -747,7 +914,7 @@ export function createRenderer() {
     startIntro, skipIntro() { intro = null; }, get intro() { return intro; },
     fx, cache, drawIcon,
     get fit() { return fit; },
-    reset() { fx.clear(); trails.clear(); intro = null; gateShake = 0; heroMark = null; sel = { plot: -1, hover: -1, range: null }; },
+    reset() { fx.clear(); trails.clear(); warnings.clear(); intro = null; gateShake = 0; heroMark = null; sel = { plot: -1, hover: -1, range: null, units: null, squad: false, hoverUnit: null, target: null }; },
     stats() { return { ...cache.stats(), particles: fx.count }; },
   };
 }

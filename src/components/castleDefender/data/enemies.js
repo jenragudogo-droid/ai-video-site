@@ -34,7 +34,7 @@ export const ENEMIES = {
   outrider: {
     name: "Outrider", kind: "cavalry",
     hp: 90, speed: 120, armour: 0.1, gateDmg: 1, bounty: 12, xp: 6,
-    dmg: [7, 10], atk: 0.9, r: 20, h: 70, blockTime: 2.4,
+    dmg: [7, 10], atk: 0.9, r: 20, h: 70, blockTime: 2.4, horse: "outrider",
     desc: "Mounted and fast. Soldiers can only hold one for a moment.",
   },
   shieldBearer: {
@@ -49,6 +49,35 @@ export const ENEMIES = {
     dmg: [10, 14], atk: 1.8, range: 200, pierce: 0.5, r: 13, h: 58,
     stage: 2,
     desc: "Longer reach and bolts that punch through soldier armour.",
+  },
+  /* Stage II cavalry. `charge` makes a unit build up and charge the
+     defenders ahead on open ground; scouts have no charge and simply
+     slip past a block after `blockTime`. */
+  scoutCav: {
+    name: "Cavalry Scout", kind: "cavalry",
+    hp: 62, speed: 150, armour: 0.05, gateDmg: 1, bounty: 13, xp: 6,
+    dmg: [6, 9], atk: 0.9, r: 20, h: 72, blockTime: 1.2, horse: "scout",
+    stage: 2,
+    desc: "Rides hard for the gate and slips past a block in a moment. Arrows bring it down.",
+  },
+  knightCav: {
+    name: "Armoured Knight", kind: "cavalry",
+    hp: 210, speed: 90, armour: 0.4, gateDmg: 2, bounty: 26, xp: 12,
+    dmg: [12, 17], atk: 1.0, r: 22, h: 76, blockTime: 3.0, horse: "knight",
+    charge: { buildup: 1.6, speedMul: 2.3, dist: 280, dmg: 34, kb: 44, stun: 0.7, cd: 9, spearDmg: 70 },
+    spearWeakness: 1.6,
+    stage: 2,
+    desc: "Plate on rider and horse. Charges on open ground and scatters soldiers. Pikes and ballistas stop it.",
+  },
+  cavCommander: {
+    name: "Captain Malric", kind: "cavalry",
+    hp: 1400, speed: 76, armour: 0.45, gateDmg: 6, bounty: 130, xp: 40,
+    dmg: [18, 26], atk: 1.0, r: 26, h: 88, blockTime: 4.0, horse: "commander", boss: "mini",
+    charge: { buildup: 2.2, speedMul: 2.4, dist: 320, dmg: 60, kb: 60, stun: 1.0, cd: 8, spearDmg: 110 },
+    aura: { radius: 180, armour: 0.15, speed: 1.15 },
+    spearWeakness: 1.5,
+    stage: 2,
+    desc: "The Black Rider. Rallies the cavalry around him and charges with a horn's warning.",
   },
   ram: {
     name: "Battering Ram", kind: "siege",
@@ -65,4 +94,4 @@ export const ENEMIES = {
   },
 };
 
-export const ENEMY_ORDER = ["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "crossbow", "ram", "siegeTower"];
+export const ENEMY_ORDER = ["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "crossbow", "scoutCav", "knightCav", "cavCommander", "ram", "siegeTower"];

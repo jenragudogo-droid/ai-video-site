@@ -39,7 +39,18 @@
   width: 100%;
   height: 100%;
   max-height: none;
+  min-height: 0;
 }
+/* pseudo fullscreen for browsers without the Fullscreen API (iPhone Safari):
+   pinned over the page, page scrolling locked by the shared helper */
+.nshoot.is-pseudo {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  height: 100dvh;
+}
+.nshoot.is-full .nshootQuick { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); }
 
 .nshootCanvas {
   display: block;
@@ -62,7 +73,7 @@
   top: 12px;
   display: flex;
   gap: 6px;
-  z-index: 5;
+  z-index: 7;   /* above the menu and results cards, so fullscreen is always reachable */
 }
 
 .nshootQuick button {

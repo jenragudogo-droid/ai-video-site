@@ -130,6 +130,8 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     if (riverPts.length && nearPath(riverPts, x, y, 44 + margin)) return false;
     if (x > c.x - 40 - margin && x < c.x + c.w + 40 + margin && y > c.y - 120 - margin && y < c.y + c.h + 50 + margin) return false;
     const hs = layout.heroSpawn; if ((hs.x - x) ** 2 + (hs.y - y) ** 2 < 70 ** 2) return false;
+    for (const f of layout.fields || []) if (x > f.x - 24 - margin && x < f.x + f.w + 24 + margin && y > f.y - 30 - margin && y < f.y + f.h + 20 + margin) return false;
+    for (const hh of layout.houses || []) if ((hh.x - x) ** 2 + (hh.y - y) ** 2 < 70 ** 2) return false;
     for (const f of layout.flags) if ((f.x - x) ** 2 + (f.y - y) ** 2 < 60 ** 2) return false;
     return true;
   };
@@ -193,13 +195,14 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   /* roads */
   for (const route of layout.routes) {
     const pts = route.pts;
-    strokePath(ctx, pts, 76, PAL.roadEdge);
-    strokePath(ctx, pts, 64, PAL.roadDark);
-    strokePath(ctx, pts, 52, PAL.road);
-    ctx.globalAlpha = 0.35; strokePath(ctx, pts, 22, shade(PAL.road, 0.12)); ctx.globalAlpha = 1;
+    const wm = route.width || 1;
+    strokePath(ctx, pts, 76 * wm, PAL.roadEdge);
+    strokePath(ctx, pts, 64 * wm, PAL.roadDark);
+    strokePath(ctx, pts, 52 * wm, PAL.road);
+    ctx.globalAlpha = 0.35; strokePath(ctx, pts, 22 * wm, shade(PAL.road, 0.12)); ctx.globalAlpha = 1;
     /* wheel ruts */
     ctx.globalAlpha = 0.28;
-    for (const off of [-11, 11]) {
+    for (const off of [-11 * wm, 11 * wm]) {
       const rut = pts.map((p, i) => {
         const q = pts[Math.min(pts.length - 1, i + 1)];
         let nx = q.y - p.y; let ny = -(q.x - p.x); const l = Math.hypot(nx, ny) || 1;
@@ -242,6 +245,35 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     /* end posts */
     for (const px of [-46, 40]) for (const py of [-34, 22]) outlined(ctx, PAL.stoneLight, () => ctx.rect(px, py, 6, 11), 1);
     ctx.restore();
+  }
+
+  /* field walls: low dry-stone walls that funnel the road */
+  for (const seg of layout.walls || []) {
+    const [a, b] = seg;
+    const dx = b.x - a.x; const dy = b.y - a.y; const L = Math.hypot(dx, dy);
+    ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(Math.atan2(dy, dx));
+    ctx.fillStyle = rgba("#000000", 0.22); ctx.fillRect(0, -6, L + 4, 22);
+    outlined(ctx, PAL.stoneDark, () => ctx.rect(0, -8, L, 16), 1.3);
+    ctx.fillStyle = rgba("#000000", 0.14); ctx.fillRect(0, 2, L, 6);
+    outlined(ctx, PAL.stone, () => ctx.rect(0, -12, L, 6), 1);
+    ctx.strokeStyle = rgba("#000000", 0.16); ctx.lineWidth = 1;
+    for (let xx = 8; xx < L; xx += 11) { ctx.beginPath(); ctx.moveTo(xx, -8); ctx.lineTo(xx + 2, 8); ctx.stroke(); }
+    for (let xx = 4; xx < L; xx += 14) outlined(ctx, PAL.stoneLight, () => ctx.rect(xx, -16, 6, 5), 0.9);
+    ctx.restore();
+  }
+
+  /* cottages */
+  for (const hh of layout.houses || []) {
+    const x = hh.x; const y = hh.y;
+    ctx.fillStyle = rgba("#000000", 0.2); ctx.beginPath(); ctx.ellipse(x + 4, y + 4, 34, 12, 0, 0, Math.PI * 2); ctx.fill();
+    outlined(ctx, PAL.stoneDark, () => ctx.rect(x - 24, y - 12, 48, 14), 1.2);
+    outlined(ctx, "#d9c9a3", () => ctx.rect(x - 22, y - 40, 44, 28), 1.3);
+    ctx.strokeStyle = PAL.woodDark; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-22 + x, y - 40); ctx.lineTo(-22 + x, y - 12); ctx.moveTo(x, y - 40); ctx.lineTo(x, y - 12); ctx.moveTo(x + 22, y - 40); ctx.lineTo(x + 22, y - 12); ctx.moveTo(x - 22, y - 26); ctx.lineTo(x + 22, y - 26); ctx.stroke();
+    outlined(ctx, PAL.gateWood, () => ctx.rect(x - 5, y - 26, 10, 14), 1);
+    outlined(ctx, "#b89a4a", () => { ctx.moveTo(x - 28, y - 40); ctx.lineTo(x, y - 62); ctx.lineTo(x + 28, y - 40); ctx.closePath(); }, 1.3);
+    ctx.fillStyle = rgba("#000000", 0.18); ctx.beginPath(); ctx.moveTo(x, y - 40); ctx.lineTo(x, y - 62); ctx.lineTo(x + 28, y - 40); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = rgba("#000000", 0.2); ctx.lineWidth = 1; for (let i = 1; i < 5; i += 1) { ctx.beginPath(); ctx.moveTo(x - 28 + i * 5, y - 40 - i * 4); ctx.lineTo(x + 28 - i * 5, y - 40 - i * 4); ctx.stroke(); }
+    outlined(ctx, PAL.stoneDark, () => ctx.rect(x + 10, y - 60, 6, 12), 1);
   }
 
   /* castle apron: paved ground under and in front of the castle */

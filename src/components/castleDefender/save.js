@@ -1,13 +1,25 @@
-/* Local persistence for Castle Defender: stars and best scores per
-   stage, endless best waves, settings. Falls back to memory when
-   localStorage is unavailable (private browsing, node tests). */
+/* ------------------------------------------------------------------ *
+ * Local persistence for Castle Defender.
+ *
+ * One versioned record: campaign progress (stars, scores, completions),
+ * the chosen difficulty, kingdom-level upgrades and their currency,
+ * settings, and an optional saved battle for Continue. Falls back to
+ * memory when localStorage is unavailable (private browsing, node
+ * tests). An unreadable or older record never crashes the game: the
+ * parts we understand are kept, the rest is dropped.
+ * ------------------------------------------------------------------ */
 
-const KEY = "castleDefenderSave.v1";
+const KEY = "castleDefenderSave.v1";   // storage key stays; `version` inside tells the format
+export const SAVE_VERSION = 2;
 
 const DEFAULTS = {
+  version: SAVE_VERSION,
   stages: {},                 // id -> { stars, bestScore, bestWave, completed, hardStars }
   settings: { sound: true, music: true, sfxVol: 0.8, musicVol: 0.55, quality: "auto", seenHowTo: false },
   campaignsDone: [],
+  difficulty: "normal",
+  meta: { crowns: 0, spent: 0, upgrades: {}, unlocks: [] },
+  battle: null,               // serialized battle from engine.serializeGame, or null
 };
 
 let memory = null;
@@ -19,25 +31,37 @@ function storage() {
   return null;
 }
 
+/* Bring any older record up to the current shape without losing progress. */
+function migrate(data) {
+  const out = structuredClone(DEFAULTS);
+  if (!data || typeof data !== "object") return out;
+  if (data.stages && typeof data.stages === "object") {
+    for (const [id, rec] of Object.entries(data.stages)) {
+      if (rec && typeof rec === "object") out.stages[id] = { stars: 0, bestScore: 0, bestWave: 0, completed: false, hardStars: 0, ...rec };
+    }
+  }
+  if (data.settings && typeof data.settings === "object") out.settings = { ...out.settings, ...data.settings };
+  if (Array.isArray(data.campaignsDone)) out.campaignsDone = data.campaignsDone.slice();
+  if (data.difficulty === "hard" || data.difficulty === "normal") out.difficulty = data.difficulty;
+  if (data.meta && typeof data.meta === "object") out.meta = { ...out.meta, ...data.meta, upgrades: { ...(data.meta.upgrades || {}) }, unlocks: Array.isArray(data.meta.unlocks) ? data.meta.unlocks.slice() : [] };
+  /* a saved battle only survives if it was written by this format */
+  if (data.version === SAVE_VERSION && data.battle && typeof data.battle === "object" && data.battle.stageId) out.battle = data.battle;
+  return out;
+}
+
 export function readSave() {
   const st = storage();
   try {
     const raw = st ? st.getItem(KEY) : memory;
     if (!raw) return structuredClone(DEFAULTS);
-    const data = JSON.parse(raw);
-    return {
-      ...structuredClone(DEFAULTS),
-      ...data,
-      settings: { ...DEFAULTS.settings, ...(data.settings || {}) },
-      stages: { ...(data.stages || {}) },
-    };
+    return migrate(JSON.parse(raw));
   } catch {
     return structuredClone(DEFAULTS);
   }
 }
 
 export function writeSave(save) {
-  const raw = JSON.stringify(save);
+  const raw = JSON.stringify({ ...save, version: SAVE_VERSION });
   const st = storage();
   try {
     if (st) st.setItem(KEY, raw);
@@ -50,29 +74,73 @@ export function stageRecord(save, id) {
   return save.stages[id] || { stars: 0, bestScore: 0, bestWave: 0, completed: false, hardStars: 0 };
 }
 
-/* Folds a finished run in and reports what was new. */
+/* Crowns are the kingdom-upgrade currency: one per star, three more for
+   a first completion. Returns what was new. */
 export function recordResult(save, sum) {
   const rec = { ...stageRecord(save, sum.stageId) };
-  const flags = { newBest: false, newStars: false, newWave: false };
+  const flags = { newBest: false, newStars: false, newWave: false, crowns: 0 };
   if (sum.mode === "endless") {
-    if (sum.wave > rec.bestWave) { rec.bestWave = sum.wave; flags.newWave = true; }
+    if (sum.wave > rec.bestWave) { rec.bestWave = sum.wave; flags.newWave = true; flags.crowns += Math.floor((sum.wave - (save.stages[sum.stageId]?.bestWave || 0)) / 5); }
     if (sum.score > rec.bestScore) { rec.bestScore = sum.score; flags.newBest = true; }
   } else {
     if (sum.score > rec.bestScore) { rec.bestScore = sum.score; flags.newBest = true; }
     if (sum.won) {
+      if (!rec.completed) flags.crowns += 3;
       rec.completed = true;
       const key = sum.difficulty === "hard" ? "hardStars" : "stars";
-      if (sum.stars > rec[key]) { rec[key] = sum.stars; flags.newStars = true; }
+      if (sum.stars > rec[key]) { flags.crowns += sum.stars - rec[key]; rec[key] = sum.stars; flags.newStars = true; }
       if (sum.difficulty === "hard" && sum.stars > rec.stars) rec.stars = sum.stars;
     }
   }
-  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec } };
+  const meta = { ...save.meta, crowns: (save.meta?.crowns || 0) + flags.crowns };
+  /* only a finished battle leaves the slot; quitting to the menu keeps it for Continue */
+  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec }, meta, battle: sum.finished ? null : save.battle };
   writeSave(next);
   return { save: next, ...flags };
 }
 
 export function saveSettings(save, patch) {
   const next = { ...save, settings: { ...save.settings, ...patch } };
+  writeSave(next);
+  return next;
+}
+
+export function saveDifficulty(save, difficulty) {
+  const next = { ...save, difficulty };
+  writeSave(next);
+  return next;
+}
+
+/* ------------------------------ battle slot ------------------------------ */
+
+export function saveBattle(save, battle) {
+  const next = { ...save, battle: { ...battle, savedAt: Date.now() } };
+  writeSave(next);
+  return next;
+}
+
+export function clearBattle(save) {
+  if (!save.battle) return save;
+  const next = { ...save, battle: null };
+  writeSave(next);
+  return next;
+}
+
+/* ------------------------------ kingdom upgrades ------------------------------ */
+
+export function buyUpgrade(save, id, cost) {
+  const meta = save.meta || DEFAULTS.meta;
+  if ((meta.crowns || 0) < cost) return null;
+  const upgrades = { ...meta.upgrades, [id]: (meta.upgrades[id] || 0) + 1 };
+  const next = { ...save, meta: { ...meta, crowns: meta.crowns - cost, spent: (meta.spent || 0) + cost, upgrades } };
+  writeSave(next);
+  return next;
+}
+
+export function addUnlock(save, id) {
+  const meta = save.meta || DEFAULTS.meta;
+  if (meta.unlocks.includes(id)) return save;
+  const next = { ...save, meta: { ...meta, unlocks: [...meta.unlocks, id] } };
   writeSave(next);
   return next;
 }

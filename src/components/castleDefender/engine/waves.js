@@ -76,9 +76,16 @@ const FORMS = [
   { type: "crossbow", form: "column", every: 1.7, min: 9, unit: 12 },
 ];
 
-export function endlessWave(n, rng, routesAvailable) {
+/* cavalry joins the endless pools from Stage II's map onward */
+const CAV_FORMS = [
+  { type: "scoutCav", form: "rush", every: 0.8, min: 3, unit: 12 },
+  { type: "knightCav", form: "line", every: 1.6, min: 6, unit: 24 },
+];
+
+export function endlessWave(n, rng, routesAvailable, stage = null) {
   const budget = 70 + n * 34 + Math.floor(n * n * 1.3);
-  const pool = FORMS.filter((f) => n >= f.min);
+  const cavalry = !!(stage && stage.number >= 2);
+  const pool = FORMS.concat(cavalry ? CAV_FORMS : []).filter((f) => n >= f.min);
   const groups = [];
   let left = budget;
   let at = 0;
@@ -94,7 +101,8 @@ export function endlessWave(n, rng, routesAvailable) {
     at += 2 + rng() * 4;
   }
   if (n % 5 === 0) {
-    groups.push({ type: "ram", count: 1 + Math.floor(n / 15), route: 0, at: at + 4, every: 6, form: "column" });
+    if (cavalry && n % 10 === 0) groups.push({ type: "cavCommander", count: 1, route: 0, at: at + 4, every: 6, form: "column" });
+    else groups.push({ type: "ram", count: 1 + Math.floor(n / 15), route: 0, at: at + 4, every: 6, form: "column" });
   }
   return groups;
 }

@@ -8,6 +8,7 @@ import { createRenderer } from "./neonSpaceShooter/render.js";
 import { createShooterAudio } from "./neonSpaceShooter/audio.js";
 import { readSave, recordRun, saveSettings } from "./neonSpaceShooter/save.js";
 import "./NeonSpaceShooter.css";
+import { fullscreenElement, onFullscreenChange, toggleGameFullscreen, unlockPageScroll } from "./fullscreen.js";
 
 /* ------------------------------------------------------------------ *
  * Neon Space Shooter — the React shell.
@@ -57,6 +58,7 @@ export default function NeonSpaceShooter() {
   const [profile, setProfile] = useState(() => readSave());
   const [results, setResults] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pseudoFull, setPseudoFull] = useState(false);
   const [coarse, setCoarse] = useState(
     () => typeof window !== "undefined"
       && !!window.matchMedia
@@ -396,18 +398,20 @@ export default function NeonSpaceShooter() {
     };
   }, [pauseGame]);
 
+  /* Real fullscreen where the browser has it (standard or WebKit-prefixed);
+     otherwise a pinned pseudo-fullscreen with page scrolling locked. */
   const toggleFullscreen = useCallback(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-    else el.requestFullscreen?.().catch(() => {});
-  }, []);
+    toggleGameFullscreen(wrapRef.current, { real: !!fullscreenElement(), pseudo: pseudoFull }, (st) => {
+      setPseudoFull(st.pseudo);
+      setTimeout(resize, 60); setTimeout(resize, 400);
+    });
+  }, [pseudoFull, resize]);
 
   useEffect(() => {
-    const onFs = () => { setFullscreen(!!document.fullscreenElement); setTimeout(resize, 60); };
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
+    const onFs = () => { setFullscreen(!!fullscreenElement()); setTimeout(resize, 60); setTimeout(resize, 400); };
+    return onFullscreenChange(onFs);
   }, [resize]);
+  useEffect(() => () => { if (pseudoFull) unlockPageScroll(); }, [pseudoFull]);
 
   /* -------------------------------- view -------------------------------- */
 
@@ -416,7 +420,7 @@ export default function NeonSpaceShooter() {
 
   return (
     <div
-      className={`nshoot ${live ? "is-live" : ""} ${fullscreen ? "is-full" : ""}`}
+      className={`nshoot ${live ? "is-live" : ""} ${fullscreen || pseudoFull ? "is-full" : ""} ${pseudoFull ? "is-pseudo" : ""}`}
       ref={wrapRef}
     >
       <canvas ref={canvasRef} className="nshootCanvas" />
@@ -457,19 +461,23 @@ export default function NeonSpaceShooter() {
         </>
       )}
 
-      {(live || screen === "paused") && (
-        <div className="nshootQuick">
+      <div className="nshootQuick">
+        {(live || screen === "paused") && (
+          <>
           <button type="button" onClick={() => setMuted(!muted)} aria-label={muted ? "Unmute" : "Mute"} title="Sound (M)">
             {muted ? "🔇" : "🔊"}
           </button>
-          <button type="button" onClick={toggleFullscreen} aria-label="Fullscreen" title="Fullscreen">
-            {fullscreen ? "⤡" : "⤢"}
-          </button>
+          </>
+        )}
+        <button type="button" onClick={toggleFullscreen} aria-label={fullscreen || pseudoFull ? "Exit fullscreen" : "Fullscreen"} title={fullscreen || pseudoFull ? "Exit fullscreen" : "Fullscreen"}>
+          {fullscreen || pseudoFull ? "⤡" : "⤢"}
+        </button>
+        {(live || screen === "paused") && (
           <button type="button" onClick={togglePause} aria-label="Pause" title="Pause (P)">
             {live ? "❚❚" : "▶"}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {screen === "intro" && (
         <div className="nshootOverlay">
