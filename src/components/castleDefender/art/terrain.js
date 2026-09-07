@@ -8,6 +8,7 @@
  * ------------------------------------------------------------------ */
 
 import { PAL, shade, rgba } from "./palette.js";
+import { drawSiegeCamp, drawTrench, drawScorch, drawWreckage } from "./siege.js";
 import { drawPlot } from "./towers.js";
 
 const OUT = "rgba(28, 20, 12, 0.55)";
@@ -133,6 +134,8 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     for (const f of layout.fields || []) if (x > f.x - 24 - margin && x < f.x + f.w + 24 + margin && y > f.y - 30 - margin && y < f.y + f.h + 20 + margin) return false;
     for (const hh of layout.houses || []) if ((hh.x - x) ** 2 + (hh.y - y) ** 2 < 70 ** 2) return false;
     for (const f of layout.flags) if ((f.x - x) ** 2 + (f.y - y) ** 2 < 60 ** 2) return false;
+    for (const cp of layout.camps || []) if ((cp.x - x) ** 2 + (cp.y - y) ** 2 < 110 ** 2) return false;
+    for (const [a, b] of layout.outerWall ? layout.outerWall.segments : []) if (nearPath([a, b], x, y, 40)) return false;
     return true;
   };
 
@@ -276,6 +279,21 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     outlined(ctx, PAL.stoneDark, () => ctx.rect(x + 10, y - 60, 6, 12), 1);
   }
 
+  /* Stage III siege ground: burnt patches, trenches, wreckage and the enemy camps */
+  for (const sc of layout.scorched || []) drawScorch(ctx, sc.x, sc.y, rng);
+  for (const [a, b] of layout.trenches || []) drawTrench(ctx, a, b);
+  for (const wk of layout.wreckage || []) drawWreckage(ctx, wk.x, wk.y);
+  for (const cp of layout.camps || []) drawSiegeCamp(ctx, cp.x, cp.y, rng);
+  if (layout.outerWall) {
+    /* the ground the wall stands on: a packed strip so the live wall sits well */
+    for (const [a, b] of layout.outerWall.segments) {
+      const dx = b.x - a.x; const dy = b.y - a.y; const L = Math.hypot(dx, dy);
+      ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(Math.atan2(dy, dx));
+      ctx.fillStyle = rgba("#8a7a58", 0.5); ctx.fillRect(-6, -30, L + 12, 60);
+      ctx.restore();
+    }
+  }
+
   /* castle apron: paved ground under and in front of the castle */
   outlined(ctx, "#a89c86", () => ctx.rect(c.x - 6, c.y - 6, c.w + 12, c.h + 12), 1);
   const ag = ctx.createRadialGradient(c.gate.x, c.gate.y + 40, 10, c.gate.x, c.gate.y + 40, 120);
@@ -328,7 +346,7 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
 
   /* light and vignette */
   const lg = ctx.createRadialGradient(w * 0.3, h * 0.25, 40, w * 0.3, h * 0.25, Math.max(w, h) * 0.8);
-  lg.addColorStop(0, PAL.sun); lg.addColorStop(1, rgba("#000000", 0));
+  lg.addColorStop(0, stage.time === "dusk" ? rgba("#ffb070", 0.16) : PAL.sun); lg.addColorStop(1, rgba("#000000", 0));
   ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
   const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
   vg.addColorStop(0, rgba("#000000", 0)); vg.addColorStop(1, rgba("#1a1408", 0.4));

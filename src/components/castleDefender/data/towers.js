@@ -103,6 +103,15 @@ export const SOLDIERS = {
 };
 
 export const PIKE_UNITS = ["pikeMilitia", "pikeManAtArms", "pikeKnight", "pikeRoyal"];
+
+/* Formations (Stage III onward). A formation is a standing order on a
+   soldier: slower on the move, but stronger at what it is for. Pike
+   Wall needs pike units and keeps the spears set at all times; Shield
+   Wall is for sword-and-shield squads. */
+export const FORMATIONS = {
+  shieldWall: { name: "Shield Wall", icon: "⛨", armour: 0.25, dmg: -0.1, speed: 0.65, needs: "shield", desc: "Shields locked: +25% armour, slower on the move." },
+  pikeWall: { name: "Pike Wall", icon: "⟋", armour: 0.05, dmg: 0, speed: 0.65, needs: "spear", vsCavalry: 1.25, desc: "Spears set at all times: breaks every charge, slower on the move." },
+};
 export const DRILL_COST = 40;
 
 export const HERO = {
@@ -110,6 +119,8 @@ export const HERO = {
   hp: 320, hpPerLevel: 60, dmg: [15, 21], dmgPerLevel: 3, armour: 0.3, atk: 0.9, speed: 125, r: 15,
   regen: 8, respawn: 12, engageRange: 70,
   charge: { name: "Royal Charge", cd: 20, dist: 260, dmg: 60, dmgPerLevel: 12, stun: 1.0, kb: 45, width: 42 },
+  /* Stage III upgrade: wider, harder, longer, and a shockwave where it ends */
+  kingsCharge: { name: "King's Charge", dist: 330, dmgMul: 1.4, stun: 1.6, kb: 80, width: 64, wave: 90, waveDmg: 0.6, desc: "Sir Edric's charge strikes wider and harder, throws riders back further, and ends in a shockwave." },
   xpLevels: [0, 40, 100, 180, 290],
   maxLevel: 5,
 };
@@ -133,5 +144,5 @@ export const ABILITIES = {
 
 export const DIFFICULTY = {
   normal: { name: "Normal", hp: 1, gold: 1, desc: "The way it is meant to be played." },
-  hard:   { name: "Hard",   hp: 1.25, gold: 0.85, desc: "Tougher enemies, thinner purse." },
+  hard:   { name: "Hard",   hp: 1.18, gold: 0.9, desc: "Tougher enemies, thinner purse." },
 };

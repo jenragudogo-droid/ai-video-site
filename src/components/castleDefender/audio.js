@@ -213,6 +213,35 @@ export function createCastleAudio() {
     watchfire: [0.6, (t) => { noise(t, 0.6, 0.2, 2200, 0.6, "bandpass", sfxBus, 300); tone("sawtooth", 200, 400, t, 0.5, 0.05, sfxBus, "lin"); for (let i = 0; i < 4; i += 1) noise(t + 0.2 + i * 0.1, 0.2, 0.06, 3000, 0.5, "highpass"); }],
     royalRally: [0.8, (t) => { horn(392, t, 0.3, 0.12, sfxBus); horn(523, t + 0.28, 0.3, 0.12, sfxBus); horn(659, t + 0.56, 0.8, 0.14, sfxBus); for (let i = 0; i < 4; i += 1) drum(t + i * 0.14, 0.1, i % 2 === 0, sfxBus); }],
     resume: [0.5, (t) => { [523, 784].forEach((f, i) => tone("triangle", f, f, t + i * 0.12, 0.25, 0.08)); }],
+    /* Stage III siege */
+    warDrums: [1.5, (t) => { for (let i = 0; i < 12; i += 1) drum(t + i * 0.16, i % 4 === 0 ? 0.18 : 0.1, i % 2 === 0, sfxBus); horn(110, t + 1.0, 1.2, 0.14, sfxBus); horn(147, t + 1.6, 1.4, 0.14, sfxBus); }],
+    catapultLaunch: [0.4, (t) => { tone("sawtooth", 70, 40, t, 0.4, 0.1, sfxBus, "lin"); noise(t + 0.05, 0.35, 0.16, 500, 0.7); tone("square", 50, 30, t + 0.25, 0.2, 0.06); noise(t + 0.3, 0.5, 0.06, 2600, 0.6, "bandpass"); }],
+    siegeStone: [0.3, (t) => { noise(t, 0.7, 0.5, 700, 0.6); tone("sine", 60, 20, t, 0.8, 0.4); tone("triangle", 45, 25, t, 0.5, 0.14); noise(t + 0.2, 0.7, 0.16, 1400, 0.5); }],
+    wallHit: [0.3, (t) => { noise(t, 0.5, 0.4, 900, 0.7); tone("sine", 110, 30, t, 0.5, 0.3); }],
+    wallBreach: [2, (t) => { noise(t, 1.6, 0.5, 400, 0.5); tone("sine", 50, 18, t, 1.6, 0.42); for (let i = 0; i < 5; i += 1) noise(t + 0.2 + i * 0.22, 0.3, 0.2, 800 - i * 100, 0.7); horn(98, t + 0.6, 1.4, 0.14, sfxBus); }],
+    ramWall: [0.5, (t) => { noise(t, 0.6, 0.45, 600, 0.6); tone("sine", 65, 22, t, 0.7, 0.4); tone("square", 48, 24, t, 0.4, 0.08); }],
+    towerDock: [1, (t) => { tone("sawtooth", 120, 60, t, 0.9, 0.06, sfxBus, "lin"); noise(t, 0.9, 0.12, 600, 0.6); noise(t + 0.9, 0.3, 0.3, 900, 0.7); tone("sine", 90, 30, t + 0.9, 0.4, 0.26); }],
+    towerBurn: [0.4, (t) => { noise(t, 0.7, 0.16, 2600, 0.5, "highpass"); tone("sawtooth", 160, 320, t, 0.4, 0.05, sfxBus, "lin"); }],
+    hammer: [0.2, (t) => { noise(t, 0.05, 0.14, 1800, 1); tone("square", 800, 500, t, 0.05, 0.05); }],
+    shieldWall: [0.5, (t) => { for (let i = 0; i < 4; i += 1) { noise(t + i * 0.07, 0.06, 0.16, 800, 1); tone("triangle", 500 - i * 60, 380, t + i * 0.07, 0.07, 0.07); } tone("sine", 220, 220, t + 0.3, 0.3, 0.05); }],
+    pikeWall: [0.5, (t) => { for (let i = 0; i < 4; i += 1) { noise(t + i * 0.06, 0.03, 0.14, 1400, 1.2); tone("square", 320, 240, t + i * 0.06, 0.04, 0.05); } }],
+    oil: [0.6, (t) => { noise(t, 0.5, 0.2, 2000, 0.6, "bandpass", sfxBus, 300); noise(t + 0.3, 0.9, 0.26, 3000, 0.5, "highpass"); tone("sawtooth", 100, 260, t + 0.3, 0.6, 0.06, sfxBus, "lin"); }],
+    barrage: [0.6, (t) => { for (let i = 0; i < 3; i += 1) { tone("sawtooth", 80, 50, t + i * 0.16, 0.3, 0.08, sfxBus, "lin"); noise(t + 0.05 + i * 0.16, 0.2, 0.12, 700, 0.8); } }],
+    emergencyRepair: [0.6, (t) => { for (let i = 0; i < 6; i += 1) { noise(t + i * 0.08, 0.04, 0.14, 2000, 1); tone("square", 700 + (i % 2) * 120, 500, t + i * 0.08, 0.04, 0.05); } [523, 659, 784].forEach((f, i) => tone("triangle", f, f, t + 0.5 + i * 0.08, 0.3, 0.07)); }],
+    bossEnter: [2, (t) => { for (let i = 0; i < 8; i += 1) drum(t + i * 0.2, i % 2 ? 0.1 : 0.2, i % 2 === 0, sfxBus); horn(82, t + 0.4, 1.6, 0.18, sfxBus); horn(110, t + 1.2, 1.6, 0.18, sfxBus); horn(123, t + 2.0, 2.0, 0.2, sfxBus); }],
+    bossHornWind: [1, (t) => { horn(147, t, 0.5, 0.14, sfxBus); horn(147, t + 0.5, 0.5, 0.14, sfxBus); horn(196, t + 1.0, 1.0, 0.18, sfxBus); }],
+    bossSweepWind: [0.6, (t) => { tone("sawtooth", 90, 180, t, 0.9, 0.08, sfxBus, "lin"); noise(t, 0.9, 0.1, 400, 0.6); }],
+    bossSweep: [0.3, (t) => { noise(t, 0.4, 0.4, 700, 0.7); tone("sine", 80, 30, t, 0.5, 0.34); tone("triangle", 2600, 900, t, 0.14, 0.08); noise(t + 0.08, 0.3, 0.2, 2200, 0.8, "bandpass"); }],
+    bossRage: [2, (t) => { horn(73, t, 1.8, 0.2, sfxBus); horn(98, t + 0.3, 1.8, 0.18, sfxBus); for (let i = 0; i < 10; i += 1) drum(t + i * 0.12, 0.14, i % 2 === 0, sfxBus); noise(t, 1.2, 0.12, 300, 0.5); }],
+    bossDown: [3, (t) => { noise(t, 1.2, 0.45, 600, 0.6); tone("sine", 70, 20, t, 1.4, 0.4); [392, 523, 659, 784, 1047].forEach((f, i) => horn(f, t + 0.8 + i * 0.22, 0.9, 0.12, sfxBus)); }],
+    kingsCharge: [0.8, (t) => { noise(t, 0.5, 0.24, 2800, 0.8, "bandpass", sfxBus, 400); horn(392, t, 0.3, 0.14, sfxBus); horn(523, t + 0.2, 0.3, 0.14, sfxBus); horn(659, t + 0.4, 0.8, 0.16, sfxBus); noise(t + 0.5, 0.4, 0.3, 500, 0.7); }],
+    conquered: [3, (t) => { const seq = [[392, 0], [523, 0.2], [659, 0.4], [784, 0.6], [1047, 0.9], [784, 1.4], [1047, 1.6], [1319, 1.9], [1047, 2.5], [1319, 2.7], [1568, 3.0]]; seq.forEach(([f, d]) => horn(f, t + d, 0.5, 0.14, sfxBus)); for (let i = 0; i < 12; i += 1) drum(t + i * 0.25, 0.14, i % 2 === 0, sfxBus); }],
+    catapultWind: [0.8, (t) => { for (let i = 0; i < 6; i += 1) { tone("sawtooth", 140 + i * 18, 150 + i * 18, t + i * 0.18, 0.16, 0.035, sfxBus, "lin"); noise(t + i * 0.18, 0.1, 0.05, 900, 0.8); } }],
+    wallCrack: [1, (t) => { noise(t, 0.35, 0.3, 1200, 0.7); tone("sine", 90, 40, t, 0.5, 0.26); for (let i = 0; i < 4; i += 1) noise(t + 0.15 + i * 0.12, 0.12, 0.16, 2200 - i * 300, 0.9, "bandpass"); }],
+    gateFailing: [1.5, (t) => { horn(98, t, 0.6, 0.14, sfxBus); horn(92, t + 0.5, 1.2, 0.16, sfxBus); noise(t, 0.6, 0.2, 500, 0.6); for (let i = 0; i < 4; i += 1) drum(t + 0.2 + i * 0.22, 0.12, true, sfxBus); }],
+    bossOpen: [0.4, (t) => { tone("sine", 1047, 1047, t, 0.25, 0.08); tone("sine", 1568, 1568, t + 0.08, 0.35, 0.07); noise(t, 0.12, 0.05, 4000, 0.5, "highpass"); }],
+    bossRoar: [1.6, (t) => { tone("sawtooth", 70, 55, t, 1.4, 0.12, sfxBus, "lin"); noise(t, 1.4, 0.16, 300, 0.6); for (let i = 0; i < 6; i += 1) drum(t + i * 0.16, 0.14, i % 2 === 0, sfxBus); horn(65, t + 0.3, 1.2, 0.16, sfxBus); }],
+    rout: [1.5, (t) => { horn(392, t, 0.3, 0.12, sfxBus); horn(523, t + 0.25, 0.3, 0.12, sfxBus); horn(659, t + 0.5, 0.4, 0.14, sfxBus); horn(784, t + 0.8, 0.9, 0.16, sfxBus); for (let i = 0; i < 8; i += 1) noise(t + 1.0 + i * 0.07, 0.05, 0.08, 800, 1.2, "bandpass"); }],
     drill: [0.4, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.09, 0.04, 0.14, 1200, 1); tone("square", 500, 380, t + i * 0.09, 0.05, 0.04); } tone("triangle", 660, 990, t + 0.3, 0.2, 0.06, sfxBus, "lin"); }],
   };
 
@@ -231,7 +260,10 @@ export function createCastleAudio() {
     [0, 0, 3, 0, 5, 3, 0, 0], [0, 3, 5, 3, 0, -1, 2, 0], [7, 7, 5, 3, 0, 0, 2, 3],
   ];
 
-  const tempo = () => (mode === "boss" ? 132 : mode === "battle" ? 112 : mode === "menu" ? 72 : 84);
+  const SIEGE_PHRASES = [
+    [0, 0, 2, 3, 0, 0, 5, 3], [0, 3, 2, 0, -1, 0, 2, 3], [7, 5, 3, 2, 0, 0, 2, 0], [3, 3, 5, 7, 5, 3, 2, 0],
+  ];
+  const tempo = () => (mode === "boss" ? 132 : mode === "siege" ? 120 : mode === "battle" ? 112 : mode === "menu" ? 72 : 84);
 
   const startDrone = () => {
     if (drone || !ctx) return;
@@ -256,7 +288,7 @@ export function createCastleAudio() {
     const step = 60 / bpm / 2;            // eighth notes
     const i = beat % 8;
     if (i === 0) { bar += 1; if (bar % 2 === 0) phraseIdx = Math.floor(Math.random() * 100); }
-    const bank = mode === "boss" ? BOSS_PHRASES : mode === "battle" ? BATTLE_PHRASES : PHRASES;
+    const bank = mode === "boss" ? BOSS_PHRASES : mode === "siege" ? SIEGE_PHRASES : mode === "battle" ? BATTLE_PHRASES : PHRASES;
     const phrase = bank[phraseIdx % bank.length];
     const deg = phrase[i];
     const lead = mode === "menu" ? (bar % 2 === 0) : true;
@@ -274,9 +306,11 @@ export function createCastleAudio() {
     if (i === 0) pluck(SCALE[0] / 2, t, step * 3, 0.14);
     if (i === 4) pluck(SCALE[(mode === "boss" ? 3 : 4)] / 2, t, step * 3, 0.1);
     /* drums */
-    if (mode === "battle" || mode === "boss") {
-      if (i === 0 || i === 4) drum(t, 0.16, true);
+    if (mode === "battle" || mode === "boss" || mode === "siege") {
+      if (i === 0 || i === 4) drum(t, mode === "siege" ? 0.2 : 0.16, true);
       if (i === 2 || i === 6) drum(t, 0.08, false);
+      if (mode === "siege" && (i === 3 || i === 7)) drum(t, 0.12, true);
+      if (mode === "siege" && i === 0 && bar % 4 === 0) horn(SCALE[0] * 0.5, t, step * 3, 0.08);
       if (mode === "boss" && (i === 3 || i === 7)) drum(t, 0.1, false);
       if (mode === "boss" && i === 7 && bar % 4 === 0) for (let k = 0; k < 4; k += 1) drum(t + k * step * 0.25, 0.07, false);
     } else if (mode === "calm") {

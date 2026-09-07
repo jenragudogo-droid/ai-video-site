@@ -78,7 +78,7 @@ export function stageRecord(save, id) {
    a first completion. Returns what was new. */
 export function recordResult(save, sum) {
   const rec = { ...stageRecord(save, sum.stageId) };
-  const flags = { newBest: false, newStars: false, newWave: false, crowns: 0 };
+  const flags = { newBest: false, newStars: false, newWave: false, crowns: 0, realmComplete: false };
   if (sum.mode === "endless") {
     if (sum.wave > rec.bestWave) { rec.bestWave = sum.wave; flags.newWave = true; flags.crowns += Math.floor((sum.wave - (save.stages[sum.stageId]?.bestWave || 0)) / 5); }
     if (sum.score > rec.bestScore) { rec.bestScore = sum.score; flags.newBest = true; }
@@ -92,9 +92,12 @@ export function recordResult(save, sum) {
       if (sum.difficulty === "hard" && sum.stars > rec.stars) rec.stars = sum.stars;
     }
   }
+  /* the last stage of a kingdom: the realm is complete */
+  let campaignsDone = save.campaignsDone || [];
+  if (sum.won && sum.finale && sum.kingdom && !campaignsDone.includes(sum.kingdom)) { campaignsDone = [...campaignsDone, sum.kingdom]; flags.realmComplete = true; flags.crowns += 5; }
   const meta = { ...save.meta, crowns: (save.meta?.crowns || 0) + flags.crowns };
   /* only a finished battle leaves the slot; quitting to the menu keeps it for Continue */
-  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec }, meta, battle: sum.finished ? null : save.battle };
+  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec }, meta, campaignsDone, battle: sum.finished ? null : save.battle };
   writeSave(next);
   return { save: next, ...flags };
 }

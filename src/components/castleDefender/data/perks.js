@@ -37,6 +37,14 @@ export const PERKS = [
   { id: "greatBallistas", name: "Great Ballistas", rarity: "epic", icon: "ballista", desc: "Every ballista bolt pierces one more enemy; +15% damage.", mods: { ballistaPierce: 1, ballistaDmg: 0.15 } },
   { id: "veterans", name: "Veteran Squads", rarity: "epic", icon: "barracks", desc: "Soldiers +25% health and +25% damage.", mods: { soldierHp: 0.25, soldierDmg: 0.25 } },
   { id: "kingsChampion", name: "King's Champion", rarity: "epic", icon: "hero", desc: "Sir Edric +30% health, Royal Charge recharges 30% faster.", mods: { heroHp: 0.3, heroChargeCd: -0.3 } },
+  /* Stage III choices (offered from the Siege of Ashford onward) */
+  { id: "pikeArmour", name: "Pike Shirts", rarity: "common", icon: "barracks", desc: "Pike units +15% armour.", mods: { pikeArmour: 0.15 }, minStage: 3 },
+  { id: "fastWinch", name: "Fast Winch", rarity: "common", icon: "catapult", desc: "Catapults reload 15% faster.", mods: { catapultRate: 0.15 }, minStage: 3 },
+  { id: "gateBars", name: "Iron Gate Bars", rarity: "rare", icon: "castle", desc: "+6 castle health now and to the maximum.", mods: { castleBonus: 6 }, minStage: 3 },
+  { id: "muster", name: "Full Muster", rarity: "rare", icon: "ability", desc: "Reinforcements bring two more levies.", mods: { reinforceCount: 2 }, minStage: 3 },
+  { id: "rallyHorns", name: "Rally Horns", rarity: "rare", icon: "hero", desc: "Royal Rally recharges 20% faster.", mods: { royalRallyCd: -0.2 }, minStage: 3 },
+  { id: "boilingPitch", name: "Boiling Pitch", rarity: "epic", icon: "ability", desc: "Burning Oil burns 40% hotter and 30% wider.", mods: { oilDmg: 0.4, oilRadius: 0.3 }, minStage: 3 },
+  { id: "masterMasons", name: "Master Masons", rarity: "epic", icon: "castle", desc: "Emergency Repair recharges 30% faster and mends 4 more.", mods: { emergencyCd: -0.3, emergencyHp: 4 }, minStage: 3 },
   /* legendary */
   { id: "ashfordBowmen", name: "Bowmen of Ashford", rarity: "legendary", icon: "archer", desc: "Archer towers shoot 25% faster and reach 15% further.", mods: { archerRate: 0.25, archerRange: 0.15 } },
   { id: "kingsPurse", name: "The King's Purse", rarity: "legendary", icon: "gold", desc: "+200 gold now and +20% gold from then on.", mods: { goldNow: 200, bountyMul: 0.2 } },
@@ -50,8 +58,12 @@ export const POWERS = {
   volley: { name: "Arrow Volley", cd: 35, dmg: 55, radius: 75, delay: 0.9, key: "V", unlockWave: 0, desc: "The garrison rains arrows where you tap." },
   reinforce: { name: "Reinforcements", cd: 25, count: 2, key: "R", unlockWave: 0, desc: "Two levies hold the ground for 15 seconds." },
   repair: { name: "Repair", cost: 60, hp: 5, key: "F", unlockWave: 0, desc: "Masons restore 5 castle health." },
-  watchfire: { name: "Watchfire", cd: 45, dur: 12, range: 0.3, key: "G", unlockWave: 4, desc: "Every tower gains 30% range for 12 seconds." },
-  royalRally: { name: "Royal Rally", cd: 55, dur: 8, heal: 0.4, armour: 0.2, key: "B", unlockWave: 7, desc: "Every soldier heals 40% and gains armour for 8 seconds." },
+  watchfire: { name: "Watchfire", cd: 45, dur: 12, range: 0.3, key: "G", unlockWave: 4, icon: "🔥", label: "Watchfire", desc: "Every tower gains 30% range for 12 seconds." },
+  royalRally: { name: "Royal Rally", cd: 55, dur: 8, heal: 0.4, armour: 0.2, key: "B", unlockWave: 7, icon: "🏴", label: "Rally", desc: "Every soldier heals 40% and gains armour for 8 seconds." },
+  /* Stage III siege powers: a stage lists the wave each one joins on */
+  burningOil: { name: "Burning Oil", cd: 40, dmg: 60, radius: 95, dps: 16, dur: 5, key: "O", stageOnly: true, icon: "🫗", label: "Oil", desc: "Pour burning oil in front of the gate: everyone within reach of the walls burns." },
+  emergencyRepair: { name: "Emergency Repair", cd: 90, hp: 10, wall: 35, key: "E", stageOnly: true, icon: "🛠", label: "Masons", desc: "Masons rush the walls: +10 castle health and the outer wall mended. Long recharge." },
+  catapultBarrage: { name: "Catapult Barrage", cd: 60, stones: 6, dmg: 58, radius: 70, spread: 60, delay: 0.7, key: "C", stageOnly: true, icon: "☄", label: "Barrage", desc: "Six stones fall where you tap over four seconds." },
 };
 
-export const POWER_ORDER = ["volley", "reinforce", "repair", "watchfire", "royalRally"];
+export const POWER_ORDER = ["volley", "reinforce", "repair", "watchfire", "royalRally", "burningOil", "emergencyRepair", "catapultBarrage"];

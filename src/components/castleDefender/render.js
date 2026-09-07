@@ -17,6 +17,7 @@ import {
   catapultBrazier, towerFlag, TOWER_BOX,
 } from "./art/towers.js";
 import { FIGURES, figurePose, drawFigure, drawHorse, drawRam } from "./art/figures.js";
+import { drawSiegeCatapult, drawSiegeTower, drawOuterWall } from "./art/siege.js";
 import { PAL, rgba } from "./art/palette.js";
 import { towerLevel } from "./engine/engine.js";
 import { HERO, TOWERS } from "./data/towers.js";
@@ -32,7 +33,14 @@ const HORSES = {
   scout: { color: "#8a5a32", rider: "scoutRider", size: 1.14, cloth: "#6a2e22" },
   knight: { color: "#3c3c46", rider: "knightRider", size: 1.24, barding: "#7a2e22", trim: "#b8b8c0", chamfron: "#5a5a64" },
   commander: { color: "#1f1e24", rider: "commanderRider", size: 1.46, barding: "#1a1a20", trim: "#c04040", chamfron: "#2a2a32", plume: "#c04040" },
+  heavy: { color: "#2c2830", rider: "heavyRider", size: 1.32, barding: "#3a2626", trim: "#8a8a92", chamfron: "#3a3a44", plume: "#a4563c" },
 };
+/* Stage III lighting: 0 afternoon, 1 sunset, 2 night */
+function lightTarget(s) {
+  if (!s.stage || s.stage.lighting !== "siege") return 0;
+  const w = s.wave + (s.waveState === "countdown" ? 1 : 0);
+  return w >= 9 ? 2 : w >= 5 ? 1 : 0;
+}
 const IDLE_PERIOD = 2.856;      // matches sin(t * 2.2)
 const dist2 = (ax, ay, bx, by) => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 
@@ -66,6 +74,13 @@ export function createRenderer() {
   const blockText = new Map();
   const warnings = new Map();
   let lastChargeText = -9;
+  const catMarks = new Map();     // catapult shots being wound up: id -> { tx, ty, r, t, max, kind, x, y }
+  const bossMarks = [];           // boss wind-ups: { x, y, r, t, max, kind, id }
+  let light = 0;                  // current lighting phase, eased toward lightTarget
+  let lastGuardText = -9;
+  let outro = null;               // the campaign victory sequence
+  let frameDt = 1 / 60;           // last frame's dt, for effects drawn outside draw()
+  const openings = new Map();     // boss id -> seconds left in the attack window
 
   /* ------------------------------ camera ------------------------------ */
 
@@ -152,10 +167,12 @@ export function createRenderer() {
     });
   }
 
-  function ramSprite(frame, dead) {
+  function ramSprite(frame, dead, scale = 1) {
     const n = 8;
     const f = ((frame % n) + n) % n;
-    return cache.get(`ram:${dead ? "dead" : "walk"}:${f}`, 160, 120, 76, 104, (ctx) => {
+    const W = Math.round(160 * scale); const H = Math.round(120 * scale);
+    return cache.get(`ram:${scale}:${dead ? "dead" : "walk"}:${f}`, W, H, Math.round(76 * scale), Math.round(104 * scale), (ctx) => {
+      ctx.scale(scale, scale);
       if (dead) {
         const k = (f + 0.5) / n;
         ctx.globalAlpha = k > 0.6 ? 1 - (k - 0.6) / 0.4 : 1;
@@ -164,6 +181,24 @@ export function createRenderer() {
         return;
       }
       drawRam(ctx, f / n);
+    });
+  }
+
+  function catapultSprite(frame, armStep, dead) {
+    const n = 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`siegeCat:${dead ? "dead" : armStep}:${f}`, 200, 150, 100, 132, (ctx) => {
+      if (dead) { ctx.globalAlpha = 0.9; ctx.rotate(0.14); ctx.translate(0, 8); drawSiegeCatapult(ctx, 0, 1, { crew: false }); return; }
+      drawSiegeCatapult(ctx, f / n, armStep / 6);
+    });
+  }
+
+  function siegeTowerSprite(frame, ramp, dead) {
+    const n = 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`siegeTower:${dead ? "dead" : ramp}:${f}`, 180, 200, 90, 182, (ctx) => {
+      if (dead) { ctx.rotate(0.1); ctx.translate(0, 10); drawSiegeTower(ctx, 0, 1, { dead: true }); return; }
+      drawSiegeTower(ctx, f / n, ramp);
     });
   }
 
@@ -302,6 +337,43 @@ export function createRenderer() {
       case "spawn": fx.spawn("dust", e.x, e.y, { n: 2 }); break;
       case "levyLeave": fx.spawn("dust", e.x, e.y, { n: 3 }); break;
       case "layout": trails.clear(); break;
+      /* Stage III siege */
+      case "siegeHalt": fx.spawn("dust", e.x, e.y, { n: 10 }); fx.spawn("text", e.x, e.y - 110, { text: "IN RANGE", size: 11, color: "#ff9c7a", max: 1.4, bold: true }); break;
+      case "catapultWarn": catMarks.set(e.id, { x: e.x, y: e.y, tx: e.tx, ty: e.ty, r: e.r, t: e.windup, max: e.windup, kind: e.kind }); break;
+      case "siegeShot": catMarks.delete(e.id); fx.spawn("dust", e.x, e.y, { n: 6 }); fx.spawn("smoke", e.x, e.y - 60, { n: 3, size: 6 }); break;
+      case "siegeImpact":
+        fx.spawn("dust", e.x, e.y, { n: 14 }); fx.spawn("debris", e.x, e.y, { n: 14, color: e.kind === "tower" ? PAL.wood : PAL.rockLight }); fx.spawn("ring", e.x, e.y, { size: e.radius * 1.8, max: 0.6, width: 4 });
+        fx.spawn("scorch", e.x, e.y, { size: e.radius * 0.5, max: 14 }); fx.spawn("smoke", e.x, e.y, { n: 5, size: 9 });
+        gateShake = Math.max(gateShake, e.kind === "castle" ? 0.5 : 0.28);
+        break;
+      case "wallHit": fx.spawn("dust", e.x, e.y, { n: 8 }); fx.spawn("debris", e.x, e.y - 10, { n: 6, color: PAL.rockLight }); if (e.src === "ram" || e.src === "catapult") fx.spawn("text", e.x, e.y - 60, { text: `WALL -${Math.round(e.amount)}`, size: 11, color: "#ffb59a", max: 1.1, bold: true }); break;
+      case "wallBreach": fx.spawn("debris", e.x, e.y, { n: 26, color: PAL.rockLight }); fx.spawn("dust", e.x, e.y, { n: 24 }); fx.spawn("smoke", e.x, e.y, { n: 10, size: 12 }); fx.spawn("ring", e.x, e.y, { size: 160, max: 1, width: 5, color: rgba(PAL.redLight, 0.8) }); fx.spawn("text", e.x, e.y - 90, { text: "THE WALL FALLS", size: 15, color: "#ff8f7a", max: 2.2, bold: true }); gateShake = Math.max(gateShake, 0.8); break;
+      case "ramWall": fx.spawn("dust", e.x, e.y, { n: 10 }); fx.spawn("debris", e.x, e.y - 20, { n: 8, color: PAL.rockLight }); gateShake = Math.max(gateShake, 0.4); break;
+      case "towerDock": fx.spawn("dust", e.x, e.y, { n: 12 }); fx.spawn("text", e.x, e.y - 150, { text: "RAMP DOWN", size: 12, color: "#ff9c7a", max: 1.6, bold: true }); gateShake = Math.max(gateShake, 0.25); break;
+      case "unload": fx.spawn("dust", e.x, e.y, { n: 4 }); break;
+      case "towerBurn": fx.spawn("fire", e.x, e.y - 20, { n: 10, spread: 22 }); fx.spawn("ember", e.x, e.y - 30, { n: 6 }); fx.spawn("text", e.x, e.y - 80, { text: "BURNING", size: 10, color: "#ffb347", max: 1.2, bold: true }); break;
+      case "engineerRepair": fx.spawn("spark", e.x, e.y, { n: 4, color: "#ffd27a" }); break;
+      case "bossEnter": fx.spawn("ring", e.x, e.y, { size: 180, color: rgba(PAL.red, 0.8), max: 1.6, width: 5 }); break;
+      case "bossPhase":
+        fx.spawn("ring", e.x, e.y, { size: e.phase === 3 ? 220 : 160, color: e.phase === 3 ? "rgba(255,60,40,0.9)" : rgba(PAL.redLight, 0.8), max: 1.4, width: 5 });
+        fx.spawn("text", e.x, e.y - 120, { text: e.phase === 3 ? "ENRAGED" : "BLACKMOOR ADVANCES", size: 14, color: "#ff8f7a", max: 2, bold: true });
+        if (e.phase === 3) { fx.spawn("fire", e.x, e.y, { n: 14, spread: 50 }); fx.spawn("ember", e.x, e.y - 20, { n: 12 }); }
+        break;
+      case "bossWind": bossMarks.push({ x: e.x, y: e.y, r: e.r, t: e.dur, max: e.dur, kind: e.kind, id: e.id }); if (e.kind === "sweep") fx.spawn("text", e.x, e.y - 120, { text: "SWEEP!", size: 13, color: "#ff8f7a", max: 1.2, bold: true }); else fx.spawn("text", e.x, e.y - 120, { text: "HORN OF BLACKMOOR", size: 12, color: "#ffb59a", max: 1.6, bold: true }); break;
+      case "bossSweep": fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: "rgba(255,120,80,0.9)", max: 0.5, width: 6 }); fx.spawn("dust", e.x, e.y, { n: 18 }); fx.spawn("spark", e.x, e.y - 30, { n: 14, color: "#ffd0a0" }); gateShake = Math.max(gateShake, 0.3); break;
+      case "bossHorn": fx.spawn("ring", e.x, e.y, { size: 300, color: rgba(PAL.redLight, 0.6), max: 1.2, width: 4 }); break;
+      case "bossDown": openings.clear(); fx.spawn("ring", e.x, e.y, { size: 260, color: rgba(PAL.goldLight, 0.9), max: 1.6, width: 6 }); fx.spawn("ring", e.x, e.y, { size: 120, color: "rgba(255,120,80,0.9)", max: 0.8, width: 5 }); fx.spawn("spark", e.x, e.y - 30, { n: 40, color: PAL.goldLight }); fx.spawn("debris", e.x, e.y, { n: 18, color: PAL.iron }); fx.spawn("smoke", e.x, e.y, { n: 8, size: 12 }); fx.spawn("text", e.x, e.y - 130, { text: "BLACKMOOR FALLS", size: 16, color: PAL.goldLight, max: 3, bold: true }); gateShake = Math.max(gateShake, 0.7); break;
+      case "bossOpen": openings.set(e.id, { t: e.dur, max: e.dur }); fx.spawn("ring", e.x, e.y, { size: 90, color: rgba(PAL.goldLight, 0.95), max: 0.6, width: 5 }); fx.spawn("text", e.x, e.y - 118, { text: "STRIKE NOW", size: 13, color: PAL.goldLight, max: 1.4, bold: true }); break;
+      case "bossOpenEnd": openings.delete(e.id); break;
+      case "bossRoarEnd": fx.spawn("ring", e.x, e.y, { size: 160, color: "rgba(255,80,50,0.9)", max: 0.6, width: 5 }); fx.spawn("dust", e.x, e.y, { n: 14 }); break;
+      case "wallCrack": fx.spawn("debris", e.x, e.y, { n: 10, color: PAL.rockLight }); fx.spawn("dust", e.x, e.y, { n: 10 }); fx.spawn("text", e.x, e.y - 60, { text: "THE WALL CRACKS", size: 12, color: "#ffb59a", max: 1.6, bold: true }); gateShake = Math.max(gateShake, 0.3); break;
+      case "gateFailing": { const c = s.layout.castle; fx.spawn("debris", c.gate.x, c.gate.y - 10, { n: 10, color: PAL.rockLight }); fx.spawn("smoke", c.gate.x, c.gate.y - 30, { n: 6, size: 9 }); gateShake = Math.max(gateShake, 0.4); break; }
+      case "guarded": if (time - lastGuardText > 1.5) { lastGuardText = time; fx.spawn("text", e.x, e.y - 110, { text: "GUARDED", size: 11, color: "#cfd6e6", max: 1 }); } fx.spawn("flash", e.x, e.y - 40, { size: 22, color: "rgba(200,210,255,0.5)" }); break;
+      case "kingsCharge": fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(PAL.goldLight, 0.95), max: 0.7, width: 6 }); fx.spawn("spark", e.x, e.y - 30, { n: 22, color: PAL.goldLight }); fx.spawn("dust", e.x, e.y, { n: 16 }); fx.spawn("text", e.x, e.y - 100, { text: "KING'S CHARGE", size: 13, color: PAL.goldLight, max: 1.4, bold: true }); gateShake = Math.max(gateShake, 0.2); break;
+      case "oil": fx.spawn("fire", e.x, e.y, { n: 24, spread: e.r }); fx.spawn("ember", e.x, e.y, { n: 12 }); fx.spawn("smoke", e.x, e.y, { n: 8, size: 10 }); fx.spawn("scorch", e.x, e.y, { size: e.r * 0.6, max: 20 }); fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(PAL.fire, 0.8), max: 0.6, width: 4 }); break;
+      case "emergencyRepair": { const c = s.layout.castle; for (let i = 0; i < 6; i += 1) fx.spawn("spark", c.x + 20 + (i / 5) * (c.w - 40), c.y + c.h - 20, { n: 4, color: PAL.goldLight }); fx.spawn("text", e.x, e.y - 90, { text: "MASONS AT WORK", size: 12, color: PAL.goldLight, max: 1.6, bold: true }); break; }
+      case "barrage": fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(PAL.goldLight, 0.6), max: 1, width: 3 }); break;
+      case "formation": fx.spawn("ring", e.x, e.y, { size: 44, color: e.kind ? rgba(PAL.goldLight, 0.9) : "rgba(255,255,255,0.6)", max: 0.5 }); if (e.kind) fx.spawn("text", e.x, e.y - 70, { text: e.kind === "pikeWall" ? "PIKE WALL" : "SHIELD WALL", size: 11, color: PAL.goldLight, max: 1.2, bold: true }); break;
       default: break;
     }
   }
@@ -313,6 +385,7 @@ export function createRenderer() {
     if (u.state === "dead") return { anim: "dead", frame: Math.floor((1 - Math.max(0, u.deadT) / 1.5) * FRAMES.dead) };
     if (!enemy && u.bracing && (u.state === "idle" || u.state === "fight")) return { anim: "brace", frame: 0 };
     if (u.state === "stun") return { anim: "stun", frame: Math.floor(u.animT * 6) };
+    if (u.state === "wind") return { anim: "brace", frame: 0 };
     if (u.state === "charge") return { anim: "charge", frame: Math.floor(u.animT * 14) };
     if (u.state === "fight") {
       const atk = enemy ? def.atk : (u.kind === "hero" ? HERO.atk : def.atk);
@@ -355,14 +428,47 @@ export function createRenderer() {
       if (e.state === "charge") { fx.spawn("dust", e.x - e.face * 18, e.y + 2, { n: 2 }); if (Math.random() < 0.5) fx.spawn("dust", e.x + e.face * 10, e.y + 4, { n: 1 }); }
       else if (e.state === "walk" && Math.random() < 0.3) fx.spawn("dust", e.x - e.face * 16, e.y + 3, { n: 1 });
       if (e.buffT > 0) { ctx.fillStyle = rgba(PAL.redLight, 0.18); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 26, 11, 0, 0, Math.PI * 2); ctx.fill(); }
-    } else if (e.type === "ram") {
-      sp = ramSprite(e.state === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 8) : Math.floor(e.d / 14), e.state === "dead");
+    } else if (e.type === "ram" || def.ram) {
+      sp = ramSprite(e.state === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 8) : Math.floor(e.d / 14), e.state === "dead", def.scale || 1);
       if (e.state !== "dead" && Math.random() < 0.08) fx.spawn("dust", e.x - 30 * e.face, e.y + 4, { n: 1 });
+    } else if (def.engine) {
+      const eg = def.engine;
+      let arm = 0;
+      if (e.windT > 0) arm = 0.08 * (1 - e.windT / eg.windup);
+      else if (e.stopped && e.reload > eg.reload - 0.7) arm = 1 - (eg.reload - e.reload) / 0.7;
+      sp = catapultSprite(e.stopped ? 0 : Math.floor(e.d / 14), Math.round(Math.max(0, Math.min(1, arm)) * 6), e.state === "dead");
+      if (e.state !== "dead" && !e.stopped && Math.random() < 0.08) fx.spawn("dust", e.x - 40 * e.face, e.y + 4, { n: 1 });
+      if (e.state === "dead") { if (Math.random() < 0.5) fx.spawn("fire", e.x + (Math.random() - 0.5) * 60, e.y - 20, { n: 1, size: 5 }); if (Math.random() < 0.2) fx.spawn("smoke", e.x, e.y - 40, { n: 1, size: 8 }); }
+    } else if (def.tower) {
+      sp = siegeTowerSprite(e.docked ? 0 : Math.floor(e.d / 14), e.docked ? 1 : 0, e.state === "dead");
+      if (e.state !== "dead" && !e.docked && Math.random() < 0.1) fx.spawn("dust", e.x - 40 * e.face, e.y + 4, { n: 1 });
+      if (e.state === "dead") { if (Math.random() < 0.6) fx.spawn("fire", e.x + (Math.random() - 0.5) * 40, e.y - 60 - Math.random() * 60, { n: 1, size: 6 }); if (Math.random() < 0.3) fx.spawn("smoke", e.x, e.y - 110, { n: 1, size: 10 }); }
+      else if (e.docked && Math.random() < 0.06) fx.spawn("dust", e.x + e.face * 34, e.y + 2, { n: 1 });
     } else {
       const { anim, frame } = unitAnim(e, true);
       sp = figureSprite(figureKey("enemy", e.type, true), e.id % 2, anim, frame);
     }
     const hitFlash = e.hitT > 0.12;
+    if (e.boss) {
+      /* the warlord: a red glow that deepens as he rages, a shimmer while guarded */
+      const raged = e.boss.raged;
+      const g = ctx.createRadialGradient(e.x, e.y + 2, 4, e.x, e.y + 2, raged ? 70 : 48);
+      g.addColorStop(0, rgba(raged ? "#ff4a2a" : PAL.redLight, (raged ? 0.45 : 0.25) + Math.sin(time * (raged ? 9 : 4)) * 0.08)); g.addColorStop(1, rgba(PAL.redLight, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, raged ? 70 : 48, raged ? 30 : 20, 0, 0, Math.PI * 2); ctx.fill();
+      if (e.boss.phase === 1 && e.state !== "dead") { ctx.strokeStyle = rgba("#cfd6e6", 0.45 + Math.sin(time * 3) * 0.15); ctx.lineWidth = 2; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 40, 17, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+      const op = openings.get(e.id);
+      if (op && e.state !== "dead") {
+        /* the attack window: a gold ring closing as it runs out */
+        op.t -= frameDt;
+        const k = Math.max(0, op.t / op.max);
+        ctx.strokeStyle = rgba(PAL.goldLight, 0.55 + Math.sin(time * 10) * 0.25); ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 46 * (0.5 + k * 0.5), 20 * (0.5 + k * 0.5), 0, 0, Math.PI * 2); ctx.stroke();
+        if (Math.random() < 0.4) fx.spawn("spark", e.x + (Math.random() - 0.5) * 40, e.y - 30, { n: 1, color: PAL.goldLight });
+        if (op.t <= 0) openings.delete(e.id);
+      }
+      if (e.boss.roarT > 0 && e.state !== "dead") { const k = e.boss.roarT / 1.6; ctx.strokeStyle = rgba("#ff5a3c", 0.5 + Math.sin(time * 18) * 0.3); ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 70 * (1.4 - k), 30 * (1.4 - k), 0, 0, Math.PI * 2); ctx.stroke(); if (Math.random() < 0.6) fx.spawn("ember", e.x + (Math.random() - 0.5) * 50, e.y - 30, { n: 1 }); }
+      if (raged && Math.random() < 0.4) fx.spawn("ember", e.x + (Math.random() - 0.5) * 30, e.y - 20, { n: 1 });
+    }
     cache.blit(ctx, sp, e.x, e.y + ay, flip);
     if (hitFlash && e.state !== "dead") {
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.45;
@@ -370,7 +476,7 @@ export function createRenderer() {
       ctx.restore();
     }
     if (e.state !== "dead" && e.hp < e.maxHp) {
-      const w = def.boss ? 64 : def.horse ? 30 : 24;
+      const w = def.boss === "final" ? 90 : def.boss ? 64 : def.horse ? 30 : 24;
       hpBar(ctx, e.x, e.y - def.h - 8, w, e.hp / e.maxHp, true, !!def.boss);
     }
     if (e.stun > 0) {
@@ -466,6 +572,14 @@ export function createRenderer() {
     tr.push(sx, sy);
     if (tr.length > 10) tr.splice(0, 2);
     const ang = tr.length >= 4 ? Math.atan2(sy - tr[tr.length - 4 + 1], sx - tr[tr.length - 4]) : Math.atan2(pr.dy || 0, pr.dx || 1);
+    if (pr.kind === "siegeStone") {
+      if (Math.random() < 0.8) fx.spawn("smoke", sx, sy, { n: 1, size: 5, z: 0, color: "rgba(70,60,50,0.45)" });
+      ctx.fillStyle = "rgba(28,20,12,0.75)"; ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = PAL.rockDark; ctx.beginPath(); ctx.arc(sx, sy, 10.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = PAL.rock; ctx.beginPath(); ctx.arc(sx - 2, sy - 2, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgba("#ffffff", 0.25); ctx.beginPath(); ctx.arc(sx - 3, sy - 4, 3, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
     if (pr.kind === "stone") {
       /* trail smoke for fire pots */
       if (pr.fire && Math.random() < 0.7) fx.spawn("smoke", sx, sy, { n: 1, size: 3, z: 0, color: "rgba(80,60,40,0.4)" });
@@ -499,7 +613,9 @@ export function createRenderer() {
     ctx.fillStyle = enemy ? "#5a5050" : (pr.kind === "bolt" ? PAL.red : "#e8e2d4");
     ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(-L - 4, -2.4); ctx.lineTo(-L + 3, -1.2); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(-L - 4, 2.4); ctx.lineTo(-L + 3, 1.2); ctx.closePath(); ctx.fill();
+    if (pr.fire) { ctx.fillStyle = rgba(PAL.fire, 0.75); ctx.beginPath(); ctx.ellipse(4, 0, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = rgba(PAL.fireHot, 0.8); ctx.beginPath(); ctx.arc(5, 0, 2, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore();
+    if (pr.fire && Math.random() < 0.6) fx.spawn("ember", sx, sy, { n: 1, z: 0 });
   }
 
   /* ------------------------------ main draw ------------------------------ */
@@ -520,7 +636,7 @@ export function createRenderer() {
   }
 
   function draw(ctx, s, dt, opts = {}) {
-    time += dt;
+    time += dt; frameDt = dt;
     const layout = s.layout;
     if (opts.menu) {
       menuDrift += dt;
@@ -529,6 +645,8 @@ export function createRenderer() {
       cam.y = layout.h * 0.5 + Math.cos(menuDrift * 0.09) * layout.h * 0.12;
     } else if (intro) {
       stepIntro(s, dt);
+    } else if (outro) {
+      stepOutro(s, dt);
     } else {
       cam.zoom = 1; cam.x = layout.w / 2; cam.y = layout.h / 2;
     }
@@ -555,6 +673,19 @@ export function createRenderer() {
     /* terrain */
     ctx.drawImage(terrain.canvas, 0, 0, layout.w, layout.h);
     drawWater(ctx, layout);
+    /* the outer siege wall, live so its damage shows */
+    if (layout.outerWall) {
+      const ratio = s.wallMax ? Math.max(0, s.wallHp) / s.wallMax : 1;
+      const key = `wall:${layout.name}:${ratio <= 0 ? 0 : ratio < 0.4 ? 1 : ratio < 0.75 ? 2 : 3}`;
+      const sp = cache.get(key, layout.w, 120, 0, 60, (c) => { c.translate(0, 0); const ow = layout.outerWall; const minY = Math.min(...ow.segments.flat().map((q) => q.y)); c.translate(0, -minY + 60); drawOuterWall(c, ow, ratio); });
+      const minY = Math.min(...layout.outerWall.segments.flat().map((q) => q.y));
+      cache.blit(ctx, sp, 0, minY);
+      if (ratio > 0 && ratio < 0.4 && Math.random() < 0.3 * quality) { const ow = layout.outerWall; const seg = ow.segments[Math.floor(Math.random() * ow.segments.length)]; const k = Math.random(); fx.spawn("smoke", seg[0].x + (seg[1].x - seg[0].x) * k, seg[0].y + (seg[1].y - seg[0].y) * k - 10, { n: 1, size: 5 }); }
+    }
+    /* siege camp fires and the warband's banners */
+    if (!opts.menu) {
+      for (const cp of layout.camps || []) { if (Math.random() < 0.35 * quality) fx.spawn("fire", cp.x + 4, cp.y - 10, { n: 1, size: 4, spread: 6 }); if (Math.random() < 0.08) fx.spawn("smoke", cp.x + 4, cp.y - 16, { n: 1, size: 5 }); }
+    }
 
     /* ground decorations: zones, particles, plots, ranges, markers */
     for (const z of s.zones) {
@@ -598,6 +729,44 @@ export function createRenderer() {
         /* countdown pip above the rider */
         ctx.fillStyle = rgba("#ff3b1e", 0.9); ctx.font = "bold 16px Cinzel, Georgia, serif"; ctx.textAlign = "center";
         ctx.lineWidth = 3; ctx.strokeStyle = "rgba(20,10,5,0.8)"; ctx.strokeText("!", e.x, e.y - 96); ctx.fillText("!", e.x, e.y - 96);
+      }
+    }
+    /* catapult shots being wound up: a red marker where the stone will land */
+    for (const [id, m] of catMarks) {
+      const e = s.enemies.find((x) => x.id === id);
+      if (!e || e.state === "dead") { catMarks.delete(id); continue; }
+      m.t -= dt;
+      if (m.t <= -0.2) { catMarks.delete(id); continue; }
+      const k = 1 - Math.max(0, m.t) / m.max;
+      const pulse = 0.6 + Math.sin(time * 12) * 0.3;
+      ctx.setLineDash([8, 8]); ctx.lineDashOffset = -time * 40; ctx.strokeStyle = rgba("#ff5a3c", 0.35 * pulse); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y - 40); ctx.quadraticCurveTo((e.x + m.tx) / 2, Math.min(e.y, m.ty) - 160, m.tx, m.ty); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      const g = ctx.createRadialGradient(m.tx, m.ty, 4, m.tx, m.ty, m.r);
+      g.addColorStop(0, rgba("#ff5a3c", 0.35 * pulse * k)); g.addColorStop(1, rgba("#ff5a3c", 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(m.tx, m.ty, m.r, m.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgba("#ff3b1e", (0.5 + k * 0.5) * pulse); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(m.tx, m.ty, m.r * (1.2 - k * 0.2), m.r * 0.55 * (1.2 - k * 0.2), 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = rgba("#ff3b1e", 0.95 * pulse); ctx.font = "bold 14px Cinzel, Georgia, serif"; ctx.textAlign = "center";
+      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(20,10,5,0.8)"; ctx.strokeText("!", m.tx, m.ty - 16); ctx.fillText("!", m.tx, m.ty - 16);
+    }
+    /* boss wind-ups: sweep radius or horn call */
+    for (let i = bossMarks.length - 1; i >= 0; i -= 1) {
+      const m = bossMarks[i];
+      const e = s.enemies.find((x) => x.id === m.id);
+      m.t -= dt;
+      if (!e || e.state === "dead" || m.t <= -0.1) { bossMarks.splice(i, 1); continue; }
+      const k = 1 - Math.max(0, m.t) / m.max;
+      const pulse = 0.6 + Math.sin(time * 14) * 0.3;
+      if (m.kind === "sweep") {
+        const g = ctx.createRadialGradient(e.x, e.y + 2, 6, e.x, e.y + 2, m.r);
+        g.addColorStop(0, rgba("#ff5a3c", 0.12 * pulse)); g.addColorStop(0.7, rgba("#ff5a3c", 0.25 * pulse * k)); g.addColorStop(1, rgba("#ff5a3c", 0));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, m.r, m.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = rgba("#ff3b1e", (0.5 + k * 0.5) * pulse); ctx.lineWidth = 4; ctx.setLineDash([12, 8]); ctx.lineDashOffset = -time * 60;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, m.r * k, m.r * 0.55 * k, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      } else {
+        ctx.strokeStyle = rgba("#ffb59a", (0.4 + k * 0.5) * pulse); ctx.lineWidth = 3;
+        for (let r = 0; r < 3; r += 1) { const rr = 40 + ((time * 120 + r * 60) % 180); ctx.globalAlpha = 1 - rr / 220; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, rr, rr * 0.5, 0, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.globalAlpha = 1;
       }
     }
     for (const c of s.enemies) {
@@ -744,7 +913,7 @@ export function createRenderer() {
     /* shadows */
     ctx.fillStyle = PAL.shadow;
     const shadow = (x, y, r) => { ctx.beginPath(); ctx.ellipse(x + 3, y + 2, r, r * 0.42, 0, 0, Math.PI * 2); ctx.fill(); };
-    for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.type === "ram" ? 44 : e.def.horse ? 26 * (HORSES[e.def.horse]?.size || 1) : 12);
+    for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.def.engine ? 56 : e.def.tower ? 48 : e.def.ram ? 44 * (e.def.scale || 1) : e.type === "ram" ? 44 : e.def.horse ? 26 * (HORSES[e.def.horse]?.size || 1) : e.boss ? 20 : 12);
     for (const u of s.units) if (u.state !== "dead" && u.state !== "respawn") shadow(u.x, u.y, 11);
     if (s.hero.state !== "dead" && s.hero.state !== "respawn") shadow(s.hero.x, s.hero.y, 13);
     for (const pr of s.projectiles) { ctx.fillStyle = rgba("#000000", 0.22); ctx.beginPath(); ctx.ellipse(pr.x, pr.y + 2, pr.kind === "stone" ? 5 : 4, 2, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -757,12 +926,13 @@ export function createRenderer() {
     const dmg = castleDamageState(s.castleHp, s.castleMax);
     items.push({ y: castle.y + castle.h - 2, fn: () => drawCastleLive(ctx, s, castle, dmg) });
     if (!opts.menu) {
-      for (const e of s.enemies) items.push({ y: e.y + (e.state === "dead" ? -30 : 0), fn: () => drawEnemy(ctx, e) });
+      for (const e of s.enemies) if (!outro || (e.state === "dead" && !e.routed)) items.push({ y: e.y + (e.state === "dead" ? -30 : 0), fn: () => drawEnemy(ctx, e) });
       for (const u of s.units) if (u.state !== "respawn") items.push({ y: u.y + (u.state === "dead" ? -30 : 0), fn: () => drawUnit(ctx, u) });
       if (s.hero.state !== "respawn") items.push({ y: s.hero.y + (s.hero.state === "dead" ? -30 : 0), fn: () => drawUnit(ctx, s.hero) });
       for (const pr of s.projectiles) items.push({ y: pr.y + 1, fn: () => drawProjectile(ctx, pr) });
     }
     if (intro && intro.parade) for (const pe of intro.parade) items.push({ y: pe.y, fn: () => drawParade(ctx, pe) });
+    if (outro) for (const fe of outro.flee) items.push({ y: fe.y, fn: () => drawFlee(ctx, fe) });
     /* route entrance banners */
     layout.flags.forEach((f, i) => {
       if (i > 0 && s.wave + 1 < (layout.routes[i].opensAt || 1) && s.mode !== "endless") return;
@@ -770,6 +940,25 @@ export function createRenderer() {
     });
     items.sort((a, b) => a.y - b.y);
     for (const it of items) it.fn();
+
+    /* burning towers and formation marks */
+    if (!opts.menu) {
+      s.towers.forEach((t, i) => {
+        if (!t || !(t.burnT > 0)) return;
+        const p = layout.plots[i];
+        if (Math.random() < 0.7 * quality) fx.spawn("fire", p.x + (Math.random() - 0.5) * 30, p.y - 40 - Math.random() * 40, { n: 1, size: 5 });
+        if (Math.random() < 0.25) fx.spawn("smoke", p.x, p.y - 80, { n: 1, size: 7 });
+        if (Math.random() < 0.15) fx.spawn("ember", p.x, p.y - 60, { n: 1 });
+      });
+      for (const u of s.units) {
+        if (!u.formation || u.state === "dead" || u.state === "respawn") continue;
+        const pike = u.formation === "pikeWall";
+        ctx.fillStyle = rgba(pike ? "#ffe08a" : "#bfe0ff", 0.85); ctx.font = "bold 10px Cinzel, Georgia, serif"; ctx.textAlign = "center";
+        ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(20,14,8,0.8)"; ctx.strokeText(pike ? "⟋" : "⛨", u.x, u.y - 70); ctx.fillText(pike ? "⟋" : "⛨", u.x, u.y - 70);
+      }
+      /* the warband's camp banners */
+      for (const b of layout.banners || []) drawFlag(ctx, b.x, b.y, 34, 0.9, PAL.blackDark, PAL.red, b.x * 0.01, 0.95);
+    }
 
     /* prune projectile trails */
     if (s.projectiles.length === 0 && trails.size) trails.clear();
@@ -779,6 +968,31 @@ export function createRenderer() {
     fx.update(dt);
     fx.drawAir(ctx);
 
+    /* Stage III lighting: afternoon, sunset, then a night siege lit by torches and fire */
+    const lt = lightTarget(s);
+    light += (lt - light) * Math.min(1, dt * 0.35);
+    if (light > 0.01) {
+      const sunset = Math.min(1, light);
+      const night = Math.max(0, light - 1);
+      const g = ctx.createLinearGradient(0, 0, 0, layout.h);
+      g.addColorStop(0, rgba("#ff8a3a", 0.16 * sunset * (1 - night * 0.6))); g.addColorStop(1, rgba("#7a3a2a", 0.22 * sunset * (1 - night * 0.6)));
+      ctx.fillStyle = g; ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+      if (night > 0.01) {
+        ctx.save(); ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = rgba("#4a5898", 0.72 * night); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+        ctx.restore();
+        /* torches and fires push the dark back */
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        const glow = (x, y, r, a, hot) => { const fl = 0.85 + Math.sin(time * 9 + x * 0.05) * 0.1 + Math.sin(time * 23 + y * 0.03) * 0.05; const rg = ctx.createRadialGradient(x, y, 4, x, y, r * fl); rg.addColorStop(0, rgba(hot ? "#ffb060" : "#ff9a40", a * night * fl)); rg.addColorStop(1, rgba("#ff8a30", 0)); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(x, y, r * fl, r * fl * 0.7, 0, 0, Math.PI * 2); ctx.fill(); };
+        for (const t of layout.torches || []) { glow(t.x, t.y - 20, 95, 0.42, false); if (Math.random() < 0.35 * quality) fx.spawn("fire", t.x, t.y - 30, { n: 1, size: 3, spread: 3 }); }
+        for (const z of s.zones) glow(z.x, z.y, z.r * 1.8, 0.5, true);
+        for (const cp of layout.camps || []) glow(cp.x + 4, cp.y - 10, 80, 0.4, false);
+        s.towers.forEach((t, i) => { if (t && t.burnT > 0) glow(layout.plots[i].x, layout.plots[i].y - 50, 110, 0.5, true); });
+        for (const e of s.enemies) if ((e.def.engine || e.def.tower) && e.state === "dead") glow(e.x, e.y - 30, 90, 0.4, true);
+        const c = layout.castle; glow(c.x + c.w / 2, c.y + c.h - 20, 200, 0.22, false);
+        ctx.restore();
+      }
+    }
     if (opts.menu) {
       /* dusk */
       const g = ctx.createLinearGradient(0, 0, 0, layout.h);
@@ -789,6 +1003,10 @@ export function createRenderer() {
       ctx.fillStyle = rgba("#1a1408", intro.fade);
       ctx.fillRect(-500, -500, layout.w + 1000, layout.h + 1000);
     }
+    if (outro && outro.fade > 0) {
+      ctx.fillStyle = rgba("#1a1408", outro.fade * 0.85);
+      ctx.fillRect(-500, -500, layout.w + 1000, layout.h + 1000);
+    }
     ctx.restore();
   }
 
@@ -796,6 +1014,15 @@ export function createRenderer() {
     const sp = castleSprite(castle, dmg);
     cache.blit(ctx, sp, castle.x, castle.y);
     castleFlags(castle).forEach((f, i) => drawFlag(ctx, castle.x + f.x, castle.y + f.y, f.h, f.size, f.color, f.trim, i * 1.3));
+    if (outro && outro.banners > 0) {
+      /* the realm's banners go up along the south wall */
+      const k = Math.min(1, outro.banners);
+      for (let i = 0; i < 5; i += 1) {
+        const fx0 = castle.x + 30 + (i / 4) * (castle.w - 60); const fy = castle.y + castle.h - 36;
+        const hh = 8 + 34 * k;
+        drawFlag(ctx, fx0, fy, hh, 0.9 + k * 0.3, i % 2 ? PAL.gold : PAL.red, i % 2 ? PAL.red : PAL.gold, i * 0.9 + 1, Math.min(1, k * 1.5));
+      }
+    }
     for (const p of castleDamagePoints(castle, dmg)) {
       if (Math.random() < 0.25 * quality) fx.spawn("smoke", castle.x + p.x, castle.y + p.y, { n: 1, size: 5, z: 10 });
       if (p.fire && Math.random() < 0.6) fx.spawn("fire", castle.x + p.x, castle.y + p.y, { n: 1, size: 5, z: 6 });
@@ -818,6 +1045,55 @@ export function createRenderer() {
         ctx.beginPath(); ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y); ctx.stroke();
       }
     }
+  }
+
+  /* ------------------------------ outro: the realm holds ------------------------------ */
+
+  /* After the final wave: the warband runs, the camera finds the gate, then
+     the castle raises its banners. ~7.5 seconds, skippable. */
+  function startOutro(s) {
+    const layout = s.layout;
+    const flee = [];
+    for (const e of s.enemies) {
+      if (e.state === "dead" && !e.routed) continue;
+      const route = layout.routes[e.route] || layout.routes[0];
+      flee.push({ type: e.type, d: e.d, lat: e.lat, route, x: e.x, y: e.y, face: -1, t: Math.random() * 3, speed: (e.def.speed || 50) * 1.6, horse: e.def.horse, engine: !!(e.def.engine || e.def.tower || e.def.ram || e.type === "ram"), alpha: 1 });
+    }
+    outro = { t: 0, dur: 7.6, flee, fade: 0, phase: 0, banners: 0 };
+    stepOutro(s, 0);
+  }
+
+  function stepOutro(s, dt) {
+    const layout = s.layout; const it = outro; it.t += dt;
+    const c = layout.castle; const gate = c.gate; const h = s.hero;
+    const ease = (k) => k * k * (3 - 2 * k);
+    const t = it.t;
+    const heroAt = { x: h.state === "dead" || h.state === "respawn" ? gate.x : h.x, y: h.state === "dead" || h.state === "respawn" ? gate.y + 30 : h.y };
+    if (t < 2.6) { it.phase = 0; cam.zoom = 1.45; cam.x = heroAt.x; cam.y = heroAt.y - 20; it.fade = 0; }
+    else if (t < 5.4) { it.phase = 1; const k = ease((t - 2.6) / 2.8); cam.zoom = 1.45 + k * 0.15; cam.x = heroAt.x + (c.x + c.w / 2 - heroAt.x) * k; cam.y = heroAt.y - 20 + (c.y + c.h * 0.45 - heroAt.y + 20) * k; it.banners = Math.max(0, (t - 3.4) / 1.6); }
+    else { it.phase = 2; it.banners = 1; const k = ease(Math.min(1, (t - 5.4) / 2.2)); cam.zoom = 1.6 - k * 0.5; cam.x = c.x + c.w / 2 + (layout.w / 2 - c.x - c.w / 2) * k; cam.y = c.y + c.h * 0.45 + (layout.h / 2 - c.y - c.h * 0.45) * k; it.fade = t > 6.8 ? Math.min(1, (t - 6.8) / 0.8) : 0; }
+    for (const fe of it.flee) {
+      fe.d -= fe.speed * dt; fe.t += dt;
+      if (fe.d <= 0) { fe.alpha = 0; continue; }
+      const p = sampleRoute(fe.route, fe.d);
+      fe.x = p.x + p.nx * fe.lat; fe.y = p.y + p.ny * fe.lat;
+      fe.face = p.tx < 0 ? 1 : -1;
+      if (fe.horse && Math.random() < 0.3) fx.spawn("dust", fe.x + fe.face * 14, fe.y + 3, { n: 1 });
+    }
+    /* gold sparks over the castle as the banners go up */
+    if (it.banners > 0 && it.banners < 1 && Math.random() < 0.5 * quality) fx.spawn("spark", c.x + 20 + Math.random() * (c.w - 40), c.y + 10 + Math.random() * 40, { n: 3, color: PAL.goldLight, z: 40 });
+    if (it.phase >= 1 && Math.random() < 0.08 * quality) fx.spawn("ember", c.x + Math.random() * c.w, c.y + c.h - 30, { n: 1, z: 30 });
+    if (t >= it.dur) outro = null;
+  }
+
+  function drawFlee(ctx, fe) {
+    if (fe.alpha <= 0) return;
+    ctx.fillStyle = PAL.shadow; ctx.beginPath(); ctx.ellipse(fe.x + 3, fe.y + 2, fe.engine ? 40 : fe.horse ? 26 : 12, fe.engine ? 16 : fe.horse ? 11 : 5, 0, 0, Math.PI * 2); ctx.fill();
+    let sp;
+    if (fe.horse) sp = horseSprite(fe.horse, "walk", Math.floor(fe.t * 10));
+    else if (fe.engine) sp = fe.type === "siegeCatapult" ? catapultSprite(Math.floor(fe.t * 6), 0, false) : fe.type === "siegeTower" ? siegeTowerSprite(Math.floor(fe.t * 6), 0, false) : ramSprite(Math.floor(fe.t * 6), false, 1.3);
+    else sp = figureSprite(figureKey("enemy", fe.type, true), 0, "walk", Math.floor(fe.t * 12));
+    cache.blit(ctx, sp, fe.x, fe.y, fe.face < 0, fe.alpha);
   }
 
   /* ------------------------------ intro ------------------------------ */
@@ -912,9 +1188,10 @@ export function createRenderer() {
     setSelection(patch) { sel = { ...sel, ...patch }; },
     get selection() { return sel; },
     startIntro, skipIntro() { intro = null; }, get intro() { return intro; },
+    startOutro, skipOutro() { outro = null; }, get outro() { return outro; },
     fx, cache, drawIcon,
     get fit() { return fit; },
-    reset() { fx.clear(); trails.clear(); warnings.clear(); intro = null; gateShake = 0; heroMark = null; sel = { plot: -1, hover: -1, range: null, units: null, squad: false, hoverUnit: null, target: null }; },
+    reset() { fx.clear(); trails.clear(); warnings.clear(); catMarks.clear(); bossMarks.length = 0; openings.clear(); light = 0; intro = null; outro = null; gateShake = 0; heroMark = null; sel = { plot: -1, hover: -1, range: null, units: null, squad: false, hoverUnit: null, target: null }; },
     stats() { return { ...cache.stats(), particles: fx.count }; },
   };
 }

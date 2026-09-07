@@ -551,7 +551,8 @@
 }
 .cdCmd.is-squad { border-color: #5fb4ee; box-shadow: 0 0 0 1px rgba(95, 180, 238, 0.35), 0 10px 28px rgba(0, 0, 0, 0.5); }
 .cdCmdHead { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.cdCmdHead strong { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 0.06em; color: var(--cd-gold-2); margin-right: auto; }
+.cdCmdHead strong { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; letter-spacing: 0.06em; color: var(--cd-gold-2); margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cdCmdHead strong > em + * { min-width: 0; }
 .cdCmd.is-squad .cdCmdHead strong { color: #bfe6ff; }
 .cdCmdBadge { font: 700 10px var(--cd-serif); font-style: normal; letter-spacing: 0.16em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: #5fb4ee; color: #0e2233; }
 .cdCmdMini { min-height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--cd-line); background: rgba(0, 0, 0, 0.35); color: var(--cd-ink); font: 600 11px var(--cd-serif); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
@@ -574,10 +575,12 @@
 .cdCmdAbility small { font-size: 10px; color: var(--cd-gold-2); }
 @media (max-width: 480px) {
   .cdCmd { bottom: 132px; padding: 6px 8px 8px; }
-  .cdCmdRow { grid-template-columns: repeat(3, 1fr); }
-  .cdCmdRow button { min-height: 46px; }
-  .cdCmdAbility { grid-column: span 3; }
+  /* six columns: orders take two each (three a row); formation and ability take three each and share a row */
+  .cdCmdRow { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  .cdCmdRow button { min-height: 44px; grid-column: span 2; font-size: 9.5px; }
+  .cdCmdRow button.cdCmdAbility, .cdCmdRow button.cdCmdFormation { grid-column: span 3; min-height: 40px; }
   .cdCmdHead strong { font-size: 12px; }
+  .cdCmdHead { margin-bottom: 5px; }
 }
 
 /* locked powers */
@@ -639,3 +642,134 @@
 .cdUpgrade strong { font-size: 13px; }
 .cdUpgrade span { font-size: 12px; color: var(--cd-dim); }
 .cdUpgrade .cdBtn { min-height: 36px; padding: 0 12px; font-size: 12px; }
+
+
+/* ------------------------------ Stage III: the siege ------------------------------ */
+
+.cdBoss--final { background: rgba(50, 8, 8, 0.9); border-color: rgba(255, 90, 70, 0.6); }
+.cdBoss--final.is-raged { border-color: #ff5a3c; box-shadow: 0 0 0 1px rgba(255, 90, 60, 0.4), 0 0 24px rgba(255, 60, 40, 0.35); animation: cdRagePulse 0.9s ease-in-out infinite alternate; }
+@keyframes cdRagePulse { from { box-shadow: 0 0 0 1px rgba(255, 90, 60, 0.3), 0 0 14px rgba(255, 60, 40, 0.25); } to { box-shadow: 0 0 0 2px rgba(255, 90, 60, 0.6), 0 0 30px rgba(255, 60, 40, 0.5); } }
+.cdBoss--final .cdBar--boss { width: min(380px, 54vw); height: 11px; }
+.cdBossPhase { display: block; font: 600 10px var(--cd-body); letter-spacing: 0.12em; color: rgba(255, 200, 180, 0.85); margin-top: 2px; font-style: normal; }
+.cdStat--wall { gap: 6px; }
+.cdStat--wall .cdBar--wall { width: 64px; height: 7px; }
+.cdBarFill.is-wall { background: linear-gradient(90deg, #b8b0a0, #d9d2c2); }
+.cdStat--wall.is-down .cdWaveLabel { color: #ff9c7a; text-decoration: line-through; }
+.cdCrownBadge { position: absolute; top: 3px; right: 5px; font-size: 11px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.cdCmdFormation { grid-column: span 2; }
+.cdCmdFormation.is-on { border-color: #bfe0ff !important; box-shadow: 0 0 0 2px rgba(191, 224, 255, 0.35); }
+/* eight power tiles on the siege: two rows, and the command bar sits above them */
+.cdBottomRight.is-many { flex-wrap: wrap; justify-content: flex-end; max-width: 296px; row-gap: 6px; }
+.cdCmd.is-lifted { bottom: 140px; }
+@media (max-width: 480px) {
+  .cdBottomRight.is-many { max-width: 228px; }
+  .cdCmd.is-lifted { bottom: 176px; }
+}
+/* Realm conquered */
+.cdCard--conquered { border-color: var(--cd-gold); box-shadow: 0 0 0 1px rgba(217, 168, 58, 0.35), 0 24px 60px rgba(0, 0, 0, 0.6); }
+.cdCard--conquered h3 { font-size: clamp(30px, 6vw, 44px); letter-spacing: 0.14em; color: var(--cd-gold-2); text-shadow: 0 0 18px rgba(241, 210, 122, 0.45), 0 2px 0 rgba(0, 0, 0, 0.5); }
+.cdConquered { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 12px; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.28); border: 1px solid var(--cd-line); text-align: left; }
+.cdConqueredRow { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.cdConqueredRow span { color: var(--cd-dim); letter-spacing: 0.06em; text-transform: uppercase; font-size: 11px; }
+.cdConqueredRow strong { color: var(--cd-gold-2); text-align: right; }
+.cdBtn--soon { flex-direction: column; gap: 2px; opacity: 0.75; cursor: default; border-style: dashed; }
+.cdBtn--soon small { font: 500 11px var(--cd-body); text-transform: none; letter-spacing: 0.02em; color: var(--cd-dim); }
+.cdRealmDone { display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--cd-gold); background: linear-gradient(180deg, rgba(60, 46, 20, 0.9), rgba(30, 24, 14, 0.9)); }
+.cdRealmDone strong { font: 700 22px var(--cd-serif); letter-spacing: 0.16em; text-transform: uppercase; color: var(--cd-gold-2); }
+.cdRealmDone span { font-size: 13px; color: var(--cd-dim); }
+.cdStage--next { border-style: dashed; }
+
+/* ------------------------------ banners never block the controls ------------------------------ */
+/* banners cannot be tapped through anyway (pointer-events: none); these rules keep them
+   from sitting on top of the boss bar or the soldier command bar */
+.cd.has-boss .cdBanners { top: 110px; }
+.cd.is-cmd .cdBanners { z-index: 5; }                    /* below the command bar (6) while a squad is selected */
+@media (max-width: 480px), (max-height: 560px) {
+  .cdBanners { top: 52px; gap: 4px; width: min(94%, 420px); }
+  .cdBanner { padding: 5px 12px; }
+  .cdBanner strong { font-size: 13px; letter-spacing: 0.1em; }
+  .cdBanner--waveBig strong, .cdBanner--final strong { font-size: 17px; }
+  .cdBanner span { font-size: 11px; }
+  .cdBanner:nth-child(n+3) { display: none; }            /* two cards at most on a small screen */
+  .cd.has-boss .cdBanners { top: 100px; }
+  .cd.is-cmd .cdBanner:nth-child(n+2) { display: none; }  /* one compact card while the command bar is open */
+  .cd.is-cmd .cdBanner { transform: scale(0.92); transform-origin: top center; }
+  .cdCmd.is-lifted { bottom: 140px; }
+}
+
+/* Short screens (phone landscape, tablet landscape in the page): the command bar
+   anchors top-left under the HUD as a compact two-row panel, clear of the hero
+   card, the power tiles and the boss bar; banners step aside while it is open. */
+@media (max-height: 560px) {
+  /* the top HUD wraps to two rows here, so everything hangs below 96px */
+  .cdCmd, .cdCmd.is-lifted { top: 96px; bottom: auto; left: 10px; transform: none; width: min(350px, 52%); padding: 4px 8px 6px; }
+  .cdCmdHead { margin-bottom: 4px; }
+  .cdCmdHead strong { font-size: 11px; }
+  .cdCmdMini { min-height: 24px; padding: 0 8px; font-size: 9.5px; }
+  .cdCmdRow { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .cdCmdRow button { min-height: 34px; grid-column: auto; font-size: 8.5px; letter-spacing: 0.03em; padding: 2px 1px; gap: 1px; }
+  .cdCmdRow button i { font-size: 13px; }
+  .cdCmdRow button.cdCmdAbility, .cdCmdRow button.cdCmdFormation { grid-column: auto; min-height: 34px; }
+  /* the boss bar moves to the right, level with the command bar, clear of the wrapped HUD */
+  .cdBoss { left: auto; right: 10px; top: 96px; transform: none; width: min(300px, 44%); padding: 5px 10px; font-size: 11px; }
+  .cdBoss .cdBar--boss, .cdBoss--final .cdBar--boss { width: 100%; height: 8px; }
+  .cd.is-cmd .cdBanners { display: none; }
+}
+
+/* phones: the boss bar drops under the two-row HUD, banners drop under the boss bar,
+   and while a squad is selected with a boss on screen the banners wait */
+@media (max-width: 480px) {
+  .cdBoss { top: 80px; padding: 4px 10px; font-size: 10px; letter-spacing: 0.12em; }
+  .cdBoss .cdBar--boss, .cdBoss--final .cdBar--boss { width: min(240px, 60vw); height: 7px; }
+  .cdBossPhase { font-size: 9px; }
+  .cd.has-boss .cdBanners { top: 128px; }
+  .cd.is-cmd.has-boss .cdBanners { display: none; }
+}
+/* shorter viewports (tablet landscape in the page): one card at a time while the bar is open */
+@media (max-height: 780px) {
+  .cd.is-cmd .cdBanner:nth-child(n+2) { display: none; }
+}
+
+/* short screens again: banners sit left under the HUD, one at a time, clear of the
+   boss bar on the right and the power tiles below it */
+@media (max-height: 560px) {
+  .cdBanners, .cd.has-boss .cdBanners { left: 10px; transform: none; width: min(340px, 50%); top: 100px; align-items: flex-start; }
+  .cd.has-boss .cdBanners { top: 142px; }
+  .cdBanner:nth-child(n+2) { display: none; }
+}
+
+/* boss bar: phase pips, the attack window, the roar */
+.cdBossPips { display: inline-flex; gap: 3px; margin-right: 8px; vertical-align: middle; }
+.cdBossPips b { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255, 160, 140, 0.7); background: transparent; display: inline-block; }
+.cdBossPips b.is-on { background: #ff6a50; box-shadow: 0 0 6px rgba(255, 90, 60, 0.7); }
+.cdBoss.is-open { border-color: var(--cd-gold-2); background: rgba(70, 50, 12, 0.92); box-shadow: 0 0 0 1px rgba(241, 210, 122, 0.5), 0 0 22px rgba(241, 210, 122, 0.35); }
+.cdBoss.is-open .cdBossPhase { color: var(--cd-gold-2); }
+.cdBoss.is-open .cdBarFill.is-boss { filter: brightness(1.4); }
+.cdBoss.is-roar { border-color: #ff3b1e; }
+
+.cdIntro--outro .cdIntroText h3 { color: var(--cd-gold-2); text-shadow: 0 0 18px rgba(241, 210, 122, 0.45), 0 2px 0 rgba(0, 0, 0, 0.5); }
+
+/* overlays scroll when a card is taller than a small box (phone landscape, tiny windows),
+   so Main menu and Restart are always reachable */
+.cdOverlay { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+@media (max-height: 560px), (max-width: 480px) {
+  .cdOverlay:not(.cdOverlay--page):not(.cdOverlay--menu) { align-content: start; align-items: start; padding-top: 10px; padding-bottom: 10px; }
+  .cdCard { padding: 12px 14px 14px; }
+  .cdCard h3 { margin-bottom: 6px; }
+  .cdCard--result .cdResultGrid { gap: 6px; }
+  .cdCard--result .cdResultGrid strong { font-size: 18px; }
+  .cdStars--big { font-size: 34px; margin: 2px 0 0; }
+  .cdConquered { margin: 6px 0 8px; padding: 8px 10px; }
+  .cdCol { gap: 6px; }
+}
+
+/* eight power tiles (the siege) take two rows, so the touch tower sheet sits higher */
+.cd.has-many .cdSheet--bottom { bottom: 150px; max-height: calc(100% - 210px); }
+.cd.is-full.has-many .cdSheet--bottom { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 480px) {
+  .cd.has-many .cdSheet--bottom { bottom: 134px; max-height: calc(100% - 200px); }
+  .cd.is-full.has-many .cdSheet--bottom { bottom: calc(134px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-height: 560px) {
+  .cd.has-many .cdSheet--bottom, .cd.is-full.has-many .cdSheet--bottom { bottom: auto; top: 54px; max-height: calc(100% - 200px); }
+}

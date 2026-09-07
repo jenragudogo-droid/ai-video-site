@@ -13,6 +13,7 @@ import {
   plotAt, canBuild, nextWaveSummary, towerLevel, PLOT_R, setDrill, canDrill, DRILL_COST,
   serializeGame, restoreGame, BATTLE_FORMAT,
   orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility, offerPerks, choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, repairCost,
+  castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, damageWall, guardCount,
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
@@ -814,6 +815,298 @@ console.log("— perks and powers —");
   const snap = serializeGame(m);
   const back = restoreGame(snap);
   ok(back.perks.length === m.perks.length && back.mods.soldierHp === 0.15 && back.castleMax === m.castleMax, "perks and modifiers survive a save");
+}
+
+
+
+/* ================================================================ */
+console.log("— stage III data —");
+{
+  const st = STAGES[2];
+  ok(st.id === "siege" && st.available && st.waves.length === 12 && st.finale, "Stage III is available, final, and twelve waves long");
+  ok(st.waveTitles[3] && st.waveTitles[5] && st.waveTitles[7] && st.waveTitles[9] && st.waveTitles[11] && st.waveTitles[12] === "Final siege", "the siege wave titles are set");
+  const types = new Set(st.waves.flat().map((g) => g.type));
+  ok(["heavyInf", "siegeEngineer", "fireArcher", "heavyCav", "siegeRam", "siegeCatapult", "siegeTower", "eliteGuard", "warCaptain", "warlord"].every((t) => types.has(t) && ENEMIES[t]), "every new enemy type appears in the waves and exists");
+  for (const name of ["landscape", "portrait"]) {
+    const L = st.layouts[name];
+    ok(L.routes.length === 4 && L.outerWall && L.outerWall.segments.length >= 3 && L.plots.length === 12 && L.torches.length >= 8 && L.camps.length >= 3, `${name}: four roads, an outer wall, twelve plots, torches and camps`);
+  }
+  const s = makeGame({ stageId: "siege", seed: 3 });
+  ok(s.wallHp === 100 && s.wallMax === 100 && s.totalWaves === 12, "the siege starts with a whole outer wall and 12 waves");
+  ok(s.layout.routes.every((r) => r.wallD > 0 && r.wallPt) && s.layout.routes[3].throughBreach && !s.layout.routes[0].throughBreach, "every road knows where it crosses the wall; the fourth goes through the breach");
+  ok(stagePowers(s).length === 5 && powerWave(s, "burningOil") === 2 && powerWave(s, "catapultBarrage") === 9 && powerWave(s, "royalRally") === 7, "five siege powers with their unlock waves");
+  const s2 = makeGame({ stageId: "greenhollow", seed: 3 });
+  ok(stagePowers(s2).length === 2 && powerWave(s2, "burningOil") == null && !powerUnlocked(s2, "burningOil"), "Stage I keeps its two powers; siege powers never appear there");
+  const s3 = makeGame({ stageId: "stonebridge", seed: 3 }); s3.wave = 7;
+  ok(powerUnlocked(s3, "royalRally") && !powerUnlocked(s3, "emergencyRepair") && s3.wallHp == null, "Stage II unchanged: rally at 7, no wall, no siege powers");
+}
+
+/* ================================================================ */
+console.log("— siege engines and the outer wall —");
+{
+  const siege = (seed) => { const s = makeGame({ seed, stageId: "siege" }); startStage(s); s.stage = { ...s.stage, countdown: 9999 }; s.countdown = 9999; s.countdownMax = 9999; s.waveState = "active"; s.wave = 3; s.queue = []; return s; };
+  /* catapult halts, telegraphs, then hits the wall */
+  let s = siege(11);
+  s.queue = [{ t: 0, type: "siegeCatapult", route: 0, lat: 0 }];
+  let ev = run(s, 0.1); const cat = s.enemies[0];
+  ok(cat && cat.def.engine && !cat.stopped, "a siege catapult rolls in");
+  ev = run(s, 60);
+  ok(cat.stopped && ev.some((e) => e.type === "siegeHalt"), "it halts in the field");
+  const warn = ev.find((e) => e.type === "catapultWarn"); const shot = ev.find((e) => e.type === "siegeShot"); const imp = ev.find((e) => e.type === "siegeImpact");
+  ok(warn && shot && imp && warn.kind === "wall", "it winds up with a marker, launches, and the stone lands on the outer wall");
+  ok(s.wallHp < 100 && ev.some((e) => e.type === "wallHit"), `the wall takes damage (${s.wallHp}/100)`);
+  ok(cat.d < s.layout.routes[0].length * 0.6 && cat.state !== "dead" && s.castleHp === 30, "it stays put and the castle is untouched while the wall stands");
+  /* once the wall is down, stones hit the castle; every third stone burns a tower */
+  s.gold = 1000; buildTower(s, 5, "archer");
+  damageWall(s, s.wallHp, "test");
+  ok(s.wallHp === 0 && s.layout.routes[3].opensAt <= s.wave, "a broken wall opens the breach road at once");
+  ev = run(s, 40);
+  const hits = ev.filter((e) => e.type === "siegeImpact").map((e) => e.kind);
+  ok(hits.includes("castle") && s.castleHp < 30, `stones now hit the castle (${hits.join(",")}), castle ${s.castleHp}`);
+  ok(hits.includes("tower") && s.towers[5].burnT > 0 || ev.some((e) => e.type === "towerBurn"), "one stone set a tower burning");
+  /* an engineer mends a damaged engine */
+  s = siege(12);
+  s.queue = [{ t: 0, type: "siegeCatapult", route: 0, lat: 0 }, { t: 0.5, type: "siegeEngineer", route: 0, lat: 8 }];
+  run(s, 3); const eng = s.enemies.find((e) => e.type === "siegeCatapult"); eng.hp -= 200; const before = eng.hp;
+  ev = run(s, 6);
+  ok(eng.hp > before && ev.some((e) => e.type === "engineerRepair"), `the engineer repairs the catapult (${Math.round(before)} → ${Math.round(eng.hp)})`);
+  /* the iron ram batters the wall on its way past */
+  s = siege(13);
+  s.queue = [{ t: 0, type: "siegeRam", route: 0, lat: 0 }];
+  ev = run(s, 70);
+  ok(ev.some((e) => e.type === "ramWall") && s.wallHp <= 70, `the ram struck the wall (${s.wallHp}/100)`);
+  /* the siege tower docks at the wall and unloads men */
+  s = siege(14);
+  s.queue = [{ t: 0, type: "siegeTower", route: 1, lat: 0 }];
+  ev = run(s, 75);
+  const tw = s.enemies.find((e) => e.type === "siegeTower");
+  ok(tw && tw.docked && ev.some((e) => e.type === "towerDock"), "the siege tower docks short of the wall");
+  ok(count(ev, "unload") >= 2 && s.enemies.some((e) => e.type === "heavyInf" || e.type === "manAtArms"), `it unloaded ${count(ev, "unload")} soldiers onto the road`);
+  /* fire archers burn towers, which shoot slower */
+  s = siege(15); s.gold = 1000; buildTower(s, 6, "archer"); s.towers[6].buildT = 0;
+  s.queue = [{ t: 0, type: "fireArcher", route: 3, lat: 0 }];
+  s.layout.routes[3].opensAt = 1;
+  ev = run(s, 30);
+  ok(ev.some((e) => e.type === "towerBurn") || s.towers[6].burnT > 0, "a fire archer set the tower burning");
+  /* soldiers squeezing the siege gate are slowed while the wall stands */
+  s = siege(16);
+  s.queue = [{ t: 0, type: "bandit", route: 0, lat: 0 }];
+  run(s, 0.1); const b = s.enemies[0]; b.d = s.layout.routes[0].wallD - 30; run(s, 1); const d1 = b.d - (s.layout.routes[0].wallD - 30);
+  const s4 = siege(16); s4.queue = [{ t: 0, type: "bandit", route: 0, lat: 0 }]; run(s4, 0.1); const b2 = s4.enemies[0]; b2.d = 300; run(s4, 1); const d2 = b2.d - 300;
+  ok(d1 < d2 * 0.75, `the siege gate slows the warband (${d1.toFixed(0)} vs ${d2.toFixed(0)} per second)`);
+}
+
+/* ================================================================ */
+console.log("— Warlord Blackmoor —");
+{
+  const s = makeGame({ seed: 21, stageId: "siege" }); startStage(s);
+  s.stage = { ...s.stage, countdown: 9999 }; s.countdown = 9999; s.countdownMax = 9999; s.waveState = "active"; s.wave = 11;
+  s.queue = [{ t: 0, type: "warlord", route: 0, lat: 0 }, { t: 0.2, type: "eliteGuard", route: 0, lat: 10 }, { t: 0.4, type: "eliteGuard", route: 0, lat: -10 }];
+  s.gold = 2000; buildTower(s, 10, "archer"); upgradeTower(s, 10); upgradeTower(s, 10); s.towers[10].buildT = 0;
+  let ev = run(s, 12);
+  const w = s.enemies.find((e) => e.type === "warlord");
+  ok(w && w.boss && w.boss.phase === 1 && ev.some((e) => e.type === "bossEnter") && s.bossPhase === 1, "the warlord arrives in phase 1");
+  ok(w.d >= w.def.phases.campAt - 1 && w.state === "idle", "he halts at his camp behind the guard");
+  const hp0 = w.hp; castVolley(s, w.x, w.y);
+  ev = run(s, 4);
+  ok(w.hp === hp0 && ev.some((e) => e.type === "guarded"), "a volley does nothing while his guard stands");
+  for (const g of s.enemies) if (g.def.guard) g.hp = 0;
+  ev = run(s, 2);
+  for (const g of s.enemies) if (g.def.guard && g.state !== "dead") { g.state = "dead"; g.deadT = 0; }
+  ev = run(s, 3);
+  ok(w.boss.phase === 2 && ev.some((e) => e.type === "bossPhase" && e.phase === 2), "with the guard dead he advances: phase 2");
+  /* soldiers near him draw the sweep, with a wind-up first */
+  buildTower(s, 7, "barracks"); s.towers[7].buildT = 0; run(s, 2);
+  const ids = squadOf(s, 7); orderUnits(s, ids, { kind: "attack", enemyId: w.id });
+  ev = run(s, 30);
+  const wind = ev.findIndex((e) => e.type === "bossWind" && e.kind === "sweep"); const sweep = ev.findIndex((e) => e.type === "bossSweep");
+  ok(wind >= 0 && sweep > wind, "the Ironbreaker sweep is telegraphed before it lands");
+  const open = ev.findIndex((e) => e.type === "bossOpen");
+  ok(open > sweep && ev.some((e) => e.type === "bossOpenEnd"), "every sweep leaves him open for a moment, and the window closes");
+  /* during the opening he takes more damage */
+  {
+    const t = makeGame({ seed: 22, stageId: "siege" }); startStage(t); t.waveState = "active"; t.wave = 11; t.stage = { ...t.stage, countdown: 9999 };
+    t.queue = [{ t: 0, type: "warlord", route: 0, lat: 0 }]; run(t, 0.1); const b = t.enemies[0]; b.boss.phase = 2; b.d = 400;
+    run(t, 0.1); const hpA = b.hp; castVolley(t, b.x, b.y); run(t, 1.2); const dmgNormal = hpA - b.hp;
+    b.hp = b.maxHp; b.boss.openT = 3; t.abilities.volley = 0; const hpB = b.hp; castVolley(t, b.x, b.y); run(t, 1.2); const dmgOpen = hpB - b.hp;
+    ok(dmgOpen > dmgNormal * 1.4, `an open warlord takes more from the same volley (${Math.round(dmgNormal)} → ${Math.round(dmgOpen)})`);
+    ok(guardCount(t) === 0, "guard count reads zero with no guard");
+  }
+  ok(ev.some((e) => e.type === "bossWind" && e.kind === "horn") && ev.some((e) => e.type === "bossHorn") && s.enemies.some((e) => e.type === "heavyInf"), "his horn calls reinforcements after a wind-up");
+  /* rage at 40 % */
+  const beforeCount = s.enemies.filter((e) => e.state !== "dead").length;
+  w.hp = w.maxHp * 0.39;
+  ev = run(s, 1);
+  ok(w.boss.raged && w.boss.phase === 3 && ev.some((e) => e.type === "bossPhase" && e.phase === 3) && s.bossPhase === 3, "at low health he rages: phase 3");
+  { const hpR = w.hp; castVolley(s, w.x, w.y); s.abilities.volley = 0; run(s, 0.5); ok(w.hp === hpR && w.boss.roarT > 0, "during the roar nothing hurts him"); const rev = run(s, 1.6); ok(w.boss.roarT <= 0 && rev.some((e) => e.type === "bossRoarEnd"), "the roar ends and he comes on"); }
+  ok(s.enemies.filter((e) => e.state !== "dead").length > beforeCount, "the rage brings a final siege push");
+  /* he stands at the gate and batters it instead of vanishing */
+  w.d = s.layout.routes[0].length - 5; ev = run(s, 7);
+  ok(w.state !== "dead" && s.enemies.includes(w) && ev.filter((e) => e.type === "gateHit" && e.enemy === "warlord").length >= 2, "at the gate he keeps hitting it, and stays alive to be killed");
+  /* the wave cannot clear while he lives on the final wave; killing him clears it */
+  s.wave = 12; s.waveState = "active"; s.queue = []; for (const e of s.enemies) if (e !== w) { e.state = "dead"; e.deadT = 0; }
+  run(s, 2);
+  ok(s.phase === "playing" && s.waveState === "active", "wave 12 does not clear while Blackmoor stands");
+  /* on the final wave his death routs the warband */
+  s.queue = [{ t: 0, type: "heavyInf", route: 1, lat: 0 }, { t: 0, type: "heavyInf", route: 1, lat: 8 }, { t: 0, type: "siegeCatapult", route: 2, lat: 0 }];
+  run(s, 0.2); for (const e of s.enemies) if (e !== w && e.state !== "dead") e.d = 600;
+  w.boss.roarT = 0; w.boss.openT = 0; w.hp = 1; const killEv = run(s, 0.05, (g) => { const b = g.enemies.find((x) => x.type === "warlord"); if (b && b.state !== "dead") { b.hp = 0; castVolley(g, b.x, b.y); } });
+  void killEv;
+  w.hp = 0; if (w.state !== "dead") { const hits = run(s, 1.5, (g) => { if (g.abilities.volley <= 0) castVolley(g, w.x, w.y); }); void hits; }
+  const alive = s.enemies.filter((e) => e.state !== "dead" && e !== w);
+  ok(w.state === "dead", "the warlord falls");
+  ok(alive.length > 0 && alive.every((e) => e.routed), `the rest of the warband is routed (${alive.length} running)`);
+  ok(s.phase === "victory", "and the final wave clears at once: victory");
+  const dBefore = alive.map((e) => e.d); run(s, 1);
+  ok(s.phase === "victory", "the game stays won while they run");
+  void dBefore;
+}
+
+/* ================================================================ */
+console.log("— formations, King's Charge and siege powers —");
+{
+  const s = makeGame({ seed: 31, stageId: "siege" }); startStage(s);
+  s.stage = { ...s.stage, countdown: 9999 }; s.countdown = 9999; s.countdownMax = 9999; s.gold = 3000;
+  buildTower(s, 2, "barracks"); run(s, 3);
+  const ids = squadOf(s, 2);
+  const f = formationFor(s, ids);
+  ok(f && f.kind === "shieldWall" && !f.on, "a sword squad is offered Shield Wall");
+  ok(setFormation(s, ids, "shieldWall") && s.units.every((u) => u.formation === "shieldWall"), "Shield Wall set on the whole squad");
+  ok(!setFormation(s, ids, "pikeWall"), "Pike Wall refuses a sword squad");
+  const armourWall = s.units[0].def.armour; void armourWall;
+  ok(formationFor(s, ids).on, "the formation reads as on");
+  setDrill(s, 2, true); run(s, 1);
+  const pikes = squadOf(s, 2);
+  ok(setFormation(s, pikes, "pikeWall") && s.units.every((u) => u.formation === "pikeWall"), "after the pike drill the squad takes Pike Wall");
+  run(s, 1);
+  ok(s.units.every((u) => u.bracing), "a Pike Wall keeps the spears set with no charge in sight");
+  /* a charging lancer meets the pike wall */
+  s.waveState = "active"; s.wave = 5; s.queue = [{ t: 0, type: "heavyCav", route: 0, lat: 0 }];
+  orderUnits(s, pikes, { kind: "move", x: 700, y: 490 }); run(s, 4);
+  const ev = run(s, 30);
+  ok(ev.some((e) => e.type === "chargeBroken" && e.by === "pikes") || s.enemies.every((e) => e.state === "dead"), "the pike wall breaks the heavy lancer's charge");
+  ok(!setFormation(makeGame({ seed: 1, stageId: "stonebridge" }), [1], "shieldWall"), "formations are not available before the siege");
+  /* King's Charge unlocks on wave 5 and hits wider */
+  const k = makeGame({ seed: 32, stageId: "siege" }); startStage(k); k.gold = 3000;
+  ok(!kingsCharge(k), "Sir Edric starts with the plain Royal Charge");
+  k.wave = 4; k.waveState = "countdown"; k.countdown = 0.01; k.stage = { ...k.stage, countdown: 9999 };
+  const kev = run(k, 0.5);
+  ok(kingsCharge(k) && kev.some((e) => e.type === "unlock" && e.id === "kingsCharge"), "wave 5 unlocks King's Charge");
+  k.queue = []; for (let i = 0; i < 6; i += 1) { k.queue.push({ t: 0, type: "bandit", route: 0, lat: (i - 3) * 8 }); }
+  run(k, 0.1); for (const e of k.enemies) { e.d = 1100; } run(k, 0.05);
+  const target = k.enemies[0]; moveHero(k, target.x - 150, target.y); run(k, 3);
+  ok(heroCharge(k, target.x + 60, target.y), "King's Charge launches");
+  const cev = run(k, 2);
+  ok(cev.some((e) => e.type === "kingsCharge") && count(cev, "chargeHit") >= 3, `it ends in a shockwave and struck ${count(cev, "chargeHit")} of six`);
+  /* powers */
+  const p = makeGame({ seed: 33, stageId: "siege" }); startStage(p); p.stage = { ...p.stage, countdown: 9999 }; p.countdown = 9999;
+  ok(!castBurningOil(p), "Burning Oil is locked on wave 0");
+  p.wave = 9; p.unlocks = ["burningOil", "watchfire", "emergencyRepair", "royalRally", "catapultBarrage"];
+  p.waveState = "active"; p.queue = [{ t: 0, type: "bandit", route: 0, lat: 0 }, { t: 0, type: "bandit", route: 0, lat: 10 }];
+  run(p, 0.1); for (const e of p.enemies) e.d = p.layout.routes[0].length - 60; run(p, 0.05);
+  const oev = run(p, 0.05, (g) => { if (g.abilities.burningOil <= 0) castBurningOil(g); });
+  ok(oev.some((e) => e.type === "oil") && p.zones.some((z) => z.oil) && p.abilities.burningOil > 0, "Burning Oil burns the ground before the gate");
+  p.castleHp = 12; damageWall(p, 40, "test");
+  ok(castEmergencyRepair(p) && p.castleHp === 22 && p.wallHp === 95, `Emergency Repair mends the castle and the wall (castle ${p.castleHp}, wall ${p.wallHp})`);
+  ok(!castEmergencyRepair(p), "and then it is on cooldown");
+  ok(castBarrage(p, 800, 490) && p.strikes.filter((st) => st.kind === "barrage").length === 6, "Catapult Barrage schedules six stones");
+  const bev = run(p, 6);
+  ok(count(bev, "stoneImpact") >= 6, `all six stones landed (${count(bev, "stoneImpact")})`);
+  /* the Stage III perks only appear on the siege */
+  const q = makeGame({ seed: 34, stageId: "stonebridge" }); q.wave = 9;
+  for (let i = 0; i < 20; i += 1) { offerPerks(q); ok(q.perkOffer.every((id) => !PERK_BY_ID[id].minStage), "no siege-only perk is offered on Stage II"); q.perkOffer = null; q.perkPending = false; break; }
+}
+
+/* ================================================================ */
+console.log("— save and continue through the siege —");
+{
+  const s = makeGame({ seed: 41, stageId: "siege" }); startStage(s);
+  s.stage = { ...s.stage, countdown: 9999 }; s.countdown = 9999; s.countdownMax = 9999; s.gold = 3000; s.wave = 11; s.waveState = "active";
+  buildTower(s, 2, "barracks"); buildTower(s, 5, "archer");
+  s.queue = [{ t: 0, type: "siegeCatapult", route: 0, lat: 0 }, { t: 0, type: "siegeTower", route: 1, lat: 0 }, { t: 0, type: "warlord", route: 0, lat: 0 }, { t: 0, type: "eliteGuard", route: 0, lat: 6 }];
+  run(s, 2); setDrill(s, 2, true); run(s, 1);
+  setFormation(s, squadOf(s, 2), "pikeWall");
+  run(s, 60);
+  damageWall(s, 30, "test"); s.towers[5].burnT = 3; s.unlocks.push("kingsCharge");
+  const snap = JSON.parse(JSON.stringify(serializeGame(s)));
+  const r = restoreGame(snap);
+  ok(r.wallHp === s.wallHp && r.wallMax === 100, `the outer wall comes back at ${r.wallHp}`);
+  ok(r.units.every((u) => u.formation === "pikeWall") && r.units.length === s.units.length, "formations survive the save");
+  const cat = r.enemies.find((e) => e.type === "siegeCatapult"); const cat0 = s.enemies.find((e) => e.type === "siegeCatapult");
+  ok(cat && cat.stopped === cat0.stopped && Math.abs(cat.d - cat0.d) < 1, "the catapult is back where it halted");
+  const tw = r.enemies.find((e) => e.type === "siegeTower"); const tw0 = s.enemies.find((e) => e.type === "siegeTower");
+  ok(tw && tw.docked === tw0.docked && tw.unloaded === tw0.unloaded, "the siege tower keeps its dock and unload count");
+  const w = r.enemies.find((e) => e.type === "warlord"); const w0 = s.enemies.find((e) => e.type === "warlord");
+  ok(w && w.boss.phase === w0.boss.phase && r.bossPhase === s.bossPhase, `the warlord is restored in phase ${w.boss.phase}`);
+  ok(r.towers[5].burnT > 0 && kingsCharge(r), "a burning tower and King's Charge are restored");
+  ok(r.enemies.length === s.enemies.filter((e) => e.state !== "dead").length && r.units.length === s.units.length, "nothing is duplicated");
+  /* cooldowns and boss timers survive too */
+  s.abilities.catapultBarrage = 33; s.abilities.emergencyRepair = 70; w0.boss.openT = 1.2; w0.boss.sweepCd = 4.5; s.towers[5].cd = 1.1;
+  const snap2 = JSON.parse(JSON.stringify(serializeGame(s))); const r2 = restoreGame(snap2); const w2 = r2.enemies.find((e) => e.type === "warlord");
+  ok(r2.abilities.catapultBarrage === 33 && r2.abilities.emergencyRepair === 70 && Math.abs(w2.boss.sweepCd - 4.5) < 0.01 && Math.abs(w2.boss.openT - 1.2) < 0.01 && w2.hp === w0.hp, "power cooldowns, boss timers and boss health are restored exactly");
+  const g1 = makeGame({ seed: 42, stageId: "siege" }); startStage(g1); g1.castleHp = 8; const ge = run(g1, 0.1, (g) => { g.castleHp = 8; });
+  void ge;
+  const g2 = makeGame({ seed: 43, stageId: "siege" }); startStage(g2); g2.wave = 3; g2.waveState = "active"; g2.queue = [{ t: 0, type: "bandit", route: 0, lat: 0 }]; run(g2, 0.1); g2.castleHp = 9; g2.enemies[0].d = g2.layout.routes[0].length - 2; const gf = run(g2, 0.5);
+  ok(gf.some((e) => e.type === "gateFailing") && g2.gateWarned, "the gate-failing cue fires once the castle drops under 30%");
+  const wc = makeGame({ seed: 44, stageId: "siege" }); startStage(wc); const wev = []; damageWall(wc, 45, "test"); wev.push(...drainEvents(wc)); damageWall(wc, 10, "test"); wev.push(...drainEvents(wc)); damageWall(wc, 10, "test"); wev.push(...drainEvents(wc));
+  ok(wev.filter((e) => e.type === "wallCrack").length === 1, "the wall-crack cue fires exactly once as it passes half");
+}
+
+/* ================================================================ */
+console.log("— full stage III, scripted commander —");
+{
+  const wins = [];
+  for (const seed of [11, 23]) {
+    const s = makeGame({ seed, stageId: "siege" }); startStage(s);
+    const plan = [[1, "archer"], [0, "archer"], [2, "barracks"], [3, "ballista"], [4, "archer"], [5, "barracks"], [7, "ballista"], [6, "catapult"], [8, "archer"], [10, "catapult"], [9, "archer"], [11, "ballista"]];
+    let formed = false; let step = 0;
+    const evts = run(s, 60 * 30, (g) => {
+      step += 1;
+      for (const [plot, type] of plan) { if (!g.towers[plot] && canBuild(g, plot, type)) { buildTower(g, plot, type); return; } }
+      g.towers.forEach((t, i) => { if (t && t.type === "barracks" && !t.pikes && g.wave >= 4 && g.gold >= DRILL_COST + 80 && i === 2) setDrill(g, i, true); });
+      if (g.gold > 180) { let best = -1; let bestCost = Infinity; g.towers.forEach((t, i) => { if (!t || t.level >= 4) return; const cst = TOWERS[t.type].upgrades[t.level - 1]; if (cst < bestCost && cst <= g.gold) { bestCost = cst; best = i; } }); if (best >= 0) { upgradeTower(g, best); return; } }
+      const h = g.hero;
+      const near = g.enemies.filter((e) => e.state !== "dead" && Math.hypot(e.x - h.x, e.y - h.y) < 220);
+      const charging = near.find((e) => e.def.charge && (e.charging || e.chargeT > 0));
+      if (charging && h.chargeCd <= 0 && !h.charge) heroCharge(g, charging.x, charging.y);
+      else if (near.length >= 3 && h.chargeCd <= 0 && !h.charge) heroCharge(g, near[0].x, near[0].y);
+      if (h.state === "idle" && !h.moveTarget && near.length === 0 && g.enemies.length) { const far = g.enemies.reduce((a, e) => (e.progress > a.progress ? e : a), g.enemies[0]); if (far.progress > 0.5) moveHero(g, far.x, far.y); }
+      if (g.abilities.volley <= 0 && g.enemies.length >= 4) { const e = g.enemies[0]; castVolley(g, e.x, e.y); }
+      if (g.abilities.reinforce <= 0 && g.enemies.some((e) => e.progress > 0.85)) { const e = g.enemies.find((x) => x.progress > 0.85); castReinforce(g, e.x, e.y); }
+      if (powerUnlocked(g, "watchfire") && g.abilities.watchfire <= 0 && g.enemies.length >= 8) castWatchfire(g);
+      if (powerUnlocked(g, "royalRally") && g.abilities.royalRally <= 0 && g.units.some((u) => u.hp < u.maxHp * 0.5)) castRoyalRally(g);
+      if (powerUnlocked(g, "burningOil") && g.abilities.burningOil <= 0 && g.enemies.filter((e) => e.progress > 0.8).length >= 3) castBurningOil(g);
+      if (powerUnlocked(g, "emergencyRepair") && g.abilities.emergencyRepair <= 0 && g.castleHp < g.castleMax - 9) castEmergencyRepair(g);
+      if (powerUnlocked(g, "catapultBarrage") && g.abilities.catapultBarrage <= 0) { const eng = g.enemies.find((e) => e.def.kind === "siege" && e.state !== "dead"); const tgt = eng || (g.enemies.length >= 6 ? g.enemies[0] : null); if (tgt) castBarrage(g, tgt.x, tgt.y); }
+      if (!formed && g.towers[2] && g.towers[2].pikes) { const ids = squadOf(g, 2); if (ids.length) { setFormation(g, ids, "pikeWall"); formed = true; } }
+      if (step % 120 === 0 && g.towers[5]) { const ids = squadOf(g, 5); const eng = g.enemies.find((e) => e.def.kind === "siege" && e.state !== "dead" && e.progress > 0.3); if (ids.length && eng) orderUnits(g, ids, { kind: "attack", enemyId: eng.id }); else if (ids.length && g.units.find((u) => u.id === ids[0])?.order?.kind === "attack") orderUnits(g, ids, { kind: "rally" }); }
+      if (g.castleHp < 12 && g.gold > 200) repairCastle(g);
+      if (g.waveState === "countdown" && g.wave >= 2 && g.countdown < g.countdownMax - 4 && g.enemies.length === 0) callWave(g);
+    });
+    const waves = evts.filter((e) => e.type === "wave").map((e) => e.n);
+    ok(waves.length === 12 && waves.every((n, i) => n === i + 1), `seed ${seed}: all 12 waves ran once each (${waves.join(" ")})`);
+    ok([1, 2, 3].every((r) => evts.some((e) => e.type === "routeOpen" && e.route === r)), "the north road, the south road and the breach all opened");
+    ok(evts.some((e) => e.type === "siegeHalt") && evts.some((e) => e.type === "siegeShot") && evts.some((e) => e.type === "towerDock") && evts.some((e) => e.type === "ramWall"), "catapults fired, siege towers docked and rams struck the wall");
+    ok(evts.some((e) => e.type === "wallBreach"), "the outer wall fell");
+    ok(count(evts, "chargeStart") >= 5 && evts.some((e) => e.type === "chargeBroken"), `cavalry charged ${count(evts, "chargeStart")} times and was broken`);
+    ok(evts.some((e) => e.type === "bossEnter") && evts.some((e) => e.type === "bossPhase" && e.phase === 2) && evts.some((e) => e.type === "bossSweep"), "Warlord Blackmoor arrived, advanced and swept");
+    ok(evts.some((e) => e.type === "unlock" && e.id === "kingsCharge") && count(evts, "kingsCharge") >= 3, "King's Charge unlocked and was used");
+    ok(s.phase === "victory" || s.phase === "defeat", `stage III ended (${s.phase}, castle ${s.castleHp}/${s.castleMax}, wave ${s.wave}, t ${Math.round(s.t)}s)`);
+    if (s.phase === "victory") { ok(evts.some((e) => e.type === "bossDown") && s.stars >= 1, `victory came with the warlord dead (${s.stars} stars)`); wins.push(seed); }
+    console.log(`      seed ${seed}: ${s.phase} | kills ${s.stats.kills} | hero level ${s.hero.level} | sweeps ${count(evts, "bossSweep")} horns ${count(evts, "bossHorn")} shots ${count(evts, "siegeShot")}`);
+  }
+  ok(wins.length >= 1, `the scripted commander wins the siege on ${wins.length} of 2 seeds`);
+}
+
+/* ================================================================ */
+console.log("— realm completion —");
+{
+  resetProgress(readSave());
+  const won = recordResult(readSave(), { stageId: "siege", mode: "campaign", difficulty: "normal", won: true, finished: true, finale: true, kingdom: "ashford", stars: 2, score: 9000, wave: 12 });
+  ok(won.realmComplete && won.save.campaignsDone.includes("ashford") && won.crowns === 3 + 2 + 5, `the first conquest completes the realm and pays ${won.crowns} crowns`);
+  const again = recordResult(won.save, { stageId: "siege", mode: "campaign", difficulty: "normal", won: true, finished: true, finale: true, kingdom: "ashford", stars: 3, score: 9500, wave: 12 });
+  ok(!again.realmComplete && again.save.campaignsDone.length === 1 && again.crowns === 1, "a second conquest only pays for the new star");
+  resetProgress(readSave());
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

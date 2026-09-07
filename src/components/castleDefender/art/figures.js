@@ -44,6 +44,15 @@ export const FIGURES = {
   knightRider: { body: "plate", bodyColor: "#4c4c58", trim: PAL.rust, tabard: PAL.blackDark, helmet: "greatHelm", helmetColor: PAL.black, shield: "kite", shieldColor: PAL.rust, emblem: "boss", emblemColor: PAL.iron, weapon: "lance", cape: null, legs: "#3a3a44", boots: "#1a1618", enemy: true, h: 60 },
   commanderRider: { body: "plate", bodyColor: "#2c2c34", trim: PAL.red, tabard: PAL.black, tabardTrim: PAL.red, helmet: "greatHelm", helmetColor: "#1c1c22", plume: PAL.red, shield: "heater", shieldColor: PAL.black, emblem: "chevron", emblemColor: PAL.red, weapon: "lance", cape: PAL.redDark, legs: "#2a2a32", boots: "#111", enemy: true, scale: 1.08, h: 64, banner: true },
 
+  /* Stage III: the siege army */
+  heavyInf:   { body: "plate", bodyColor: "#3a3a42", trim: PAL.rust, tabard: PAL.blackDark, helmet: "greatHelm", helmetColor: "#26262c", shield: "tall", shieldColor: "#2e2e34", emblem: "boss", emblemColor: PAL.iron, weapon: "mace", legs: "#2a2a30", boots: "#111", enemy: true, scale: 1.06, h: 64 },
+  eliteGuard: { body: "plate", bodyColor: "#2a2a34", trim: PAL.red, tabard: PAL.red, tabardTrim: PAL.blackDark, helmet: "greatHelm", helmetColor: "#1c1c22", plume: PAL.red, shield: "heater", shieldColor: PAL.black, emblem: "chevron", emblemColor: PAL.red, weapon: "sword", cape: PAL.redDark, legs: "#2a2a32", boots: "#111", enemy: true, scale: 1.04, h: 64 },
+  siegeEngineer: { body: "leather", bodyColor: "#6a5a48", trim: PAL.blackDark, helmet: "cap", helmetColor: PAL.leatherDark, shield: "none", weapon: "hammer", legs: PAL.blackDark, boots: "#111", enemy: true, h: 57, apron: true },
+  fireArcher: { body: "leather", bodyColor: "#4a3a30", trim: PAL.rustLight, helmet: "hood", hood: "#3a2420", shield: "none", weapon: "bow", quiver: true, fire: true, legs: "#2e2a34", boots: "#1a1618", enemy: true, h: 58 },
+  warCaptain: { body: "plate", bodyColor: "#3a3038", trim: PAL.gold, tabard: PAL.black, tabardTrim: PAL.rustLight, helmet: "bascinet", helmetColor: "#2a2630", plume: PAL.rustLight, shield: "kite", shieldColor: PAL.rust, emblem: "boss", emblemColor: PAL.gold, weapon: "axe", cape: PAL.blackDark, legs: "#2a2a32", boots: "#111", enemy: true, scale: 1.1, h: 66, banner: true },
+  warlord:    { body: "plate", bodyColor: "#1e1c24", trim: PAL.red, tabard: "#120f14", tabardTrim: PAL.red, helmet: "greatHelm", helmetColor: "#111116", plume: PAL.redLight, horns: true, shield: "none", weapon: "greataxe", cape: PAL.redDark, legs: "#1c1c22", boots: "#0c0c0e", enemy: true, scale: 1.5, h: 96, banner: true, glow: PAL.redLight },
+  heavyRider: { body: "plate", bodyColor: "#3a3a42", trim: PAL.rust, tabard: "#2a1a1a", helmet: "greatHelm", helmetColor: "#1c1c22", plume: PAL.rustLight, shield: "heater", shieldColor: PAL.blackDark, emblem: "boss", emblemColor: PAL.iron, weapon: "lance", cape: null, legs: "#2a2a32", boots: "#111", enemy: true, h: 60 },
+
   /* the realm's pike drill */
   pikeMilitia:   { body: "tunic", bodyColor: PAL.cloth, trim: PAL.clothDark, helmet: "kettle", helmetColor: PAL.mail, shield: "buckler", shieldColor: PAL.wood, boss: PAL.iron, weapon: "pike", legs: "#4a4a55", boots: PAL.leatherDark, h: 56 },
   pikeManAtArms: { body: "mail", bodyColor: PAL.mail, trim: PAL.red, helmet: "nasal", helmetColor: PAL.plateDark, shield: "buckler", shieldColor: PAL.red, boss: PAL.gold, weapon: "pike", legs: PAL.mailDark, boots: PAL.leatherDark, h: 58 },
@@ -236,6 +245,18 @@ function drawWeapon(ctx, kind, x, y, angle) {
       outlined(ctx, metal, () => { ctx.moveTo(-2.2, 62); ctx.lineTo(2.2, 62); ctx.lineTo(0, 74); ctx.closePath(); });
       /* pennon */
       outlined(ctx, PAL.rust, () => { ctx.moveTo(1, 46); ctx.lineTo(12, 50); ctx.lineTo(1, 58); ctx.closePath(); }, 1);
+      break;
+    }
+    case "hammer": {
+      ctx.strokeStyle = PAL.woodDark; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -22); ctx.stroke();
+      outlined(ctx, PAL.iron, () => ctx.rect(-7, -28, 14, 8), 1.1);
+      break;
+    }
+    case "greataxe": {
+      ctx.strokeStyle = PAL.woodDark; ctx.lineWidth = 3.6; ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -40); ctx.stroke();
+      outlined(ctx, PAL.iron, () => { ctx.moveTo(0, -38); ctx.quadraticCurveTo(18, -44, 16, -22); ctx.quadraticCurveTo(10, -26, 0, -24); ctx.closePath(); }, 1.3);
+      outlined(ctx, PAL.iron, () => { ctx.moveTo(0, -38); ctx.quadraticCurveTo(-18, -44, -16, -22); ctx.quadraticCurveTo(-10, -26, 0, -24); ctx.closePath(); }, 1.3);
+      ctx.strokeStyle = PAL.ironLight; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(4, -36); ctx.quadraticCurveTo(14, -40, 13, -26); ctx.stroke();
       break;
     }
     case "axe": {
