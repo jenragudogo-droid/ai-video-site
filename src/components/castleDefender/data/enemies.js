@@ -142,7 +142,7 @@ export const ENEMIES = {
     name: "Siege Catapult", kind: "siege",
     hp: 1150, speed: 20, armour: 0.35, gateDmg: 6, bounty: 110, xp: 40,
     dmg: [0, 0], atk: 0, r: 42, h: 96, boss: "mini",
-    engine: { stopAt: 0.58, reload: 9, windup: 1.4, castleDmg: 1, wallDmg: 22, towerBurn: 4, radius: 60 },
+    engine: { stopAt: 0.58, standoff: 340, reload: 9, windup: 1.4, castleDmg: 1, wallDmg: 22, towerBurn: 4, radius: 60 },
     stage: 3,
     desc: "Halts in the field and lobs stones at the wall, the castle and your towers. Nothing else matters until it burns.",
   },

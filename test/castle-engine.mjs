@@ -14,6 +14,7 @@ import {
   serializeGame, restoreGame, BATTLE_FORMAT,
   orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility, offerPerks, choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, repairCost,
   castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, damageWall, guardCount,
+  canMount, setMount, MOUNT_COST,
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
@@ -514,10 +515,12 @@ const stone = (seed) => { const s = makeGame({ stageId: "stonebridge", seed }); 
   ok(Math.max(...knightHits) >= 60, `the pike took the horse for ${Math.round(Math.max(...knightHits))} damage`);
 
   /* pikes pay for it against archers */
-  const sw = stone(207); buildTower(sw, 1, "barracks"); run(sw, 3);
+  /* both squads hold their post so the comparison is armour only (soldiers otherwise charge a shooter in reach) */
+  const holdAll = (g) => g.units.forEach((u) => { u.hold = true; u.home = { x: u.x, y: u.y }; });
+  const sw = stone(207); buildTower(sw, 1, "barracks"); run(sw, 3); holdAll(sw);
   sw.queue = [0, 1, 2].map((i) => ({ t: i * 0.3, type: "archer", route: 0, lat: 0 })); sw.waveState = "active"; sw.wave = 2;
   const esw = run(sw, 25);
-  const pkA = stone(207); buildTower(pkA, 1, "barracks"); setDrill(pkA, 1, true); run(pkA, 3);
+  const pkA = stone(207); buildTower(pkA, 1, "barracks"); setDrill(pkA, 1, true); run(pkA, 3); holdAll(pkA);
   pkA.queue = [0, 1, 2].map((i) => ({ t: i * 0.3, type: "archer", route: 0, lat: 0 })); pkA.waveState = "active"; pkA.wave = 2;
   const epkA = run(pkA, 25);
   const hpLeft = (g) => g.units.reduce((a, u) => a + Math.max(0, u.hp), 0);
@@ -1107,6 +1110,65 @@ console.log("— realm completion —");
   const again = recordResult(won.save, { stageId: "siege", mode: "campaign", difficulty: "normal", won: true, finished: true, finale: true, kingdom: "ashford", stars: 3, score: 9500, wave: 12 });
   ok(!again.realmComplete && again.save.campaignsDone.length === 1 && again.crowns === 1, "a second conquest only pays for the new star");
   resetProgress(readSave());
+}
+
+
+/* ================================================================ */
+console.log("— Royal Knights —");
+{
+  const s = makeGame({ seed: 61, stageId: "greenhollow" }); startStage(s); s.gold = 2000;
+  s.stage = { ...s.stage, countdown: 9999 }; s.countdown = 9999; s.countdownMax = 9999;
+  buildTower(s, 2, "barracks"); run(s, 2);
+  ok(!canMount(s, 2) && !setMount(s, 2, true), "a fresh barracks cannot mount up");
+  upgradeTower(s, 2); upgradeTower(s, 2); run(s, 1);
+  ok(!canMount(s, 2) && s.units.every((u) => u.unit === "knight"), "Foot Knights (level 3) still cannot mount");
+  upgradeTower(s, 2); run(s, 1);
+  ok(s.units.every((u) => u.unit === "royalGuard") && canMount(s, 2), "Royal Guard (level 4) is earned normally and unlocks the mount");
+  const gold = s.gold;
+  ok(setMount(s, 2, true) && s.gold === gold - MOUNT_COST, `mounting costs ${MOUNT_COST} gold`);
+  const knights = s.units.filter((u) => u.tower === 2);
+  ok(knights.length === 3 && knights.every((u) => u.unit === "royalKnight" && u.def.mounted && u.def.horse === "royal"), "the whole squad becomes Royal Knights on horses");
+  ok(SOLDIERS.royalKnight.speed > SOLDIERS.royalGuard.speed * 1.5 && SOLDIERS.royalKnight.armour < SOLDIERS.royalGuard.armour && SOLDIERS.royalKnight.rangedWeakness > 1, "knights are much faster than the Guard, wear lighter armour and are weaker to arrows");
+  ok(!setFormation(s, knights.map((u) => u.id), "shieldWall") && formationFor(s, knights.map((u) => u.id)) == null, "riders take no formation");
+  /* they ride to orders faster than the Guard would */
+  const k = knights[0]; orderUnits(s, [k.id], { kind: "move", x: k.x + 300, y: k.y }); run(s, 2.4);
+  ok(Math.hypot(k.x - k.home.x, k.y - k.home.y) < 40, "a Royal Knight covers 300 units in under two and a half seconds (a Guard on foot would still be 80 short)");
+  /* Lance Charge */
+  const ab = sharedAbility(s, knights.map((u) => u.id));
+  ok(ab && ab.id === "lanceCharge" && ab.ready, "the squad shares Lance Charge");
+  ok(triggerUnitAbility(s, [k.id]) && k.abilityT > 0, "Lance Charge fires");
+  /* they still respawn as knights and survive a save */
+  k.hp = 0; run(s, 0.2); k.state = "dead"; k.deadT = 0; run(s, 0.1); k.respawnT = 0; run(s, 0.5);
+  ok(k.unit === "royalKnight" && k.state !== "respawn", "a fallen knight returns mounted");
+  const r = restoreGame(JSON.parse(JSON.stringify(serializeGame(s))));
+  ok(r.towers[2].mounted && r.units.filter((u) => u.tower === 2).every((u) => u.unit === "royalKnight"), "mounted status and the knights survive a save");
+  /* dismount / drill exclusivity */
+  ok(setMount(s, 2, false) && s.units.filter((u) => u.tower === 2).every((u) => u.unit === "royalGuard"), "dismounting returns the squad to Royal Guard");
+  setMount(s, 2, true); const st = makeGame({ seed: 62, stageId: "stonebridge" }); startStage(st); st.gold = 2000; buildTower(st, 2, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(st, 2); run(st, 1);
+  setMount(st, 2, true); ok(setDrill(st, 2, true) && !st.towers[2].mounted && st.units.filter((u) => u.tower === 2).every((u) => u.unit === "pikeRoyal"), "a pike drill dismounts the squad");
+  ok(setMount(st, 2, true) && !st.towers[2].pikes && st.units.filter((u) => u.tower === 2).every((u) => u.unit === "royalKnight"), "and mounting clears the pikes");
+  /* counters: an archer wave hurts riders more than the Guard */
+  const dmgTo = (unitType) => { const g = makeGame({ seed: 63, stageId: "greenhollow" }); startStage(g); g.gold = 2000; buildTower(g, 2, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(g, 2); run(g, 1); if (unitType === "royalKnight") setMount(g, 2, true); g.waveState = "active"; g.wave = 3; g.queue = []; for (let i = 0; i < 6; i += 1) g.queue.push({ t: 0, type: "archer", route: 0, lat: (i - 3) * 6 }); run(g, 0.1); for (const e of g.enemies) e.d = 700; run(g, 0.05); const sq = g.units.filter((u) => u.tower === 2); orderUnits(g, sq.map((u) => u.id), { kind: "move", x: g.enemies[0].x - 110, y: g.enemies[0].y }); run(g, 6); return sq.reduce((a, u) => a + (u.maxHp - Math.max(0, u.hp)), 0) / sq.reduce((a, u) => a + u.maxHp, 0); };
+  const gLoss = dmgTo("royalGuard"); const kLoss = dmgTo("royalKnight");
+  ok(kLoss > gLoss, `archers cost riders a bigger share of their health than the Guard (${(kLoss * 100).toFixed(0)}% vs ${(gLoss * 100).toFixed(0)}%)`);
+  /* the exact sheet numbers, and the Guard untouched */
+  const RK = SOLDIERS.royalKnight; const RG = SOLDIERS.royalGuard;
+  ok(RK.speed === 150 && RK.dmg[0] === 15 && RK.dmg[1] === 21 && RK.hp === 280 && RK.armour === 0.35 && RK.rangedWeakness === 1.3, "Royal Knight: speed 150, 15–21 damage, 280 health, 35% armour, 1.3× from arrows");
+  ok(RK.ability.id === "lanceCharge" && RK.ability.dmg === 0.8 && RK.ability.speed === 0.5 && RK.ability.dur === 4 && RK.ability.cd === 16, "Lance Charge: +80% damage, +50% speed, 4 s, 16 s recharge");
+  ok(RG.armour === 0.45 && RG.hp === 260 && RG.ability.id === "shieldBrace" && RG.speed === 90 && MOUNT_COST === 120, "Royal Guard unchanged: 45% armour, 260 health, Shield Brace, speed 90; mount costs 120");
+  /* dismount is free; a lance-charged knight hits harder and moves faster; the cooldown survives a save */
+  const d = makeGame({ seed: 64, stageId: "greenhollow" }); startStage(d); d.gold = 2000; buildTower(d, 2, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(d, 2); run(d, 1); setMount(d, 2, true);
+  const gd = d.gold; ok(setMount(d, 2, false) && d.gold === gd, "dismounting is free"); setMount(d, 2, true);
+  const rk = d.units.find((u) => u.tower === 2); triggerUnitAbility(d, [rk.id]);
+  const before = { x: rk.x, y: rk.y }; orderUnits(d, [rk.id], { kind: "move", x: rk.x + 400, y: rk.y }); run(d, 1);
+  const lanced = Math.hypot(rk.x - before.x, rk.y - before.y);
+  ok(lanced > 190 && rk.abilityCd > 14, `a charging knight covers ${Math.round(lanced)} in a second (150 walking) and the 16 s recharge is running`);
+  const rr = restoreGame(JSON.parse(JSON.stringify(serializeGame(d)))); const rk2 = rr.units.find((u) => u.tower === 2);
+  ok(rk2.unit === "royalKnight" && Math.abs(rk2.abilityCd - rk.abilityCd) < 0.01, "Lance Charge cooldown is restored exactly");
+  /* the Guard's formations still work on foot (formations are a siege-stage feature) */
+  const f3 = makeGame({ seed: 65, stageId: "siege" }); startStage(f3); f3.gold = 3000; buildTower(f3, 2, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(f3, 2); run(f3, 1);
+  setMount(f3, 2, true); setMount(f3, 2, false); const gids = squadOf(f3, 2);
+  ok(setFormation(f3, gids, "shieldWall") && f3.units.filter((u) => u.tower === 2).every((u) => u.formation === "shieldWall" && u.unit === "royalGuard"), "dismounted Guard can still lock shields");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

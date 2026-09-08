@@ -53,6 +53,9 @@ export const FIGURES = {
   warlord:    { body: "plate", bodyColor: "#1e1c24", trim: PAL.red, tabard: "#120f14", tabardTrim: PAL.red, helmet: "greatHelm", helmetColor: "#111116", plume: PAL.redLight, horns: true, shield: "none", weapon: "greataxe", cape: PAL.redDark, legs: "#1c1c22", boots: "#0c0c0e", enemy: true, scale: 1.5, h: 96, banner: true, glow: PAL.redLight },
   heavyRider: { body: "plate", bodyColor: "#3a3a42", trim: PAL.rust, tabard: "#2a1a1a", helmet: "greatHelm", helmetColor: "#1c1c22", plume: PAL.rustLight, shield: "heater", shieldColor: PAL.blackDark, emblem: "boss", emblemColor: PAL.iron, weapon: "lance", cape: null, legs: "#2a2a32", boots: "#111", enemy: true, h: 60 },
 
+  /* the realm's Royal Knights, drawn on their horses */
+  royalRider: { body: "plate", bodyColor: PAL.plateLight, trim: PAL.gold, tabard: PAL.red, tabardTrim: PAL.gold, helmet: "greatHelm", helmetColor: PAL.plateLight, plume: PAL.gold, shield: "heater", shieldColor: PAL.red, emblem: "cross", emblemColor: PAL.gold, weapon: "lance", cape: PAL.red, legs: PAL.plate, boots: PAL.iron, h: 62 },
+
   /* the realm's pike drill */
   pikeMilitia:   { body: "tunic", bodyColor: PAL.cloth, trim: PAL.clothDark, helmet: "kettle", helmetColor: PAL.mail, shield: "buckler", shieldColor: PAL.wood, boss: PAL.iron, weapon: "pike", legs: "#4a4a55", boots: PAL.leatherDark, h: 56 },
   pikeManAtArms: { body: "mail", bodyColor: PAL.mail, trim: PAL.red, helmet: "nasal", helmetColor: PAL.plateDark, shield: "buckler", shieldColor: PAL.red, boss: PAL.gold, weapon: "pike", legs: PAL.mailDark, boots: PAL.leatherDark, h: 58 },

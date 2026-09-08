@@ -433,3 +433,7 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
 .castleArrow--1 { left: 40%; top: 40%; }
 .castleArrow--2 { left: 30%; top: 36%; animation-delay: 0.7s; }
 @keyframes castleArrow { 0% { transform: translate(0, 0) rotate(-30deg); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(120px, -60px) rotate(-30deg); opacity: 0; } }
+
+/* Game cards number themselves from their order in the grid: 01, 02, 03 … */
+.gameGrid { counter-reset: game; }
+.gameCard .gameLabel::before { counter-increment: game; content: "Game " counter(game, decimal-leading-zero); }

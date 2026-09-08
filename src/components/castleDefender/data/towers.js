@@ -104,6 +104,13 @@ export const SOLDIERS = {
 
 export const PIKE_UNITS = ["pikeMilitia", "pikeManAtArms", "pikeKnight", "pikeRoyal"];
 
+/* Royal Knights: once a barracks has reached Royal Guard (level 4) the squad can
+   mount up. Faster than any foot soldier, harder-hitting, with a Lance Charge,
+   but lighter armour than the Guard and arrows find the rider more easily. */
+SOLDIERS.royalKnight = { name: "Royal Knight", hp: 280, dmg: [15, 21], armour: 0.35, atk: 0.85, speed: 150, r: 18, block: 0.15, mounted: true, horse: "royal", rangedWeakness: 1.3, vsCavalry: 1.15, ability: { id: "lanceCharge", name: "Lance Charge", cd: 16, dur: 4, dmg: 0.8, speed: 0.5, desc: "Couch lances: +80% damage and +50% speed for 4 seconds." } };
+export const MOUNT_UNIT = "royalKnight";
+export const MOUNT_COST = 120;
+
 /* Formations (Stage III onward). A formation is a standing order on a
    soldier: slower on the move, but stronger at what it is for. Pike
    Wall needs pike units and keeps the spears set at all times; Shield

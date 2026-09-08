@@ -4,7 +4,7 @@ import {
   buildTower, upgradeTower, sellTower, sellValue, setRally, fireTowerAbility, towerAbility,
   moveHero, heroCharge, castVolley, castReinforce, repairCastle, callWave,
   plotAt, canBuild, canUpgrade, nextWaveSummary, towerLevel, PLOT_R,
-  canDrill, setDrill, DRILL_COST,
+  canDrill, setDrill, DRILL_COST, canMount, setMount, MOUNT_COST,
   serializeGame, restoreGame, orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility,
   castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, guardCount,
   choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, upgradeCostFor, repairCost,
@@ -389,6 +389,7 @@ export default function CastleDefender() {
         case "chargeBroken": a?.play("chargeBroken"); if (e.by === "hero") banner("Charge broken", "Royal Charge stopped the rider", "good", 1600); break;
         case "brace": a?.play("brace"); break;
         case "drill": a?.play("drill"); scheduleSave(); break;
+        case "mount": a?.play(e.mounted ? "gallop" : "drill"); if (e.mounted) banner("Royal Knights", "The Guard mounts up: faster, harder-hitting, with a Lance Charge. Arrows find riders more easily.", "good", 3200); scheduleSave(); break;
         case "order": a?.play("order"); saveNow(); break;
         case "unitAbility": a?.play(e.id === "braceSpears" ? "brace" : "shieldBrace"); saveNow(); break;
         case "perkOffer": a?.play("perk"); saveNow(); break;
@@ -457,7 +458,7 @@ export default function CastleDefender() {
       boss: boss ? { name: boss.def.name, ratio: boss.hp / boss.maxHp, phase: boss.boss ? boss.boss.phase : 0, final: boss.def.boss === "final", guards: boss.boss && boss.boss.phase === 1 ? guardCount(s) : 0, open: !!(boss.boss && boss.boss.openT > 0), roar: !!(boss.boss && boss.boss.roarT > 0) } : null,
       wall: s.wallHp != null ? { hp: s.wallHp, max: s.wallMax } : null,
       kingsCharge: kingsCharge(s), formations: !!s.stage.formations, finale: !!s.stage.finale,
-      tower: t ? { type: t.type, level: t.level, abilityCd: t.abilityCd, canUp: canUpgrade(s, sel), upCost: upgradeCostFor(s, t.type, t.level), sell: sellValue(s, sel), pikes: !!t.pikes, canDrill: canDrill(s, sel), squad: t.type === "barracks" ? squadOf(s, sel).length : 0 } : null,
+      tower: t ? { type: t.type, level: t.level, abilityCd: t.abilityCd, canUp: canUpgrade(s, sel), upCost: upgradeCostFor(s, t.type, t.level), sell: sellValue(s, sel), pikes: !!t.pikes, canDrill: canDrill(s, sel), mounted: !!t.mounted, canMount: canMount(s, sel), squad: t.type === "barracks" ? squadOf(s, sel).length : 0 } : null,
       repairCost: repairCost(s),
       buildCosts: Object.fromEntries(TOWER_ORDER.map((k) => [k, buildCost(s, k)])),
       powerList: stagePowers(s),
@@ -821,6 +822,13 @@ export default function CastleDefender() {
     const s = gameRef.current; const idx = selRef.current;
     if (!s || idx < 0) return;
     if (!setDrill(s, idx, pikes)) { audioRef.current?.play("error"); banner("Not enough gold", `Drill costs ${DRILL_COST}`, "alert", 1400); return; }
+    handleEvents(); snapshot(); select(idx);
+  }, [banner, handleEvents, select, snapshot]);
+
+  const doMount = useCallback((mounted) => {
+    const s = gameRef.current; const idx = selRef.current;
+    if (!s || idx < 0) return;
+    if (!setMount(s, idx, mounted)) { audioRef.current?.play("error"); banner("Not enough gold", `Mounting the squad costs ${MOUNT_COST}`, "alert", 1400); return; }
     handleEvents(); snapshot(); select(idx);
   }, [banner, handleEvents, select, snapshot]);
 
@@ -1302,11 +1310,11 @@ export default function CastleDefender() {
                 <IconCanvas kind="tower" id={selTower.type} w={44} h={44} renderer={rendererRef} />
                 <div>
                   <strong>{TOWERS[selTower.type].name}</strong>
-                  <span>Level {selTower.level} · {hud.tower.pikes ? SOLDIERS[PIKE_UNITS[selTower.level - 1]].name : towerLevel(selTower.type, selTower.level).label}</span>
+                  <span>Level {selTower.level} · {hud.tower.mounted ? "Royal Knights" : hud.tower.pikes ? SOLDIERS[PIKE_UNITS[selTower.level - 1]].name : towerLevel(selTower.type, selTower.level).label}</span>
                 </div>
                 <button type="button" className="cdSheetClose" onClick={() => select(-1)} aria-label="Close">✕</button>
               </div>
-              <p className="cdSheetStats">{towerStatLine(selTower.type, selTower.level, hud.tower.pikes)}</p>
+              <p className="cdSheetStats">{towerStatLine(selTower.type, selTower.level, hud.tower.pikes, hud.tower.mounted)}</p>
               <div className="cdSheetRow">
                 {hud.tower.upCost != null ? (
                   <button type="button" className={`cdBtn cdBtn--gold ${hud.tower.canUp ? "" : "is-off"}`} onClick={doUpgrade}>
@@ -1319,6 +1327,13 @@ export default function CastleDefender() {
                 <div className="cdSheetRow cdDrill">
                   <button type="button" className={`cdBtn ${!hud.tower.pikes ? "is-on" : ""}`} onClick={() => doDrill(false)} title="Swords: armour and shields, steady against infantry">Swords{hud.tower.pikes && <span className="cdCost"><span className="cdCoin cdCoin--s" />{DRILL_COST}</span>}</button>
                   <button type="button" className={`cdBtn ${hud.tower.pikes ? "is-on" : ""}`} onClick={() => doDrill(true)} title="Pikes: brace against cavalry, weak to archers">Pikes{!hud.tower.pikes && <span className="cdCost"><span className="cdCoin cdCoin--s" />{DRILL_COST}</span>}</button>
+                </div>
+              )}
+              {selTower.type === "barracks" && hud.tower.canMount && (
+                <div className="cdSheetRow cdDrill">
+                  {hud.tower.mounted
+                    ? <button type="button" className="cdBtn is-on" onClick={() => doMount(false)} title="Back on foot as Royal Guard">Dismount</button>
+                    : <button type="button" className="cdBtn cdBtn--gold" onClick={() => doMount(true)} title="Royal Knights: mounted, fast, Lance Charge; arrows find riders more easily">Mount up · Royal Knights<span className="cdCost"><span className="cdCoin cdCoin--s" />{MOUNT_COST}</span></button>}
                 </div>
               )}
               <div className="cdSheetRow">
@@ -1768,9 +1783,9 @@ export default function CastleDefender() {
   );
 }
 
-function towerStatLine(type, level, pikes) {
+function towerStatLine(type, level, pikes, mounted) {
   const l = towerLevel(type, level);
-  if (type === "barracks") { const u = SOLDIERS[pikes ? PIKE_UNITS[level - 1] : l.unit]; return `3 × ${u.name} · ${u.hp} health · ${u.dmg[0]}–${u.dmg[1]} damage · ${Math.round(u.armour * 100)}% armour${u.spear ? " · braces and breaks cavalry charges · weak to arrows" : ""}`; }
+  if (type === "barracks") { const u = SOLDIERS[mounted ? "royalKnight" : pikes ? PIKE_UNITS[level - 1] : l.unit]; return `3 × ${u.name} · ${u.hp} health · ${u.dmg[0]}–${u.dmg[1]} damage · ${Math.round(u.armour * 100)}% armour${u.spear ? " · braces and breaks cavalry charges · weak to arrows" : ""}${u.mounted ? " · mounted, speed " + u.speed + " · Lance Charge · arrows hit riders harder" : ""}`; }
   const base = `${l.dmg[0]}–${l.dmg[1]} damage · every ${l.rate}s · range ${l.range}`;
   if (type === "catapult") return `${base} · blast ${l.radius}${l.fire ? " · burning ground" : ""}`;
   if (type === "ballista") return `${base} · ignores ${Math.round(l.pierceArmour * 100)}% armour${l.pierceCount ? ` · pierces ${l.pierceCount}` : ""}`;

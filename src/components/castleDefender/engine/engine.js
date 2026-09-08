@@ -15,7 +15,7 @@ import { expandWave, endlessWave, waveSummary } from "./waves.js";
 import { ENEMIES } from "../data/enemies.js";
 import {
   TOWERS, towerLevel, upgradeCost, towerValue, SELL_RATE, MAX_LEVEL,
-  SOLDIERS, HERO, heroStats, ABILITIES, DIFFICULTY, PIKE_UNITS, DRILL_COST, FORMATIONS,
+  SOLDIERS, HERO, heroStats, ABILITIES, DIFFICULTY, PIKE_UNITS, DRILL_COST, FORMATIONS, MOUNT_UNIT, MOUNT_COST,
 } from "../data/towers.js";
 import { stageById } from "../data/stages.js";
 import { PERKS, PERK_BY_ID, RARITY, POWERS } from "../data/perks.js";
@@ -25,7 +25,13 @@ import { metaMods } from "../data/progression.js";
 const mul = (s, key) => 1 + ((s.mods && s.mods[key]) || 0);
 const add = (s, key) => (s.mods && s.mods[key]) || 0;
 
-export { towerLevel, upgradeCost, towerValue, waveSummary, SELL_RATE, MAX_LEVEL, DRILL_COST, FORMATIONS };
+export { towerLevel, upgradeCost, towerValue, waveSummary, SELL_RATE, MAX_LEVEL, DRILL_COST, FORMATIONS, MOUNT_COST };
+
+/* which soldier a barracks fields: mounted Royal Knights, pikes, or the level's swordsmen */
+function barracksUnit(t) {
+  if (t.mounted && t.level >= MAX_LEVEL) return MOUNT_UNIT;
+  return t.pikes ? PIKE_UNITS[t.level - 1] : towerLevel("barracks", t.level).unit;
+}
 
 export const PLOT_R = 36;
 const ARROW_SPEED = 520;
@@ -207,7 +213,8 @@ function makeHero(s) {
 
 function placeSoldierHome(s, u, tower) {
   const off = SOLDIER_OFFSETS[u.slot % SOLDIER_OFFSETS.length];
-  u.home = { x: tower.rally.x + off[0], y: tower.rally.y + off[1] };
+  const k = u.def && u.def.mounted ? 2.1 : 1;            // horses need room
+  u.home = { x: tower.rally.x + off[0] * k, y: tower.rally.y + off[1] * k };
 }
 
 function makeSoldier(s, towerIdx, slot, unitType) {
@@ -253,13 +260,15 @@ function heroStatsFor(s, level) {
 
 function unitSpeed(u) {
   const f = u.formation && FORMATIONS[u.formation];
-  return (u.kind === "hero" ? HERO.speed : u.def.speed) * (f ? f.speed : 1);
+  const lance = u.abilityT > 0 && u.def.ability && u.def.ability.id === "lanceCharge" ? 1 + u.def.ability.speed : 1;
+  return (u.kind === "hero" ? HERO.speed : u.def.speed) * (f ? f.speed : 1) * lance;
 }
 
 function unitDmg(s, u) {
   if (u.kind === "hero") { const st = heroStatsFor(s, u.level); return st.dmg[0] + s.rng() * (st.dmg[1] - st.dmg[0]); }
   const f = u.formation && FORMATIONS[u.formation];
-  return (u.def.dmg[0] + s.rng() * (u.def.dmg[1] - u.def.dmg[0])) * mul(s, "soldierDmg") * (f ? 1 + f.dmg : 1);
+  const lance = u.abilityT > 0 && u.def.ability && u.def.ability.id === "lanceCharge" ? 1 + u.def.ability.dmg : 1;
+  return (u.def.dmg[0] + s.rng() * (u.def.dmg[1] - u.def.dmg[0])) * mul(s, "soldierDmg") * (f ? 1 + f.dmg : 1) * lance;
 }
 
 function unitArmour(s, u) {
@@ -620,7 +629,10 @@ function stepSiegeCatapult(s, e, dt, route) {
     e.state = "walk";
     e.d += e.def.speed * dt;
     syncEnemyPos(s, e);
-    if (e.d >= route.length * eg.stopAt || e.d >= route.length - 40) { e.stopped = true; e.state = "idle"; s.events.push({ type: "siegeHalt", x: e.x, y: e.y, id: e.id }); }
+    /* it halts a fixed standoff short of the wall crossing (or at a fraction of a road with no wall),
+       so it is always inside reach of the towers guarding the wall */
+    const stopD = route.wallD != null ? Math.min(route.wallD - eg.standoff, route.length - 40) : route.length * eg.stopAt;
+    if (e.d >= stopD || e.d >= route.length - 40) { e.stopped = true; e.state = "idle"; s.events.push({ type: "siegeHalt", x: e.x, y: e.y, id: e.id }); }
     return;
   }
   e.state = e.windT > 0 ? "wind" : "idle";
@@ -1018,10 +1030,11 @@ function stepFighter(s, u, dt, opts) {
   }
   if (!e) {
     e = findEngagement(s, u, opts.cx, opts.cy, opts.radius);
-    if (!e && u.kind === "hero") {
-      /* Sir Edric does not stand and take arrows: he goes for a shooter in reach */
-      let bd = 230 * 230;
-      for (const o of s.enemies) { if (o.state !== "shoot" || o.def.kind !== "ranged" || o.freeT > 0 || o.blockers.length >= 2) continue; const d = dist2(o.x, o.y, u.x, u.y); if (d < bd) { bd = d; e = o; } }
+    if (!e && (u.kind === "hero" || (u.kind === "soldier" && !u.hold))) {
+      /* nobody stands and takes arrows: a shooter in reach gets charged (the hero from further out) */
+      const reach = u.kind === "hero" ? 230 : 200;
+      let bd = reach * reach;
+      for (const o of s.enemies) { if (o.state !== "shoot" || o.def.kind !== "ranged" || o.routed || o.freeT > 0 || o.blockers.length >= 2) continue; const d = dist2(o.x, o.y, u.x, u.y); if (d < bd) { bd = d; e = o; } }
     }
     if (e) {
       u.target = e.id;
@@ -1633,6 +1646,7 @@ export function setFormation(s, ids, kind) {
   for (const id of ids) {
     const u = getUnit(s, id);
     if (!u || u.kind !== "soldier" || !alive(u)) continue;
+    if (def && u.def.mounted) continue;
     if (def && def.needs === "spear" && !u.def.spear) continue;
     if (def && def.needs === "shield" && u.def.spear) continue;
     u.formation = kind || null;
@@ -1645,7 +1659,7 @@ export function setFormation(s, ids, kind) {
 /* which formation the selection could take, if any */
 export function formationFor(s, ids) {
   if (!s.stage.formations) return null;
-  const units = ids.map((id) => getUnit(s, id)).filter((u) => u && u.kind === "soldier" && alive(u));
+  const units = ids.map((id) => getUnit(s, id)).filter((u) => u && u.kind === "soldier" && alive(u) && !u.def.mounted);
   if (!units.length) return null;
   const spears = units.filter((u) => u.def.spear).length;
   const kind = spears >= units.length / 2 ? "pikeWall" : "shieldWall";
@@ -1786,7 +1800,8 @@ export function upgradeTower(s, plotIdx) {
   s.stats.upgrades += 1;
   if (t.type === "barracks") {
     const lvl = towerLevel(t.type, t.level);
-    const unit = t.pikes ? PIKE_UNITS[t.level - 1] : lvl.unit;
+    void lvl;
+    const unit = barracksUnit(t);
     s.units.forEach((u) => {
       if (u.tower !== plotIdx) return;
       u.unit = unit;
@@ -1836,6 +1851,37 @@ export function setRally(s, plotIdx, x, y) {
   return true;
 }
 
+/* Royal Knights: a Royal Guard barracks (level 4) can mount its squad. */
+export function canMount(s, plotIdx) {
+  const t = s.towers[plotIdx];
+  return !!(t && t.type === "barracks" && t.level >= MAX_LEVEL && s.phase === "playing");
+}
+
+export function setMount(s, plotIdx, mounted) {
+  if (!canMount(s, plotIdx)) return false;
+  const t = s.towers[plotIdx];
+  if (!!t.mounted === !!mounted) return true;
+  if (mounted && s.gold < MOUNT_COST) return false;
+  if (mounted) s.gold -= MOUNT_COST;
+  t.mounted = !!mounted;
+  if (mounted) t.pikes = false;
+  const unit = barracksUnit(t);
+  s.units.forEach((u) => {
+    if (u.tower !== plotIdx) return;
+    const ratio = u.maxHp ? u.hp / u.maxHp : 1;
+    u.unit = unit;
+    u.def = SOLDIERS[unit];
+    u.maxHp = Math.round(u.def.hp * mul(s, "soldierHp"));
+    u.hp = Math.max(1, Math.round(u.maxHp * ratio));
+    u.bracing = false; u.abilityT = 0;
+    if (u.def.mounted) u.formation = null;   // riders do not lock shields or set pikes
+    if (!u.order) placeSoldierHome(s, u, t);
+  });
+  const p = s.layout.plots[plotIdx];
+  s.events.push({ type: "mount", x: p.x, y: p.y, mounted: !!mounted });
+  return true;
+}
+
 /* Pike Drill: swap a barracks squad between swords and pikes. */
 export function canDrill(s, plotIdx) {
   const t = s.towers[plotIdx];
@@ -1849,7 +1895,8 @@ export function setDrill(s, plotIdx, pikes) {
   if (s.gold < DRILL_COST) return false;
   s.gold -= DRILL_COST;
   t.pikes = !!pikes;
-  const unit = pikes ? PIKE_UNITS[t.level - 1] : towerLevel("barracks", t.level).unit;
+  t.mounted = false;                       // a drill puts the squad back on foot
+  const unit = barracksUnit(t);
   s.units.forEach((u) => {
     if (u.tower !== plotIdx) return;
     const ratio = u.maxHp ? u.hp / u.maxHp : 1;
@@ -1999,7 +2046,7 @@ export function orderUnits(s, ids, order) {
   if (s.phase !== "playing" || !ids || !ids.length) return false;
   const units = ids.map((id) => getUnit(s, id)).filter((u) => u && u.kind !== "hero" && alive(u));
   if (!units.length) return false;
-  const spread = (x, y) => units.map((u, i) => { const off = SOLDIER_OFFSETS[i % SOLDIER_OFFSETS.length]; return { u, x: x + off[0], y: y + off[1] }; });
+  const spread = (x, y) => units.map((u, i) => { const off = SOLDIER_OFFSETS[i % SOLDIER_OFFSETS.length]; const k = u.def.mounted ? 2.1 : 1; return { u, x: x + off[0] * k, y: y + off[1] * k }; });
   const clampX = (x) => clamp(x, 20, s.layout.w - 20);
   const clampY = (y) => clamp(y, 20, s.layout.h - 20);
   let ev;
@@ -2124,7 +2171,7 @@ export function serializeGame(s) {
     wave: s.wave, waveState: s.waveState, countdown: s.countdown, countdownMax: s.countdownMax, waveT: s.waveT,
     queue: s.queue.map((q) => ({ ...q })),
     stats: { ...s.stats }, abilities: { ...s.abilities }, nextId: s.nextId,
-    towers: s.towers.map((t) => (t ? { type: t.type, level: t.level, cd: t.cd, abilityCd: t.abilityCd, rally: t.rally ? { ...t.rally } : null, pikes: !!t.pikes, shooter: t.shooter || 0, angle: t.angle || 0, burnT: t.burnT || 0 } : null)),
+    towers: s.towers.map((t) => (t ? { type: t.type, level: t.level, cd: t.cd, abilityCd: t.abilityCd, rally: t.rally ? { ...t.rally } : null, pikes: !!t.pikes, mounted: !!t.mounted, shooter: t.shooter || 0, angle: t.angle || 0, burnT: t.burnT || 0 } : null)),
     wallHp: s.wallHp, wallMax: s.wallMax, bossPhase: s.bossPhase || 0, gateWarned: !!s.gateWarned,
     units: s.units.filter((u) => !u.remove).map(unitOf),
     hero: { level: s.hero.level, xp: s.hero.xp, hp: Math.round(s.hero.hp), maxHp: s.hero.maxHp, x: Math.round(s.hero.x), y: Math.round(s.hero.y), post: { ...s.hero.post }, state: s.hero.state === "dead" || s.hero.state === "respawn" ? s.hero.state : "idle", respawnT: s.hero.respawnT || 0, deadT: s.hero.deadT || 0, chargeCd: Math.max(0, s.hero.chargeCd || 0) },
@@ -2157,7 +2204,7 @@ export function restoreGame(data, opts = {}) {
     if (!t || i >= s.towers.length) return;
     const tower = makeTower(s, i, t.type);
     tower.level = t.level; tower.cd = t.cd || 0; tower.abilityCd = t.abilityCd || 0; tower.buildT = 0;
-    tower.pikes = !!t.pikes; tower.shooter = t.shooter || 0; tower.angle = t.angle || tower.angle; tower.burnT = t.burnT || 0;
+    tower.pikes = !!t.pikes; tower.mounted = !!t.mounted; tower.shooter = t.shooter || 0; tower.angle = t.angle || tower.angle; tower.burnT = t.burnT || 0;
     if (t.type === "barracks") tower.rally = t.rally && s.layout.name === data.layout ? { ...t.rally } : defaultRally(s, i);
     s.towers[i] = tower;
   });

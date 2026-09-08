@@ -201,7 +201,7 @@ function App() {
                   <span className="rushLeg rushLeg--l" />
                   <span className="rushLeg rushLeg--r" />
                 </span>
-                <span className="episodeLabel">Game 04</span>
+                <span className="episodeLabel gameLabel" />
               </div>
               <div className="cardContent">
                 <h3>Kianimation Endless Rush</h3>
@@ -245,7 +245,7 @@ function App() {
                   <span className="shooterCockpit" />
                   <span className="shooterFlame" />
                 </span>
-                <span className="episodeLabel">Game 05</span>
+                <span className="episodeLabel gameLabel" />
               </div>
               <div className="cardContent">
                 <h3>Neon Space Shooter</h3>
@@ -285,7 +285,7 @@ function App() {
                 <span className="castleKnight" />
                 <span className="castleArrow castleArrow--1" />
                 <span className="castleArrow castleArrow--2" />
-                <span className="episodeLabel">Game 06</span>
+                <span className="episodeLabel gameLabel" />
               </div>
               <div className="cardContent">
                 <h3>Castle Defender</h3>

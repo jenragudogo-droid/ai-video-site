@@ -34,6 +34,8 @@ const HORSES = {
   knight: { color: "#3c3c46", rider: "knightRider", size: 1.24, barding: "#7a2e22", trim: "#b8b8c0", chamfron: "#5a5a64" },
   commander: { color: "#1f1e24", rider: "commanderRider", size: 1.46, barding: "#1a1a20", trim: "#c04040", chamfron: "#2a2a32", plume: "#c04040" },
   heavy: { color: "#2c2830", rider: "heavyRider", size: 1.32, barding: "#3a2626", trim: "#8a8a92", chamfron: "#3a3a44", plume: "#a4563c" },
+  /* the realm's Royal Knights: a grey destrier in red and gold caparison */
+  royal: { color: "#d8d4cc", rider: "royalRider", size: 1.3, barding: "#9b2a2a", trim: "#d9a83a", chamfron: "#eef0f2", plume: "#d9a83a", saddle: "#54391f" },
 };
 /* Stage III lighting: 0 afternoon, 1 sunset, 2 night */
 function lightTarget(s) {
@@ -332,6 +334,7 @@ export function createRenderer() {
       case "watchfire": s.towers.forEach((t, i) => { if (t && t.type !== "barracks") { const p = s.layout.plots[i]; fx.spawn("fire", p.x, p.y - 70, { n: 6, spread: 20 }); fx.spawn("ember", p.x, p.y - 60, { n: 6 }); } }); break;
       case "royalRally": fx.spawn("ring", e.x, e.y, { size: 160, color: rgba(PAL.goldLight, 0.8), width: 4, max: 0.9 }); s.units.forEach((u) => { if (u.state !== "dead") fx.spawn("spark", u.x, u.y - 30, { n: 4, color: PAL.goldLight }); }); break;
       case "drill": fx.spawn("ring", e.x, e.y, { size: 60, color: rgba(PAL.goldLight, 0.8) }); fx.spawn("text", e.x, e.y - 70, { text: e.pikes ? "PIKE DRILL" : "SWORD DRILL", size: 11, color: PAL.goldLight, max: 1.3, bold: true }); break;
+      case "mount": fx.spawn("ring", e.x, e.y, { size: 70, color: rgba(PAL.goldLight, 0.9), width: 4 }); fx.spawn("dust", e.x, e.y + 10, { n: 12 }); fx.spawn("text", e.x, e.y - 70, { text: e.mounted ? "ROYAL KNIGHTS" : "DISMOUNTED", size: 11, color: PAL.goldLight, max: 1.4, bold: true }); break;
       case "miniboss": fx.spawn("ring", e.x, e.y, { size: 120, color: rgba(PAL.red, 0.7), max: 1.2, width: 4 }); break;
       case "minibossDown": break;
       case "spawn": fx.spawn("dust", e.x, e.y, { n: 2 }); break;
@@ -490,7 +493,14 @@ export function createRenderer() {
   function drawUnit(ctx, u) {
     const key = u.kind === "hero" ? "hero" : u.unit;
     const { anim, frame } = unitAnim(u, false);
-    const sp = figureSprite(key, u.kind === "hero" ? 0 : u.id % 2, anim, frame);
+    let sp;
+    if (u.def && u.def.horse) {
+      /* a mounted soldier: the horse carries the rider (same rig the cavalry uses) */
+      const a = u.state === "dead" ? "dead" : u.state === "fight" ? "attack" : u.state === "walk" ? "walk" : "idle";
+      const fr = a === "dead" ? Math.floor((1 - Math.max(0, u.deadT) / 1.5) * 6) : a === "walk" ? Math.floor(u.animT * u.def.speed / 60 * 8) : a === "attack" ? Math.floor(Math.max(0, Math.min(0.999, 1 - u.atkCd / u.def.atk)) * 8) : Math.floor(u.animT * 6);
+      sp = horseSprite(u.def.horse, a, fr);
+      if (u.state === "walk" && Math.random() < (u.abilityT > 0 ? 0.7 : 0.3)) fx.spawn("dust", u.x - u.face * 16, u.y + 3, { n: 1 });
+    } else sp = figureSprite(key, u.kind === "hero" ? 0 : u.id % 2, anim, frame);
     const flip = u.face < 0;
     const alpha = u.fade ? 0.5 : 1;
     cache.blit(ctx, sp, u.x, u.y, flip, alpha);
@@ -501,11 +511,12 @@ export function createRenderer() {
     }
     if (u.state === "charge" && Math.random() < 0.6) fx.spawn("dust", u.x - u.face * 10, u.y, { n: 1 });
     if (u.abilityT > 0 && u.state !== "dead") {
-      ctx.strokeStyle = rgba(u.def.brace ? "#ffe08a" : "#bfe0ff", 0.5 + Math.sin(time * 8) * 0.2); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(u.x, u.y - 30, 16, 26, 0, 0, Math.PI * 2); ctx.stroke();
+      const rider = !!(u.def && u.def.horse);
+      ctx.strokeStyle = rgba(u.def.brace ? "#ffe08a" : rider ? PAL.goldLight : "#bfe0ff", 0.5 + Math.sin(time * 8) * 0.2); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(u.x, u.y - (rider ? 40 : 30), rider ? 30 : 16, rider ? 36 : 26, 0, 0, Math.PI * 2); ctx.stroke();
     }
-    const h = u.kind === "hero" ? 70 : 60;
-    if (u.state !== "dead" && u.state !== "respawn" && u.hp < u.maxHp) hpBar(ctx, u.x, u.y - h - 6, u.kind === "hero" ? 34 : 22, u.hp / u.maxHp, false, false);
+    const h = u.kind === "hero" ? 70 : u.def && u.def.horse ? 84 : 60;
+    if (u.state !== "dead" && u.state !== "respawn" && u.hp < u.maxHp) hpBar(ctx, u.x, u.y - h - 6, u.kind === "hero" ? 34 : u.def && u.def.horse ? 30 : 22, u.hp / u.maxHp, false, false);
     if (u.kind === "hero" && u.state !== "dead" && u.state !== "respawn") {
       /* gold pips for the level under the health bar position */
       for (let i = 0; i < u.level; i += 1) {
@@ -914,7 +925,7 @@ export function createRenderer() {
     ctx.fillStyle = PAL.shadow;
     const shadow = (x, y, r) => { ctx.beginPath(); ctx.ellipse(x + 3, y + 2, r, r * 0.42, 0, 0, Math.PI * 2); ctx.fill(); };
     for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.def.engine ? 56 : e.def.tower ? 48 : e.def.ram ? 44 * (e.def.scale || 1) : e.type === "ram" ? 44 : e.def.horse ? 26 * (HORSES[e.def.horse]?.size || 1) : e.boss ? 20 : 12);
-    for (const u of s.units) if (u.state !== "dead" && u.state !== "respawn") shadow(u.x, u.y, 11);
+    for (const u of s.units) if (u.state !== "dead" && u.state !== "respawn") shadow(u.x, u.y, u.def && u.def.horse ? 26 * (HORSES[u.def.horse]?.size || 1) : 11);
     if (s.hero.state !== "dead" && s.hero.state !== "respawn") shadow(s.hero.x, s.hero.y, 13);
     for (const pr of s.projectiles) { ctx.fillStyle = rgba("#000000", 0.22); ctx.beginPath(); ctx.ellipse(pr.x, pr.y + 2, pr.kind === "stone" ? 5 : 4, 2, 0, 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = PAL.shadow;
