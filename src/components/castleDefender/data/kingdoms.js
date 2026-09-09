@@ -23,6 +23,18 @@ export const KINGDOMS = [
     campaign: "The Realm of Ashford",
   },
   {
+    id: "frost",
+    name: "The Frozen North",
+    style: "Northern",
+    status: "soon",
+    tagline: "Snow-covered mountains, frozen forest and an army waking beneath the drifts.",
+    colours: { primary: "#3d4759", secondary: "#9fc4d8", ground: "#eef3fa" },
+    hero: { name: "Lady Elara", ability: "Coming soon" },
+    units: ["Frost Raider", "Dire Wolf", "Ice Warlord"],
+    environment: "Snowy peaks, iced rivers and ruined watchtowers",
+    campaign: "The Frozen North",
+  },
+  {
     id: "roma",
     name: "Legion of the Frontier",
     style: "Roman",

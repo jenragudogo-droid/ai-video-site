@@ -53,6 +53,14 @@ export const FIGURES = {
   warlord:    { body: "plate", bodyColor: "#1e1c24", trim: PAL.red, tabard: "#120f14", tabardTrim: PAL.red, helmet: "greatHelm", helmetColor: "#111116", plume: PAL.redLight, horns: true, shield: "none", weapon: "greataxe", cape: PAL.redDark, legs: "#1c1c22", boots: "#0c0c0e", enemy: true, scale: 1.5, h: 96, banner: true, glow: PAL.redLight },
   heavyRider: { body: "plate", bodyColor: "#3a3a42", trim: PAL.rust, tabard: "#2a1a1a", helmet: "greatHelm", helmetColor: "#1c1c22", plume: PAL.rustLight, shield: "heater", shieldColor: PAL.blackDark, emblem: "boss", emblemColor: PAL.iron, weapon: "lance", cape: null, legs: "#2a2a32", boots: "#111", enemy: true, h: 60 },
 
+  /* The Frozen North (teaser only, drawn as silhouettes). Shapes are
+     chosen so each reads at a glance in shadow: the raider is squat
+     with a round shield and axe, the warlord is tall with a great axe
+     and a horned helm, Elara is slim with a bow and a long cloak. */
+  frostRaider: { body: "leather", bodyColor: "#4a5568", trim: "#8fa6bd", helmet: "cap", helmetColor: "#39424f", horns: true, shield: "round", shieldColor: "#5a6476", boss: "#9aa4b6", weapon: "axe", cape: "#6b7382", legs: "#333b47", boots: "#20252e", h: 58 },
+  iceWarlord: { body: "plate", bodyColor: "#54627a", trim: "#cfe0f0", tabard: "#2f3a4d", tabardTrim: "#9fc4d8", helmet: "greatHelm", helmetColor: "#3d4759", plume: "#9fc4d8", horns: true, shield: "none", weapon: "greataxe", cape: "#2b3444", legs: "#3a4356", boots: "#20252e", scale: 1.3, h: 86 },
+  elara: { body: "leather", bodyColor: "#4d5a52", trim: "#c9b070", helmet: "hood", hood: "#3c4a52", shield: "none", weapon: "bow", quiver: true, cape: "#6d7b74", legs: "#3a4148", boots: "#2a2f2c", h: 57 },
+
   /* the realm's Royal Knights, drawn on their horses */
   royalRider: { body: "plate", bodyColor: PAL.plateLight, trim: PAL.gold, tabard: PAL.red, tabardTrim: PAL.gold, helmet: "greatHelm", helmetColor: PAL.plateLight, plume: PAL.gold, shield: "heater", shieldColor: PAL.red, emblem: "cross", emblemColor: PAL.gold, weapon: "lance", cape: PAL.red, legs: PAL.plate, boots: PAL.iron, h: 62 },
 
@@ -413,6 +421,18 @@ function drawHead(ctx, spec, x, y, tilt, skin) {
     default:
       outlined(ctx, spec.hairColor || PAL.hair, () => { ctx.moveTo(-7.4, -1); ctx.quadraticCurveTo(-6, -11, 1, -9.5); ctx.quadraticCurveTo(8, -8, 6.5, -2); ctx.quadraticCurveTo(2, -6, -3, -3); ctx.closePath(); }, 1.2);
       break;
+  }
+  /* horns on a helm: northern captains and the warlord's great helm */
+  if (spec.horns) {
+    const hc = spec.hornColor || PAL.bone;
+    for (const side of [-1, 1]) {
+      outlined(ctx, hc, () => {
+        ctx.moveTo(side * 6, -7);
+        ctx.quadraticCurveTo(side * 15, -12, side * 16, -21);
+        ctx.quadraticCurveTo(side * 12, -14, side * 5, -11);
+        ctx.closePath();
+      }, 1.1);
+    }
   }
   ctx.restore();
 }

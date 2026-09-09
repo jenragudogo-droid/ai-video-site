@@ -9,6 +9,8 @@
  * parts we understand are kept, the rest is dropped.
  * ------------------------------------------------------------------ */
 
+import { BADGES, BADGE_ORDER } from "./data/frozenNorth.js";
+
 const KEY = "castleDefenderSave.v1";   // storage key stays; `version` inside tells the format
 export const SAVE_VERSION = 2;
 
@@ -19,8 +21,31 @@ const DEFAULTS = {
   campaignsDone: [],
   difficulty: "normal",
   meta: { crowns: 0, spent: 0, upgrades: {}, unlocks: [] },
+  badges: [],                 // cosmetic only: ids from data/frozenNorth.js BADGES
   battle: null,               // serialized battle from engine.serializeGame, or null
 };
+
+/* Badges that follow from progress the save already records. Deriving
+   them (rather than only awarding them once) means a player who
+   finished the campaign before badges existed has theirs the moment
+   they load, and nobody can lose one to a half-written save. */
+function derivedBadges(save) {
+  const out = [];
+  for (const [id, def] of Object.entries(BADGES)) {
+    if (def.kingdom && (save.campaignsDone || []).includes(def.kingdom)) out.push(id);
+  }
+  return out;
+}
+
+/* the save's badges, existing plus derived, in display order */
+export function badgesOf(save) {
+  const held = new Set([...(save.badges || []), ...derivedBadges(save)]);
+  return BADGE_ORDER.filter((id) => held.has(id));
+}
+
+export function hasBadge(save, id) {
+  return badgesOf(save).includes(id);
+}
 
 let memory = null;
 
@@ -44,6 +69,9 @@ function migrate(data) {
   if (Array.isArray(data.campaignsDone)) out.campaignsDone = data.campaignsDone.slice();
   if (data.difficulty === "hard" || data.difficulty === "normal") out.difficulty = data.difficulty;
   if (data.meta && typeof data.meta === "object") out.meta = { ...out.meta, ...data.meta, upgrades: { ...(data.meta.upgrades || {}) }, unlocks: Array.isArray(data.meta.unlocks) ? data.meta.unlocks.slice() : [] };
+  /* badges: keep any that were stored, then add the ones progress has already earned */
+  const stored = Array.isArray(data.badges) ? data.badges.filter((id) => BADGES[id]) : [];
+  out.badges = BADGE_ORDER.filter((id) => new Set([...stored, ...derivedBadges(out)]).has(id));
   /* a saved battle only survives if it was written by this format */
   if (data.version === SAVE_VERSION && data.battle && typeof data.battle === "object" && data.battle.stageId) out.battle = data.battle;
   return out;
@@ -78,7 +106,7 @@ export function stageRecord(save, id) {
    a first completion. Returns what was new. */
 export function recordResult(save, sum) {
   const rec = { ...stageRecord(save, sum.stageId) };
-  const flags = { newBest: false, newStars: false, newWave: false, crowns: 0, realmComplete: false };
+  const flags = { newBest: false, newStars: false, newWave: false, crowns: 0, realmComplete: false, newBadges: [] };
   if (sum.mode === "endless") {
     if (sum.wave > rec.bestWave) { rec.bestWave = sum.wave; flags.newWave = true; flags.crowns += Math.floor((sum.wave - (save.stages[sum.stageId]?.bestWave || 0)) / 5); }
     if (sum.score > rec.bestScore) { rec.bestScore = sum.score; flags.newBest = true; }
@@ -96,8 +124,11 @@ export function recordResult(save, sum) {
   let campaignsDone = save.campaignsDone || [];
   if (sum.won && sum.finale && sum.kingdom && !campaignsDone.includes(sum.kingdom)) { campaignsDone = [...campaignsDone, sum.kingdom]; flags.realmComplete = true; flags.crowns += 5; }
   const meta = { ...save.meta, crowns: (save.meta?.crowns || 0) + flags.crowns };
+  /* a finished kingdom earns its cosmetic badge, once */
+  const badges = BADGE_ORDER.filter((id) => new Set([...(save.badges || []), ...derivedBadges({ campaignsDone })]).has(id));
+  flags.newBadges = badges.filter((id) => !(save.badges || []).includes(id));
   /* only a finished battle leaves the slot; quitting to the menu keeps it for Continue */
-  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec }, meta, campaignsDone, battle: sum.finished ? null : save.battle };
+  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec }, meta, campaignsDone, badges, battle: sum.finished ? null : save.battle };
   writeSave(next);
   return { save: next, ...flags };
 }
@@ -149,6 +180,7 @@ export function addUnlock(save, id) {
 }
 
 export function resetProgress(save) {
+  /* a full reset clears badges too: they are a record of this profile's run */
   const next = { ...structuredClone(DEFAULTS), settings: save.settings };
   writeSave(next);
   return next;

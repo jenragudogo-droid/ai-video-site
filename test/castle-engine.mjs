@@ -18,7 +18,9 @@ import {
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
-import { readSave, writeSave, saveBattle, clearBattle, recordResult, resetProgress, SAVE_VERSION } from "../src/components/castleDefender/save.js";
+import { readSave, writeSave, saveBattle, clearBattle, recordResult, resetProgress, SAVE_VERSION, badgesOf, hasBadge } from "../src/components/castleDefender/save.js";
+import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, BADGES, BADGE_ORDER } from "../src/components/castleDefender/data/frozenNorth.js";
+import { KINGDOMS } from "../src/components/castleDefender/data/kingdoms.js";
 import { sampleRoute } from "../src/components/castleDefender/engine/path.js";
 import { STAGES } from "../src/components/castleDefender/data/stages.js";
 import { TOWERS, HERO, SOLDIERS } from "../src/components/castleDefender/data/towers.js";
@@ -1169,6 +1171,68 @@ console.log("— Royal Knights —");
   const f3 = makeGame({ seed: 65, stageId: "siege" }); startStage(f3); f3.gold = 3000; buildTower(f3, 2, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(f3, 2); run(f3, 1);
   setMount(f3, 2, true); setMount(f3, 2, false); const gids = squadOf(f3, 2);
   ok(setFormation(f3, gids, "shieldWall") && f3.units.filter((u) => u.tower === 2).every((u) => u.formation === "shieldWall" && u.unit === "royalGuard"), "dismounted Guard can still lock shields");
+}
+
+
+/* ================================================================ */
+console.log("— Defender of Ashford badge —");
+{
+  resetProgress(readSave());
+  ok(badgesOf(readSave()).length === 0, "a new profile has no badges");
+  /* an old save written before badges existed: everything is kept and the badge is derived on load */
+  writeSave({
+    version: SAVE_VERSION,
+    stages: {
+      greenhollow: { stars: 3, bestScore: 31000, bestWave: 12, completed: true, hardStars: 2 },
+      stonebridge: { stars: 2, bestScore: 44000, bestWave: 0, completed: true, hardStars: 0 },
+      siege: { stars: 3, bestScore: 91000, bestWave: 0, completed: true, hardStars: 1 },
+    },
+    settings: { sound: false, music: true, sfxVol: 0.5, musicVol: 0.4, quality: "high", seenHowTo: true },
+    campaignsDone: ["ashford"],
+    difficulty: "hard",
+    meta: { crowns: 7, spent: 12, upgrades: { wallHealth: 2, drillYard: 1 }, unlocks: ["kingsCharge"] },
+    battle: null,
+  });
+  const old = readSave();
+  ok(hasBadge(old, "defenderOfAshford"), "an old completed save is awarded Defender of Ashford on load");
+  ok(old.stages.greenhollow.stars === 3 && old.stages.greenhollow.hardStars === 2 && old.stages.siege.bestScore === 91000, "stage progress, stars and hard records survive the migration");
+  ok(old.difficulty === "hard" && old.meta.crowns === 7 && old.meta.upgrades.wallHealth === 2 && old.meta.unlocks.includes("kingsCharge"), "difficulty, crowns, kingdom upgrades and unlocks survive the migration");
+  ok(old.settings.quality === "high" && old.settings.sound === false, "settings survive the migration");
+  writeSave(old);
+  ok(hasBadge(readSave(), "defenderOfAshford"), "the badge persists after a reload");
+  /* an unfinished campaign earns nothing */
+  resetProgress(readSave());
+  writeSave({ ...readSave(), stages: { greenhollow: { stars: 3, bestScore: 100, bestWave: 0, completed: true, hardStars: 0 } }, campaignsDone: [] });
+  ok(!hasBadge(readSave(), "defenderOfAshford") && badgesOf(readSave()).length === 0, "an incomplete campaign earns no badge");
+  /* finishing the realm awards it once, and it is reported as new */
+  const won = recordResult(readSave(), { stageId: "siege", mode: "campaign", difficulty: "normal", won: true, finished: true, finale: true, kingdom: "ashford", stars: 3, score: 90000, wave: 12 });
+  ok(won.realmComplete && won.newBadges.includes("defenderOfAshford") && won.save.badges.includes("defenderOfAshford"), "completing the realm awards the badge and reports it as new");
+  const again = recordResult(won.save, { stageId: "siege", mode: "campaign", difficulty: "normal", won: true, finished: true, finale: true, kingdom: "ashford", stars: 3, score: 95000, wave: 12 });
+  ok(again.newBadges.length === 0 && again.save.badges.length === 1, "a second victory does not award it twice");
+  /* badges are cosmetic: no crowns, no modifiers, no unlocks of their own */
+  ok(Object.values(BADGES).every((b) => !b.mods && !b.crowns && !b.unlock), "badges carry no gameplay effect");
+  ok(BADGE_ORDER.every((id) => BADGES[id]) && BADGE_ORDER.length === Object.keys(BADGES).length, "every badge is listed in display order");
+  resetProgress(readSave());
+  ok(badgesOf(readSave()).length === 0, "resetting progress clears badges");
+}
+
+/* ================================================================ */
+console.log("— the Frozen North stays locked —");
+{
+  ok(FROZEN_NORTH.status === "soon" && FROZEN_NORTH.name === "The Frozen North", "the Frozen North is a teaser, not a stage");
+  ok(FROZEN_NORTH.flavour.length === 2 && FROZEN_NORTH.flavour.join(" ").length < 120, "the flavour text is two short lines");
+  ok(!STAGES.some((st) => st.kingdom === "frost" || st.id === "frost"), "no stage belongs to the Frozen North, so it cannot be entered");
+  ok(STAGES.every((st) => st.kingdom === "ashford"), "every playable stage is still an Ashford stage");
+  const k = KINGDOMS.find((x) => x.id === "frost");
+  ok(k && k.status === "soon" && !STAGES.some((st) => st.kingdom === k.id), "the Kingdoms page lists it as coming soon with nothing to play");
+  ok(KINGDOMS.filter((x) => x.status === "playable").length === 1 && KINGDOMS.find((x) => x.id === "ashford").status === "playable", "Ashford is still the only playable kingdom");
+  /* teasers are art and a name only: no stats can leak into balance */
+  ok(FROST_TEASERS.length === 3 && FROST_TEASERS.every((t) => t.name && t.art && !t.hp && !t.dmg && !t.armour && !t.speed), "three enemy teasers, none of them carrying stats");
+  ok(FROST_TEASERS.map((t) => t.name).join(",") === "Frost Raider,Dire Wolf,Ice Warlord", "the three teasers are the Frost Raider, the Dire Wolf and the Ice Warlord");
+  ok(FROST_HERO.name === "Lady Elara" && !FROST_HERO.hp && !FROST_HERO.ability, "Lady Elara is a silhouette and a name, with no hero stats");
+  ok(!SOLDIERS[FROST_HERO.id] && !ENEMIES.frostRaider && !ENEMIES.direWolf && !ENEMIES.iceWarlord, "none of the teased units exist in the unit tables");
+  /* Ashford is untouched by the teaser */
+  ok(STAGES.length === 3 && STAGES[2].id === "siege" && STAGES[2].waves.length === 12, "the Ashford campaign is still three stages ending in the twelve-wave siege");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

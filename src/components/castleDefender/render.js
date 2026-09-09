@@ -18,6 +18,7 @@ import {
 } from "./art/towers.js";
 import { FIGURES, figurePose, drawFigure, drawHorse, drawRam } from "./art/figures.js";
 import { drawSiegeCatapult, drawSiegeTower, drawOuterWall } from "./art/siege.js";
+import { drawFrostScene, drawDireWolf, drawAsSilhouette, drawFrostRune } from "./art/frost.js";
 import { PAL, rgba } from "./art/palette.js";
 import { towerLevel } from "./engine/engine.js";
 import { HERO, TOWERS } from "./data/towers.js";
@@ -1188,6 +1189,23 @@ export function createRenderer() {
     } else if (kind === "ram") {
       ctx.translate(w / 2, h * 0.9); const k = Math.min(w / 140, h / 110); ctx.scale(k, k);
       drawRam(ctx, 0.2);
+    } else if (kind === "scene") {
+      /* a painted panel that fills the whole box (the Frozen North teaser) */
+      if (id === "frostNorth") drawFrostScene(ctx, w, h);
+    } else if (kind === "shade") {
+      /* locked teaser art: the shape only, as a cold shadow */
+      const dpr = Math.min(2, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
+      drawAsSilhouette(ctx, w, h, (c) => {
+        c.save();
+        if (id === "direWolf") { c.translate(w / 2, h * 0.94); const k = Math.min(w / 130, h / 92); c.scale(k, k); drawDireWolf(c); }
+        else {
+          const spec = FIGURES[id] || FIGURES.militia;
+          c.translate(w / 2, h * 0.94); const k = Math.min(w / 78, h / ((spec.h || 58) + 34)); c.scale(k, k);
+          drawFigure(c, spec, figurePose("idle", 0.4, { bow: spec.weapon === "bow" }), 0);
+        }
+        c.restore();
+      }, { dpr });
+      drawFrostRune(ctx, w * 0.5, h * 0.2, Math.min(w, h) * 0.12);
     }
     ctx.restore();
   }

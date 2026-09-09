@@ -773,3 +773,87 @@
 @media (max-height: 560px) {
   .cd.has-many .cdSheet--bottom, .cd.is-full.has-many .cdSheet--bottom { bottom: auto; top: 54px; max-height: calc(100% - 200px); }
 }
+
+/* ------------------------------ v1.1: the Frozen North teaser ------------------------------ */
+
+/* A painted winter panel with carved-stone framing, then the locked
+   shadow cards under it. Cold blues against Ashford's gold so it reads
+   as the same world in a harder season. */
+.cdFrost {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 12px; border-radius: 12px;
+  border: 1px solid rgba(159, 196, 216, 0.35);
+  background: linear-gradient(180deg, rgba(38, 50, 72, 0.92), rgba(22, 30, 44, 0.94));
+  box-shadow: inset 0 1px 0 rgba(215, 236, 244, 0.12);
+}
+.cdFrostArt { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid rgba(159, 196, 216, 0.28); }
+.cdFrostScene { display: block; width: 100%; height: auto; }
+/* the text sits on a dark scrim at the foot of the painting, never over the peaks */
+.cdFrostText {
+  position: absolute; inset: auto 0 0 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 26px 16px 12px; text-align: center;
+  background: linear-gradient(180deg, rgba(16, 22, 34, 0) 0%, rgba(16, 22, 34, 0.55) 34%, rgba(13, 18, 28, 0.9) 100%);
+}
+.cdFrostText .cdEyebrow { color: rgba(215, 236, 244, 0.75); }
+.cdFrostText h4 {
+  margin: 0; font: 700 clamp(20px, 4.4vw, 30px) var(--cd-serif);
+  letter-spacing: 0.16em; text-transform: uppercase; color: #eaf4fb;
+  text-shadow: 0 0 18px rgba(159, 196, 216, 0.45), 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+.cdFrostFlavour { display: flex; flex-direction: column; margin: 0; font: italic 400 13px var(--cd-body); color: rgba(215, 236, 244, 0.82); line-height: 1.45; }
+.cdSoon--frost { margin-top: 6px; align-self: center; border-color: rgba(159, 196, 216, 0.5); color: #d7ecf4; background: rgba(16, 24, 38, 0.6); }
+
+/* snowfall: a few drifting flakes, paused for reduced motion */
+.cdSnow { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.cdSnow i { position: absolute; top: -8px; border-radius: 50%; background: rgba(238, 243, 250, 0.85); animation: cdSnowFall linear infinite; }
+@keyframes cdSnowFall {
+  from { transform: translate3d(0, -10px, 0); opacity: 0; }
+  12% { opacity: 0.9; }
+  88% { opacity: 0.75; }
+  to { transform: translate3d(14px, 240px, 0); opacity: 0; }
+}
+
+/* locked shadow cards: the shape, a name, and nothing else to click */
+.cdShadowRow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.cdShadowCard {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0;
+  padding: 10px 8px; border-radius: 10px; text-align: center;
+  border: 1px dashed rgba(159, 196, 216, 0.35); background: rgba(14, 20, 32, 0.6);
+}
+/* the canvas keeps its own aspect ratio and shrinks with the column */
+.cdShadowArt { display: block; width: 100%; max-width: 78px; height: auto; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+.cdShadowArt--hero { max-width: 66px; flex: 0 0 auto; }
+.cdShadowCard strong { font: 600 13px var(--cd-serif); letter-spacing: 0.08em; color: #cfe0f0; }
+.cdShadowCard span { font-size: 11px; color: rgba(207, 224, 240, 0.6); }
+.cdShadowCard--hero { flex-direction: row; align-items: center; gap: 14px; text-align: left; padding: 10px 14px; }
+.cdShadowCard--hero .cdShadowArt { width: 66px; }
+.cdShadowCard--hero > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cdShadowCard--hero .cdEyebrow { color: rgba(159, 196, 216, 0.8); }
+.cdShadowCard--hero strong { font-size: 16px; letter-spacing: 0.1em; }
+
+/* Defender of Ashford and any badge after it */
+.cdBadge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--cd-gold); background: linear-gradient(180deg, rgba(78, 60, 24, 0.9), rgba(40, 31, 14, 0.9));
+  font: 600 11px var(--cd-serif); letter-spacing: 0.12em; text-transform: uppercase; color: var(--cd-gold-2);
+  white-space: nowrap;
+}
+.cdBadge i { font-style: normal; font-size: 13px; }
+.cdBadge--sm { padding: 3px 9px; font-size: 10px; letter-spacing: 0.08em; }
+
+@media (max-width: 560px) {
+  .cdShadowRow { gap: 6px; }
+  .cdShadowCard { padding: 8px 4px; }
+  .cdShadowCard strong { font-size: 11px; letter-spacing: 0.04em; }
+  .cdShadowCard span { font-size: 10px; }
+  .cdShadowCard--hero { gap: 10px; padding: 10px; }
+  .cdShadowCard--hero .cdShadowArt { width: 54px; }
+  .cdFrostText { padding: 18px 12px 10px; }
+  .cdFrostFlavour { font-size: 12px; }
+  .cdBadge { padding: 4px 9px; font-size: 10px; letter-spacing: 0.06em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cdSnow { display: none; }
+}

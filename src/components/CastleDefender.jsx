@@ -11,11 +11,13 @@ import {
 } from "./castleDefender/engine/engine.js";
 import { createRenderer } from "./castleDefender/render.js";
 import { createCastleAudio } from "./castleDefender/audio.js";
-import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked, saveBattle, clearBattle, saveDifficulty, buyUpgrade } from "./castleDefender/save.js";
+import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked, saveBattle, clearBattle, saveDifficulty, buyUpgrade, badgesOf,
+} from "./castleDefender/save.js";
 import { PERK_BY_ID, RARITY, POWERS } from "./castleDefender/data/perks.js";
 import { CATEGORIES, KINGDOM_UPGRADES, upgradeCost as kingdomCost } from "./castleDefender/data/progression.js";
 import { STAGES } from "./castleDefender/data/stages.js";
 import { KINGDOMS } from "./castleDefender/data/kingdoms.js";
+import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, BADGES } from "./castleDefender/data/frozenNorth.js";
 import { TOWERS, TOWER_ORDER, ABILITIES, HERO, heroStats, DIFFICULTY, SOLDIERS, PIKE_UNITS } from "./castleDefender/data/towers.js";
 import { ENEMIES } from "./castleDefender/data/enemies.js";
 import { fullscreenElement, onFullscreenChange, toggleGameFullscreen, unlockPageScroll } from "./fullscreen.js";
@@ -58,7 +60,13 @@ const TOUCH = [
   ["Banner", "Call the next wave early for gold"],
 ];
 
-function IconCanvas({ kind, id, w = 48, h = 48, renderer, className }) {
+/* Snowfall over the teaser panel: a fixed set so React never reshuffles
+   it, and CSS does the drifting (and stops under reduced motion). */
+const SNOW = [12, 47, 78, 26, 61, 90, 5, 35, 68, 84, 19, 54, 73, 41].map((x, i) => ({
+  x, d: (i * 0.83) % 5, t: 6 + ((i * 1.7) % 5), s: i % 3 === 0 ? 3 : 2,
+}));
+
+function IconCanvas({ kind, id, w = 48, h = 48, renderer, className, fluid = false }) {
   const ref = useRef(null);
   useEffect(() => {
     const c = ref.current;
@@ -70,7 +78,7 @@ function IconCanvas({ kind, id, w = 48, h = 48, renderer, className }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     r.drawIcon(ctx, kind, id, w, h);
   }, [kind, id, w, h, renderer]);
-  return <canvas ref={ref} className={className} style={{ width: w, height: h }} aria-hidden="true" />;
+  return <canvas ref={ref} className={className} style={fluid ? undefined : { width: w, height: h }} aria-hidden="true" />;
 }
 
 function Stars({ n, big }) {
@@ -1102,6 +1110,8 @@ export default function CastleDefender() {
   const battleWave = battle ? displayWave(battle.wave, battle.waveState, battle.mode === "endless" ? Infinity : (STAGES.find((st) => st.id === battle.stageId)?.waves.length || 0)) : null;
   const battleStage = battle ? STAGES.find((st) => st.id === battle.stageId) : null;
   const crowns = profile.meta?.crowns || 0;
+  const realmDone = (profile.campaignsDone || []).includes("ashford");
+  const badges = badgesOf(profile);
 
   /* ------------------------------ view ------------------------------ */
 
@@ -1455,6 +1465,9 @@ export default function CastleDefender() {
             <span><Stars n={rec0.stars} /> Greenhollow</span>
             <span>{stars} {stars === 1 ? "star" : "stars"} earned</span>
             <span title="Crowns buy kingdom upgrades on the Campaign page">👑 {crowns}</span>
+            {badges.map((id) => (
+              <span key={id} className="cdBadge cdBadge--sm" title={BADGES[id].desc}><i aria-hidden="true">{BADGES[id].icon}</i>{BADGES[id].name}</span>
+            ))}
             <button type="button" className="cdIconBtn" onClick={toggleFullscreen} aria-label="Fullscreen">{fullscreen || pseudoFull ? "⤡" : "⤢"}</button>
           </div>
         </div>
@@ -1467,6 +1480,9 @@ export default function CastleDefender() {
               <button type="button" className="cdBack" onClick={() => setScreen("menu")}>‹ Back</button>
               <h3>The Realm of Ashford</h3>
               <button type="button" className="cdBack cdCrownBtn" onClick={() => { setScreen("kingdom"); audioRef.current?.play("open"); }} title="Spend crowns on permanent upgrades">👑 {crowns} · Kingdom upgrades</button>
+              {badges.map((id) => (
+                <span key={id} className="cdBadge" title={BADGES[id].desc}><i aria-hidden="true">{BADGES[id].icon}</i>{BADGES[id].name}</span>
+              ))}
               <div className="cdDiff">
                 {Object.entries(DIFFICULTY).map(([id, d]) => (
                   <button type="button" key={id} className={difficulty === id ? "is-on" : ""} onClick={() => setDifficulty(id)} title={d.desc}>{d.name}</button>
@@ -1510,13 +1526,44 @@ export default function CastleDefender() {
                   </article>
                 );
               })}
-              {(profile.campaignsDone || []).includes("ashford") && (
+              {realmDone && (
+                <section className="cdFrost" aria-label={`${FROZEN_NORTH.name}, coming soon`}>
+                  <div className="cdFrostArt">
+                    <IconCanvas kind="scene" id="frostNorth" w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
+                    <div className="cdSnow" aria-hidden="true">{SNOW.map((f, i) => <i key={i} style={{ left: `${f.x}%`, animationDelay: `${f.d}s`, animationDuration: `${f.t}s`, width: f.s, height: f.s }} />)}</div>
+                    <div className="cdFrostText">
+                      <p className="cdEyebrow">{FROZEN_NORTH.eyebrow}</p>
+                      <h4>{FROZEN_NORTH.name}</h4>
+                      <p className="cdFrostFlavour">{FROZEN_NORTH.flavour.map((line) => <span key={line}>{line}</span>)}</p>
+                      <span className="cdSoon cdSoon--frost">🔒 Coming soon</span>
+                    </div>
+                  </div>
+                  <div className="cdShadowRow">
+                    {FROST_TEASERS.map((t) => (
+                      <div key={t.id} className="cdShadowCard">
+                        <IconCanvas kind="shade" id={t.id} w={78} h={78} renderer={rendererRef} className="cdShadowArt" fluid />
+                        <strong>{t.name}</strong>
+                        <span>{t.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="cdShadowCard cdShadowCard--hero">
+                    <IconCanvas kind="shade" id={FROST_HERO.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
+                    <div>
+                      <p className="cdEyebrow">New hero — coming soon</p>
+                      <strong>{FROST_HERO.name}</strong>
+                      <span>{FROST_HERO.note}</span>
+                    </div>
+                  </div>
+                </section>
+              )}
+              {realmDone && (
                 <article className="cdStage cdStage--next is-locked">
-                  <div className="cdStageNum">IV</div>
+                  <div className="cdStageNum">✦</div>
                   <div className="cdStageBody">
-                    <h4>Next kingdom</h4>
-                    <p className="cdStageSub">{KINGDOMS[1].name} · {KINGDOMS[1].style}</p>
-                    <p className="cdStageIntro">{KINGDOMS[1].tagline}</p>
+                    <h4>New Game+</h4>
+                    <p className="cdStageSub">The Realm of Ashford, again</p>
+                    <p className="cdStageIntro">Replay Ashford with tougher enemies and new rewards.</p>
                     <p className="cdLocked">Coming soon</p>
                   </div>
                 </article>
