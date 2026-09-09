@@ -478,6 +478,10 @@ export default function CastleDefender() {
         case "barrage": a?.play("barrage"); break;
         case "formation": a?.play(e.kind === "pikeWall" ? "pikeWall" : e.kind === "shieldWall" ? "shieldWall" : "close"); saveNow(); break;
         /* the Frozen North */
+        case "blizzardWarn":
+          a?.play("windRise");
+          banner("The wind is rising", `A blizzard in ${e.inS} seconds. Your towers will shoot slower and see less.`, "alert", 2600);
+          break;
         case "blizzard":
           if (e.on) { a?.play("blizzard"); banner("Blizzard", "Your towers shoot slower and see less until it blows over", "alert", 3000); }
           else { a?.play("windEase"); banner("The wind eases", "", "good", 1600); }
@@ -911,7 +915,7 @@ export default function CastleDefender() {
   const enterMode = useCallback((m) => {
     setMode((cur) => (cur === m ? null : m));
     const r = rendererRef.current;
-    r?.setSelection({ target: null });
+    r?.setSelection({ target: null, range: null });
     audioRef.current?.play("open");
   }, []);
 
@@ -958,7 +962,11 @@ export default function CastleDefender() {
       else { audioRef.current?.play("error"); banner("Out of range", "Pick a target inside the tower's circle", "alert", 1400); }
       return;
     }
-    if (m === "charge") { if (heroCharge(s, x, y)) { handleEvents(); setMode(null); setHeroSel(false); } else audioRef.current?.play("error"); return; }
+    if (m === "charge") {
+      if (heroCharge(s, x, y)) { handleEvents(); setMode(null); setHeroSel(false); r.setSelection({ range: null }); }
+      else audioRef.current?.play("error");
+      return;
+    }
     if (m === "unitMove") { if (giveOrder({ kind: "move", x, y })) setMode(null); return; }
     if (m === "unitAttack") {
       let best = null; let bd = Math.max(40, 30 / r.fit.scale) ** 2;
@@ -1067,6 +1075,10 @@ export default function CastleDefender() {
     const s = gameRef.current;
     if (!s || s.hero.chargeCd > 0) { audioRef.current?.play("error"); return; }
     setHeroSel(true); setMode("charge"); audioRef.current?.play("open");
+    /* Elara shoots to a fixed distance, so show how far before the click
+       rather than letting the arrow quietly fall short of the cursor. */
+    const ab = heroAbility(s);
+    if (ab.dist) rendererRef.current?.setSelection({ range: { x: s.hero.x, y: s.hero.y, r: ab.dist } });
   }, []);
 
   /* keyboard */

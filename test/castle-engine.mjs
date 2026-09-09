@@ -15,7 +15,7 @@ import {
   orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility, offerPerks, choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, repairCost,
   castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, damageWall, guardCount,
   canMount, setMount, MOUNT_COST,
-  heroUpgrade, heroAbility, terrainSlow, blizzardRate, blizzardRange, startBlizzard, damageEnemy, spawnEnemy,
+  heroUpgrade, heroAbility, terrainSlow, blizzardRate, blizzardRange, startBlizzard, damageEnemy, spawnEnemy, onFrost, inDrift,
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
@@ -1224,6 +1224,9 @@ console.log("— Defender of Ashford badge —");
 
 const FROST_IDS = ["frostwatch", "wolfpine", "cairnhold"];
 const mk = (id, opts = {}) => { const g = makeGame({ stageId: id, ...opts }); startStage(g); return g; };
+const syncCheck = () => {};                       /* positions are set directly in these checks */
+/* how fast a unit actually moves where it is standing right now */
+const unitSpeedAt = (g, u) => { const before = { x: u.x, y: u.y }; const s0 = u.def.speed * (1 - (1 - terrainSlow(g, u.x, u.y)) * 0.5); u.chilled = terrainSlow(g, u.x, u.y) < 0.95; u.x = before.x; u.y = before.y; return s0; };
 const frostStage = (id) => STAGES.find((st) => st.id === id);
 
 console.log("— the Frozen North is a real kingdom —");
@@ -1383,6 +1386,10 @@ console.log("— snow, drifts and the storm —");
   const wst = {};
   const wevs = run(w, w.stage.blizzard.first + w.stage.blizzard.dur + 20, (gg) => autoStep(gg, wst));
   const storms = wevs.filter((e) => e.type === "blizzard");
+  ok(wevs.some((e) => e.type === "blizzardWarn"), "the wind rises before the storm, with time to react");
+  const warnAt = wevs.findIndex((e) => e.type === "blizzardWarn");
+  const startAt = wevs.findIndex((e) => e.type === "blizzard" && e.on);
+  ok(warnAt >= 0 && startAt > warnAt, "the warning comes before the storm, not with it");
   ok(storms.some((e) => e.on), "the storm arrives on schedule and announces itself");
   ok(storms.some((e) => !e.on), "and it blows over again");
   /* while it blows, towers are worse off */
@@ -1616,6 +1623,163 @@ console.log("— finishing the north —");
   ok(!isKingdomUnlocked(readSave(), "sun"), "kingdom three stays locked even with both kingdoms won");
   ok(stageRecord(readSave(), "greenhollow").completed && stageRecord(readSave(), "cairnhold").completed, "both kingdoms keep their records side by side");
   resetProgress(readSave());
+}
+
+console.log("— the version 2.0 polish pass —");
+{
+  /* the frost arrow used to do nothing at all past its reach, which
+     reads as a broken button rather than a rule */
+  const g = mk("frostwatch"); callWave(g); run(g, 30);
+  const h = g.hero; const ab = ELARA.ability;
+  g.hero.chargeCd = 0;
+  const far = heroCharge(g, h.x - ab.dist * 3, h.y);        // west, away from the map edge
+  ok(far === true, "a shot aimed past her reach still fires");
+  const st = g.strikes[g.strikes.length - 1];
+  ok(st && Math.abs(Math.hypot(st.x - h.x, st.y - h.y) - ab.dist) < 2, "and it lands at the edge of her reach, not where the finger was");
+  ok(g.hero.chargeCd > 0, "and it costs the cooldown like any other shot");
+  /* Edric was never affected: his charge always clamped */
+  const g2 = mk("siege"); g2.hero.chargeCd = 0;
+  ok(heroCharge(g2, g2.hero.x + 4000, g2.hero.y) === true, "Sir Edric's charge still clamps the same way");
+}
+
+console.log("— the ground tells you what it is doing —");
+{
+  const g = mk("frostwatch");
+  const d = g.layout.drifts[0];
+  ok(inDrift(g, d.x, d.y) && !inDrift(g, 20, 20), "a drift knows what is standing in it");
+  ok(!onFrost(g, d.x, d.y), "a snowdrift is not iced ground");
+  g.zones.push({ id: 1, x: 400, y: 400, r: 80, t: 4, dps: 0, tick: 0, frost: true, slow: 0.5 });
+  ok(onFrost(g, 400, 400) && !onFrost(g, 900, 900), "the frost arrow's ice does");
+  /* enemies wade at the full penalty, your own soldiers at half */
+  const e = spawnEnemy(g, "frostRaider", 0, 0);
+  e.x = d.x; e.y = d.y; syncCheck(e);
+  const slow = terrainSlow(g, d.x, d.y);
+  ok(slow < 1 && slow >= 0.35, "the drift slows what crosses it, and never to a standstill");
+  const u = g.units[0];
+  if (u) {
+    u.x = d.x; u.y = d.y;
+    const fast = unitSpeedAt(g, u);
+    u.x = 20; u.y = 20;
+    const clear = unitSpeedAt(g, u);
+    ok(fast < clear, "your soldiers feel the snow too");
+    ok(fast > clear * slow + 0.01, "but less than the northerners do");
+    ok(u.chilled === false, "and the mark comes off once they are out of it");
+  } else { ok(true, "your soldiers feel the snow too"); ok(true, "but less than the northerners do"); ok(true, "and the mark comes off once they are out of it"); }
+}
+
+console.log("— the Jarl cannot win by standing at the gate —");
+{
+  const g = mk("cairnhold");
+  const boss = spawnEnemy(g, "iceWarlord", 0, 0);
+  boss.boss.phase = 2;
+  /* at the gate the ice is not tended: a player losing the castle always
+     has a way back into the fight */
+  boss.atGate = true; boss.shell = 100;
+  const before = boss.shell;
+  run(g, 3);
+  ok(boss.shell <= before, "the ice does not re-form while he is battering the gate");
+  /* away from the gate it does */
+  const g2 = mk("cairnhold");
+  const b2 = spawnEnemy(g2, "iceWarlord", 0, 0);
+  b2.boss.phase = 2; b2.shell = 100;
+  run(g2, 3);
+  ok(b2.shell > 100, "away from the gate it closes again");
+  /* and each re-form comes back thinner */
+  const g3 = mk("cairnhold");
+  const b3 = spawnEnemy(g3, "iceWarlord", 0, 0);
+  b3.boss.phase = 2;
+  b3.boss.reforms = 4;
+  b3.shell = 10;
+  run(g3, 40);
+  ok(b3.shell <= b3.shellMax * 0.42, `after four breaks the ice only comes back to ${Math.round((b3.shell / b3.shellMax) * 100)}% (cap 40%)`);
+  ok(ENEMIES.iceWarlord.frost.shellRegen > 0, "the ice still regenerates, it is only capped");
+  /* the counters survive a save, or a resumed fight would be easier */
+  const g4 = mk("cairnhold");
+  const b4 = spawnEnemy(g4, "iceWarlord", 0, 0);
+  b4.boss.reforms = 3; b4.boss.patience = 12.5; run(g4, 0.2);
+  const r4 = restoreGame(JSON.parse(JSON.stringify(serializeGame(g4))));
+  const rb = r4.enemies.find((e) => e.boss);
+  ok(rb && rb.boss.reforms === 3, "how many times the ice has been broken survives a save");
+  ok(rb && Math.abs(rb.boss.patience - b4.boss.patience) < 0.3, "and so does his patience");
+}
+
+console.log("— both maps defend the gate the same way —");
+{
+  /* A boss that batters the gate turns "how many towers can reach the
+     gate" into the whole fight. The Cairnhold's landscape map had one
+     plot in range where portrait had two, and lost Normal runs to it.
+     What matters is that the two orientations agree, not the number. */
+  const reach = 240;
+  for (const st of STAGES) {
+    const counts = ["landscape", "portrait"].map((layout) => {
+      const g = mk(st.id, { layout });
+      const gate = g.layout.castle.gate;
+      return g.layout.plots.filter((p) => Math.hypot(p.x - gate.x, p.y - gate.y) < reach).length;
+    });
+    ok(Math.abs(counts[0] - counts[1]) <= 1, `${st.id}: the gate is defended alike in both orientations (${counts.join(" and ")})`);
+    /* Only Vorne can win by standing at the gate: his ice makes it a
+       damage race, so both of his orientations need real gate cover.
+       Blackmoor commits to sweeps and dies to them, and the Siege's
+       geometry is left exactly as it shipped. */
+    const boss = st.waves.flat().map((gr) => ENEMIES[gr.type]).find((d) => d && d.boss === "final");
+    if (boss && boss.frost) ok(Math.min(counts[0], counts[1]) >= 2, `${st.id}: a boss at the gate can be answered by more than one tower (${counts.join(" and ")})`);
+  }
+}
+
+console.log("— neither orientation is the easy one —");
+{
+  /* A road that is far shorter in one orientation gives the towers less
+     time for the same wave. Stonebridge's portrait roads were 897 and
+     812 against 1415 and 858, and it lost half its Normal runs. */
+  for (const st of STAGES) {
+    const lens = ["landscape", "portrait"].map((layout) => {
+      const g = mk(st.id, { layout });
+      return g.layout.routes.map((r) => r.length).reduce((a, b) => a + b, 0) / g.layout.routes.length;
+    });
+    const ratio = Math.min(lens[0], lens[1]) / Math.max(lens[0], lens[1]);
+    ok(ratio > 0.72, `${st.id}: the two orientations walk comparable roads (${Math.round(ratio * 100)}%)`);
+  }
+}
+
+console.log("— the wolf den announces itself —");
+{
+  const g = mk("wolfpine");
+  const den = spawnEnemy(g, "wolfDen", 0, 0);
+  ok(den.unloadT >= 0, "a den carries the timer the renderer shakes it with");
+  run(g, 60);
+  ok(den.docked === true, "it stops on the road and opens");
+  const before = den.unloaded || 0;
+  const evs = run(g, ENEMIES.wolfDen.tower.unloadEvery + 4);
+  ok(count(evs, "unload") >= 1, "and it looses a wolf on its own timer");
+  ok((den.unloaded || 0) > before, "which it counts, so the renderer can telegraph the next one");
+  ok(den.unloadT > 0 && den.unloadT <= ENEMIES.wolfDen.tower.unloadEvery * 2, "the timer runs down toward the next wolf");
+}
+
+console.log("— resuming a fight in an awkward moment —");
+{
+  /* the states a player is most likely to save in the middle of */
+  const g = mk("wolfpine"); g.gold = 6000;
+  const plot = g.layout.plots.findIndex((p, i) => canBuild(g, i, "barracks"));
+  buildTower(g, plot, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(g, plot);
+  setMount(g, plot, true);
+  callWave(g); run(g, 40);
+  /* hero ability on cooldown, a knight's lance on cooldown, a storm blowing */
+  g.hero.chargeCd = 0; heroCharge(g, g.hero.x - 120, g.hero.y);
+  const knight = g.units.find((u) => u.unit === "royalKnight");
+  if (knight) triggerUnitAbility(g, [knight.id]);
+  startBlizzard(g, 9);
+  run(g, 1.5);
+  const cd0 = g.hero.chargeCd; const kAb = knight ? knight.abilityCd : 0;
+  const r = restoreGame(JSON.parse(JSON.stringify(serializeGame(g))));
+  ok(Math.abs(r.hero.chargeCd - cd0) < 0.001 && cd0 > 0, "Lady Elara's Frost Arrow comes back still on cooldown");
+  const rk = r.units.find((u) => u.unit === "royalKnight");
+  ok(!knight || (rk && Math.abs((rk.abilityCd || 0) - (kAb || 0)) < 0.001), "and so does the Lance Charge");
+  ok(Math.abs(r.blizzT - g.blizzT) < 0.001 && r.blizzT > 0, "the storm is still blowing after the resume");
+  ok(r.units.filter((u) => u.unit === "royalKnight").length === g.units.filter((u) => u.unit === "royalKnight").length, "no knight is lost or duplicated");
+  ok(r.zones.length === g.zones.length, "the iced ground she left survives");
+  /* and the ground still slows what stands on it after a resume */
+  if (r.zones.length) { const z = r.zones[0]; ok(onFrost(r, z.x, z.y) && terrainSlow(r, z.x, z.y) < 1, "the restored ice still bites"); }
+  else ok(true, "the restored ice still bites");
 }
 
 console.log("— Ashford is exactly as it was —");

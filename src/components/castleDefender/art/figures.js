@@ -59,7 +59,11 @@ export const FIGURES = {
      and a horned helm, Elara is slim with a bow and a long cloak. */
   frostRaider: { body: "leather", bodyColor: "#4a5568", trim: "#8fa6bd", helmet: "cap", helmetColor: "#39424f", horns: true, shield: "round", shieldColor: "#5a6476", boss: "#9aa4b6", weapon: "axe", cape: "#6b7382", legs: "#333b47", boots: "#20252e", h: 58 },
   iceWarlord: { body: "plate", bodyColor: "#54627a", trim: "#cfe0f0", tabard: "#2f3a4d", tabardTrim: "#9fc4d8", helmet: "greatHelm", helmetColor: "#3d4759", plume: "#9fc4d8", horns: true, shield: "none", weapon: "greataxe", cape: "#2b3444", legs: "#3a4356", boots: "#20252e", scale: 1.3, h: 86 },
-  elara: { body: "leather", bodyColor: "#6d8a76", trim: "#d9c07a", helmet: "hood", hood: "#4a6356", shield: "none", weapon: "bow", quiver: true, cape: "#8fa8c4", legs: "#4a5560", boots: "#3a2f28", scale: 1.04, h: 58 },
+  /* Lady Elara. She has to be picked out instantly from an Ashford
+     bowman standing in the next tower, so nothing she wears is the
+     archer's woodland green: deep northern teal, a white fur mantle,
+     silver trim, and she stands a head taller. */
+  elara: { body: "leather", bodyColor: "#2f5f6e", trim: "#d8e6ef", helmet: "hood", hood: "#20444f", shield: "none", weapon: "bow", quiver: true, cape: "#e8f1f7", legs: "#33424e", boots: "#2a2118", scale: 1.14, h: 66 },
 
   /* The Sunspear Reach (teaser only, drawn as silhouettes) */
   duneRaider: { body: "leather", bodyColor: "#a8804a", trim: "#e8c25a", helmet: "hood", hood: "#8c5a2c", shield: "buckler", shieldColor: "#8c2f2a", boss: "#e8c25a", weapon: "spear", cape: "#c98a4a", legs: "#6a4a28", boots: "#4a2f18", enemy: true, h: 58 },

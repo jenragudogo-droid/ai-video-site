@@ -174,10 +174,15 @@ export const STAGES = [
         w: 900, h: 1600,
         routes: [
           { width: 1.35, points: [P(-60, 1300), P(200, 1250), P(420, 1150), P(560, 980), P(520, 800), P(450, 650), P(450, 500), P(450, 372)] },
-          { points: [P(960, 760), P(820, 760), P(700, 790), P(560, 800), P(520, 800), P(450, 650), P(450, 500), P(450, 372)] },
-          { points: [P(-60, 520), P(150, 560), P(320, 600), P(450, 650), P(450, 500), P(450, 372)] },
+          /* These two roads were 897 and 812 long against the landscape
+             map's 1415 and 858: cavalry on them reached the gate before
+             the towers had time to work, and the portrait stage lost
+             half its Normal runs where the landscape one lost none.
+             Same approaches, walked the long way round. */
+          { points: [P(960, 1420), P(880, 1240), P(940, 1080), P(860, 950), P(900, 860), P(820, 800), P(700, 790), P(560, 800), P(520, 800), P(450, 650), P(450, 500), P(450, 372)] },
+          { points: [P(-60, 340), P(80, 470), P(60, 640), P(190, 740), P(170, 880), P(300, 890), P(370, 770), P(340, 640), P(450, 650), P(450, 500), P(450, 372)] },
         ],
-        plots: [P(280, 1120), P(640, 1060), P(400, 880), P(600, 700), P(330, 520), P(580, 520), P(820, 860), P(380, 1010), P(300, 760), P(160, 480)],
+        plots: [P(280, 1120), P(640, 1060), P(400, 880), P(625, 705), P(330, 520), P(580, 520), P(815, 870), P(380, 1010), P(300, 760), P(160, 480)],
         castle: { x: 300, y: 60, w: 300, h: 300, gate: P(450, 360) },
         river: [P(820, 1650), P(760, 1300), P(700, 1000), P(700, 790), P(760, 600), P(900, 520)],
         bridges: [{ x: 700, y: 790, angle: 0 }],
@@ -341,7 +346,7 @@ export const STAGES = [
       "Lady Elara shoots from range and gives ground when anything reaches her. Keep her behind the line.",
       "Dire wolves slip a block in a heartbeat. Arrows kill them; soldiers rarely hold them.",
       "Shield raiders turn arrows aside. Catapults and soldiers go through them.",
-      "Snowdrifts slow everything that crosses. Put your towers where the road runs through one.",
+      "Snowdrifts slow everything that crosses, the northerners worst of all. Put your towers where the road runs through one.",
     ],
     waves: [
       W(G("frostRaider", 10, { every: 1.2 })),
@@ -431,7 +436,7 @@ export const STAGES = [
     drifts: true,
     blizzard: { first: 90, every: 78, dur: 12, towerRate: 0.3, towerRange: 0.15 },
     castleHp: 24,
-    startGold: 350,
+    startGold: 335,
     firstCountdown: 24,
     countdown: 22,
     intro: [
@@ -447,18 +452,24 @@ export const STAGES = [
     waves: [
       W(G("frostRaider", 10, { every: 1.05 }), G("direWolf", 5, { at: 5, every: 0.8, form: "rush" })),
       W(G("shieldRaider", 5, { every: 1.5, form: "shieldwall" }), G("frostArcher", 5, { at: 4, every: 1.3 }), G("frostRaider", 6, { at: 8, every: 1.1 })),
-      W(G("direWolf", 10, { every: 0.75, form: "rush" }), G("frostRaider", 8, { at: 2, every: 1.0, route: 1 }), G("berserker", 3, { at: 10, every: 2.0 })),
+      W(G("direWolf", 8, { every: 0.8, form: "rush" }), G("frostRaider", 8, { at: 3, every: 1.0, route: 1 }), G("berserker", 3, { at: 12, every: 2.0 })),
       W(G("shieldRaider", 6, { every: 1.5, form: "shieldwall" }), G("frostArcher", 6, { at: 3, every: 1.2, route: 1 }), G("frostRaider", 10, { at: 1, every: 1.0 })),
       W(G("wolfDen", 1, { at: 4 }), G("direWolf", 6, { at: 2, every: 0.8, form: "rush", route: 1 }), G("frostRaider", 8, { at: 6, every: 1.1 }), G("frostArcher", 5, { at: 12, every: 1.3 })),
-      W(G("berserker", 5, { every: 1.8 }), G("shieldRaider", 6, { at: 3, every: 1.5, form: "shieldwall", route: 1 }), G("direWolf", 10, { at: 6, every: 0.75, form: "rush", route: 2 }), G("frostArcher", 6, { at: 9, every: 1.2 })),
-      W(G("wolfDen", 1, { at: 3 }), G("wolfDen", 1, { at: 18, route: 1 }), G("frostRaider", 10, { at: 0, every: 1.0, route: 2 }), G("shieldRaider", 6, { at: 8, every: 1.4, form: "shieldwall" })),
-      W(G("frostCaptain", 1, { at: 10 }), G("shieldRaider", 8, { at: 2, every: 1.4, form: "shieldwall" }), G("frostArcher", 8, { at: 5, every: 1.2, route: 1 }),
+      /* the old wave 6 landed three heavy groups almost together and
+         played harder than waves 7 and 8: same host, spread out */
+      W(G("berserker", 5, { every: 1.8 }), G("shieldRaider", 6, { at: 8, every: 1.5, form: "shieldwall", route: 1 }), G("direWolf", 8, { at: 15, every: 0.8, form: "rush", route: 2 }), G("frostArcher", 6, { at: 21, every: 1.2 })),
+      W(G("wolfDen", 1, { at: 3 }), G("wolfDen", 1, { at: 18, route: 1 }), G("frostRaider", 12, { at: 0, every: 0.95, route: 2 }), G("shieldRaider", 7, { at: 8, every: 1.35, form: "shieldwall" })),
+      W(G("frostCaptain", 1, { at: 10 }), G("shieldRaider", 9, { at: 2, every: 1.35, form: "shieldwall" }), G("frostArcher", 8, { at: 5, every: 1.2, route: 1 }),
         G("direWolf", 10, { at: 6, every: 0.75, form: "rush", route: 2 }), G("berserker", 4, { at: 14, every: 1.8 })),
-      W(G("direWolf", 14, { every: 0.7, form: "rush" }), G("wolfDen", 1, { at: 8, route: 2 }), G("berserker", 6, { at: 4, every: 1.6, route: 1 }), G("frostArcher", 8, { at: 10, every: 1.2 })),
-      W(G("shieldRaider", 8, { every: 1.4, form: "shieldwall" }), G("frostRaider", 12, { at: 2, every: 0.95, route: 1 }), G("frostArcher", 8, { at: 6, every: 1.2, route: 2 }),
+      /* the late pressure sits here, where being ground down is a fair
+         way to lose, rather than on wave 6 where it ended runs outright */
+      W(G("direWolf", 16, { every: 0.65, form: "rush" }), G("wolfDen", 1, { at: 8, route: 2 }), G("berserker", 7, { at: 4, every: 1.5, route: 1 }), G("frostArcher", 8, { at: 10, every: 1.2 })),
+      W(G("shieldRaider", 9, { every: 1.35, form: "shieldwall" }), G("frostRaider", 14, { at: 2, every: 0.9, route: 1 }), G("frostArcher", 9, { at: 6, every: 1.15, route: 2 }),
         G("berserker", 6, { at: 12, every: 1.6 }), G("direWolf", 10, { at: 9, every: 0.75, form: "rush" })),
-      W(G("frostCaptain", 1, { at: 14 }), G("wolfDen", 1, { at: 4 }), G("wolfDen", 1, { at: 22, route: 2 }), G("shieldRaider", 8, { at: 0, every: 1.4, form: "shieldwall", route: 1 }),
-        G("berserker", 6, { at: 8, every: 1.6 }), G("frostArcher", 10, { at: 6, every: 1.1, route: 1 }), G("direWolf", 12, { at: 16, every: 0.7, form: "rush", route: 2 })),
+      /* the hollow's last stand: two huscarls, two dens and the whole pack.
+         A stage this long should be decided at the end, not on wave 6. */
+      W(G("frostCaptain", 1, { at: 14 }), G("frostCaptain", 1, { at: 30, route: 1 }), G("wolfDen", 1, { at: 4 }), G("wolfDen", 1, { at: 22, route: 2 }), G("shieldRaider", 9, { at: 0, every: 1.35, form: "shieldwall", route: 1 }),
+        G("berserker", 8, { at: 8, every: 1.5 }), G("frostArcher", 10, { at: 6, every: 1.1, route: 1 }), G("direWolf", 14, { at: 16, every: 0.7, form: "rush", route: 2 })),
     ],
     routeOpens: { 1: 3, 2: 6 },
     waveTitles: { 3: "The pack runs", 5: "Wolf dens", 6: "The blizzard closes in", 8: "A huscarl of the Jarl", 11: "Hold the hollow" },
@@ -563,7 +574,7 @@ export const STAGES = [
       W(G("shieldRaider", 6, { every: 1.5, form: "shieldwall" }), G("frostArcher", 6, { at: 4, every: 1.2, route: 1 }), G("frostRaider", 8, { at: 2, every: 1.0 })),
       W(G("frostThrower", 1, { at: 15 }), G("berserker", 4, { every: 1.8 }), G("direWolf", 10, { at: 4, every: 0.75, form: "rush", route: 1 }), G("frostRaider", 8, { at: 10, every: 1.0 })),
       W(G("wolfDen", 1, { at: 4 }), G("shieldRaider", 8, { at: 1, every: 1.4, form: "shieldwall" }), G("frostArcher", 8, { at: 6, every: 1.2, route: 1 }), G("berserker", 4, { at: 12, every: 1.8 })),
-      W(G("iceRam", 1, { at: 12 }), G("direWolf", 12, { at: 2, every: 0.7, form: "rush", route: 2 }), G("frostRaider", 10, { at: 0, every: 1.0, route: 1 }), G("frostArcher", 6, { at: 10, every: 1.2 })),
+      W(G("iceRam", 1, { at: 14 }), G("direWolf", 12, { at: 2, every: 0.7, form: "rush", route: 2 }), G("frostRaider", 10, { at: 0, every: 1.0, route: 1 }), G("frostArcher", 6, { at: 10, every: 1.2 })),
       W(G("frostThrower", 1, { at: 4 }), G("frostThrower", 1, { at: 20, route: 1 }), G("shieldRaider", 8, { at: 2, every: 1.4, form: "shieldwall" }),
         G("berserker", 6, { at: 8, every: 1.6, route: 2 }), G("frostArcher", 8, { at: 6, every: 1.2, route: 1 })),
       W(G("iceRam", 1, { at: 6 }), G("iceRam", 1, { at: 26, route: 1 }), G("wolfDen", 1, { at: 10, route: 2 }), G("frostRaider", 12, { at: 0, every: 0.95 }),
@@ -596,7 +607,11 @@ export const STAGES = [
           { points: [P(700, 960), P(780, 780), P(920, 660), P(1030, 560), P(1080, 470), P(1180, 460), P(1310, 430), P(1420, 408)] },
           { points: [P(-60, 200), P(280, 150), P(660, 130), P(960, 200), P(1080, 280), P(1180, 300), P(1250, 360), P(1420, 408)] },
         ],
-        plots: [P(157, 283), P(467, 307), P(697, 766), P(674, 631), P(718, 214), P(769, 418), P(848, 577), P(1055, 697), P(1103, 178), P(1126, 584), P(1113, 359), P(1252, 543)],
+        /* The plot at (1113, 359) sat 310 from the gate, so only one tower
+           on this map could reach anything standing at it. Portrait had
+           two, and Jarl Vorne could grind the landscape gate down while
+           the same fight was winnable in portrait. Moved to 228. */
+        plots: [P(157, 283), P(467, 307), P(697, 766), P(674, 631), P(718, 214), P(769, 418), P(848, 577), P(1055, 697), P(1103, 178), P(1126, 584), P(1240, 260), P(1252, 543)],
         castle: { x: 1270, y: 80, w: 300, h: 320, gate: P(1420, 400) },
         outerWall: { segments: [[P(1180, 120), P(1180, 250)], [P(1180, 330), P(1180, 410)], [P(1180, 510), P(1180, 780)]], gap: P(1180, 460), breach: P(1180, 290), hp: 110, orient: "v" },
         narrow: [{ x: 1180, y: 460, r: 80, name: "the ice gate" }, { x: 1180, y: 290, r: 60, name: "the breach" }],

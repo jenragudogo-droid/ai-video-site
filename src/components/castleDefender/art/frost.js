@@ -208,19 +208,25 @@ export function drawFrostScene(ctx, w, h) {
 /* A dire wolf, feet at y = 0, facing +x, about a soldier's height at
    the shoulder. Only ever drawn as a silhouette for now. */
 export function drawDireWolf(ctx, t = 0, opts = {}) {
-  const dark = opts.color || "#2a2f3a";
+  /* Flat is the teaser silhouette. In play the wolf needs a lit back, a
+     pale flank and darker legs, or it reads as a black cut-out of a
+     horse rather than an animal. */
+  const dark = opts.color || (opts.flat ? "#2a2f3a" : "#39404f");
   const light = shade(dark, 0.18);
+  const belly = opts.flat ? dark : "#6f7d90";
+  const limb = opts.flat ? dark : shade(dark, -0.28);
+  const rim = "#cbd8e8";
   const c = Math.sin(t * Math.PI * 2);
   const c2 = Math.sin(t * Math.PI * 2 + Math.PI * 0.6);
   const bob = -Math.abs(c) * 2.5;
   ctx.save();
   ctx.translate(0, bob);
   /* far legs */
-  ctx.strokeStyle = dark; ctx.lineWidth = 7;
+  ctx.strokeStyle = limb; ctx.lineWidth = 7;
   ctx.beginPath(); ctx.moveTo(-20, -34); ctx.lineTo(-24 + c * 7, -18); ctx.lineTo(-18 + c * 12, 0 - bob); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(20, -34); ctx.lineTo(26 - c * 7, -19); ctx.lineTo(22 - c * 12, 0 - bob); ctx.stroke();
   /* tail, low and heavy */
-  ctx.strokeStyle = dark; ctx.lineWidth = 9;
+  ctx.strokeStyle = shade(dark, -0.12); ctx.lineWidth = 9;
   ctx.beginPath(); ctx.moveTo(-26, -40); ctx.quadraticCurveTo(-44, -36, -50, -14); ctx.stroke();
   /* body */
   outlined(ctx, dark, () => ctx.ellipse(0, -42, 30, 15, -0.06, 0, Math.PI * 2), 1.4);
@@ -233,16 +239,32 @@ export function drawDireWolf(ctx, t = 0, opts = {}) {
   outlined(ctx, dark, () => { ctx.moveTo(34, -66); ctx.lineTo(52, -62); ctx.lineTo(60, -54); ctx.lineTo(50, -50); ctx.lineTo(36, -52); ctx.closePath(); }, 1.3);
   outlined(ctx, dark, () => { ctx.moveTo(36, -66); ctx.lineTo(34, -78); ctx.lineTo(44, -68); ctx.closePath(); }, 1.1);
   outlined(ctx, dark, () => { ctx.moveTo(28, -64); ctx.lineTo(24, -76); ctx.lineTo(35, -67); ctx.closePath(); }, 1.1);
-  /* eye and a hint of fang so it reads as alive, not a shadow */
   if (!opts.flat) {
-    ctx.fillStyle = "#d8e6f2"; ctx.beginPath(); ctx.ellipse(46, -60, 2, 1.6, -0.3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e8eef6"; ctx.beginPath(); ctx.moveTo(54, -53); ctx.lineTo(57, -49); ctx.lineTo(52, -50); ctx.closePath(); ctx.fill();
-    /* a pale ruff along the back */
+    /* pale flank and belly: the animal's own light, not a highlight */
+    ctx.fillStyle = rgba(belly, 0.55);
+    ctx.beginPath(); ctx.ellipse(-2, -35, 24, 8, -0.05, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgba(belly, 0.4);
+    ctx.beginPath(); ctx.ellipse(30, -52, 9, 6, 0.3, 0, Math.PI * 2); ctx.fill();
+    /* winter light along the spine, muzzle and haunch */
+    ctx.strokeStyle = rgba(rim, 0.72); ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(-30, -50); ctx.quadraticCurveTo(-4, -60, 24, -54); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(36, -66); ctx.lineTo(52, -62); ctx.lineTo(59, -55); ctx.stroke();
+    ctx.strokeStyle = rgba(rim, 0.35); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(-20, -44, 13, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
+    /* a pale ruff along the shoulders */
     ctx.fillStyle = rgba(light, 0.5);
     ctx.beginPath(); ctx.moveTo(-18, -54); ctx.quadraticCurveTo(2, -60, 22, -55); ctx.quadraticCurveTo(2, -52, -18, -50); ctx.closePath(); ctx.fill();
+    /* eye, ear insides and bared fangs */
+    ctx.fillStyle = "#3a1c18"; ctx.beginPath(); ctx.moveTo(36, -66); ctx.lineTo(35, -74); ctx.lineTo(42, -68); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#f2d24a"; ctx.beginPath(); ctx.ellipse(46, -60, 2.4, 1.9, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1a1410"; ctx.beginPath(); ctx.ellipse(46.6, -60, 1.1, 1.5, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#12161c"; ctx.beginPath(); ctx.ellipse(59, -55, 2.4, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#f2f6fa";
+    ctx.beginPath(); ctx.moveTo(53, -54); ctx.lineTo(56, -48); ctx.lineTo(51, -51); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(48, -53); ctx.lineTo(50, -48); ctx.lineTo(46, -51); ctx.closePath(); ctx.fill();
   }
   /* near legs */
-  ctx.strokeStyle = dark; ctx.lineWidth = 8;
+  ctx.strokeStyle = limb; ctx.lineWidth = 8;
   ctx.beginPath(); ctx.moveTo(-14, -34); ctx.lineTo(-19 + c2 * 7, -17); ctx.lineTo(-12 + c2 * 12, 0 - bob); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(15, -34); ctx.lineTo(20 - c2 * 7, -18); ctx.lineTo(16 - c2 * 12, 0 - bob); ctx.stroke();
   ctx.restore();
@@ -252,6 +274,9 @@ export function drawDireWolf(ctx, t = 0, opts = {}) {
    with a dark mouth the wolves come out of. Faces +x, ground at y = 0. */
 export function drawWolfDen(ctx, t = 0, opts = {}) {
   const dead = !!opts.dead;
+  const wake = opts.wake || 0;                      // 0..1, a wolf is about to come out
+  ctx.save();
+  if (wake > 0 && !dead) ctx.translate(Math.sin(wake * 40) * 2.2 * wake, 0);
   ctx.fillStyle = rgba("#1a2436", 0.3);
   ctx.beginPath(); ctx.ellipse(4, 2, 40, 12, 0, 0, Math.PI * 2); ctx.fill();
   /* sled runners */
@@ -269,13 +294,6 @@ export function drawWolfDen(ctx, t = 0, opts = {}) {
   for (const k of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(k * 26, -12); ctx.quadraticCurveTo(k * 30, -44, k * 12, -52); ctx.stroke(); }
   /* the mouth */
   outlined(ctx, "#12161f", () => { ctx.moveTo(24, -10); ctx.quadraticCurveTo(40, -14, 42, -30); ctx.quadraticCurveTo(30, -34, 24, -30); ctx.closePath(); }, 1.3);
-  if (!dead) {
-    /* two eyes in the dark, blinking with the gait */
-    const a = 0.5 + Math.sin(t * Math.PI * 2) * 0.3;
-    ctx.fillStyle = rgba("#d7ecf4", a);
-    ctx.beginPath(); ctx.arc(33, -24, 1.8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(38, -22, 1.6, 0, Math.PI * 2); ctx.fill();
-  }
   /* skull totem on a pole: a northern marker */
   ctx.strokeStyle = "#2c2419"; ctx.lineWidth = 2.4;
   ctx.beginPath(); ctx.moveTo(-30, -12); ctx.lineTo(-34, -58); ctx.stroke();
@@ -284,6 +302,21 @@ export function drawWolfDen(ctx, t = 0, opts = {}) {
     ctx.fillStyle = rgba("#1a1410", 0.4);
     ctx.beginPath(); ctx.ellipse(0, -20, 30, 18, 0, 0, Math.PI * 2); ctx.fill();
   }
+  /* eyes in the mouth of the den, and a bared snarl as one comes out */
+  if (!dead) {
+    const glow = 0.5 + Math.sin(t * Math.PI * 2) * 0.15 + wake * 0.45;
+    ctx.fillStyle = rgba("#f2d24a", Math.min(1, glow));
+    ctx.beginPath(); ctx.ellipse(30, -26, 3.4, 2.7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(37.5, -27, 3.4, 2.7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgba("#3a2a10", 0.85);
+    ctx.beginPath(); ctx.ellipse(30, -26, 1.3, 2.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(37.5, -27, 1.3, 2.3, 0, 0, Math.PI * 2); ctx.fill();
+    if (wake > 0.35) {
+      ctx.fillStyle = rgba("#f2f6fa", (wake - 0.35) * 1.4);
+      for (let i = 0; i < 4; i += 1) { ctx.beginPath(); ctx.moveTo(26 + i * 5, -22); ctx.lineTo(28 + i * 5, -16); ctx.lineTo(24 + i * 5, -18); ctx.closePath(); ctx.fill(); }
+    }
+  }
+  ctx.restore();
 }
 
 /* Render `draw` as a flat shadow: the shape only, in one cold colour,

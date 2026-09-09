@@ -243,7 +243,7 @@ export const ENEMIES = {
   },
   iceWarlord: {
     name: "Jarl Vorne", kind: "infantry",
-    hp: 4600, speed: 44, armour: 0.45, gateDmg: 14, bounty: 420, xp: 90,
+    hp: 4300, speed: 44, armour: 0.45, gateDmg: 14, bounty: 420, xp: 90,
     dmg: [26, 36], atk: 1.05, r: 23, h: 90, boss: "final", persist: true,
     aura: { radius: 230, armour: 0.16, speed: 1.18, all: true },
     /* His fight is a shell, not a bodyguard: the ice on him has to be

@@ -25,7 +25,10 @@ const SEASONS = {
   winter: {
     /* packed snow over frozen ground; roads are trodden slush, rivers are ice */
     grass: "#dfe8f2", grassLight: "#f1f6fb", grassDark: "#bccbdd",
-    road: "#cfd8e4", roadDark: "#a8b6c8", roadEdge: "#8e9db2", pebble: "#eef3fa",
+    /* The road is the single most important line on the board. Trodden
+       slush on snow was too close in value to the ground beside it, so
+       the north's roads run darker and browner than the drifts. */
+    road: "#b9c4d4", roadDark: "#8d9bb0", roadEdge: "#6d7d95", pebble: "#eef3fa",
     river: FROST.ice, riverDeep: FROST.iceDark, riverFoam: FROST.iceLight, riverBank: "#c3d2e4",
     field: "#d8dfe8", fieldDark: "#b9c5d4", fieldEdge: "#9aa8bb",
     apron: "#b8c2d0", patchLight: "#ffffff", patchDark: "#8ea6bd",
@@ -359,20 +362,40 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     }
   }
 
-  /* snowdrifts: pale banks across the road that slow everything crossing */
+  /* snowdrifts: pale banks across the road that slow everything crossing.
+     On white ground a soft white blob is invisible, so each bank gets a
+     shadowed lee side, a lit crest and a scalloped edge to read against
+     the snow it is lying on. */
   for (const dr of layout.drifts || []) {
-    const g2 = ctx.createRadialGradient(dr.x, dr.y, dr.r * 0.2, dr.x, dr.y, dr.r);
-    g2.addColorStop(0, rgba(FROST.snow, 0.95)); g2.addColorStop(0.7, rgba(FROST.snow, 0.75)); g2.addColorStop(1, rgba(FROST.snow, 0));
+    ctx.save();
+    /* the shadow the bank casts on the road, which is what the eye catches */
+    const sh = ctx.createRadialGradient(dr.x, dr.y + dr.r * 0.22, dr.r * 0.2, dr.x, dr.y + dr.r * 0.22, dr.r * 1.02);
+    sh.addColorStop(0, rgba("#7f95ad", 0.34)); sh.addColorStop(0.75, rgba("#7f95ad", 0.14)); sh.addColorStop(1, rgba("#7f95ad", 0));
+    ctx.fillStyle = sh;
+    ctx.beginPath(); ctx.ellipse(dr.x, dr.y + dr.r * 0.2, dr.r * 1.02, dr.r * 0.64, 0, 0, Math.PI * 2); ctx.fill();
+    /* the bank itself */
+    const g2 = ctx.createRadialGradient(dr.x, dr.y - dr.r * 0.16, dr.r * 0.15, dr.x, dr.y, dr.r);
+    g2.addColorStop(0, "#ffffff"); g2.addColorStop(0.62, rgba(FROST.snow, 0.95)); g2.addColorStop(1, rgba(FROST.snow, 0.1));
     ctx.fillStyle = g2; ctx.beginPath(); ctx.ellipse(dr.x, dr.y, dr.r, dr.r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = rgba(FROST.snowDeep, 0.5); ctx.lineWidth = 1.4;
+    /* a scalloped windward edge: drifts have a shape, glare does not */
+    ctx.strokeStyle = rgba("#8fa8c0", 0.55); ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let a = Math.PI * 0.06; a <= Math.PI * 0.94; a += Math.PI * 0.055) {
+      const rr = dr.r * (0.93 + Math.sin(a * 7) * 0.06);
+      const px = dr.x + Math.cos(a) * rr; const py = dr.y + Math.sin(a) * rr * 0.62;
+      if (a < Math.PI * 0.1) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    /* wind ridges, and the lit crest along the top */
+    ctx.strokeStyle = rgba(FROST.snowDeep, 0.45); ctx.lineWidth = 1.3;
     for (let k = 0; k < 3; k += 1) {
       ctx.beginPath();
       ctx.ellipse(dr.x + (k - 1) * dr.r * 0.2, dr.y + (k - 1) * dr.r * 0.14, dr.r * (0.66 - k * 0.16), dr.r * (0.4 - k * 0.1), 0.2, Math.PI * 0.05, Math.PI * 0.95);
       ctx.stroke();
     }
-    /* wind-carved ridge along the top edge */
-    ctx.strokeStyle = rgba("#ffffff", 0.85); ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(dr.x, dr.y - dr.r * 0.16, dr.r * 0.8, dr.r * 0.42, 0, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+    ctx.strokeStyle = rgba("#ffffff", 0.95); ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.ellipse(dr.x, dr.y - dr.r * 0.17, dr.r * 0.82, dr.r * 0.44, 0, Math.PI * 1.06, Math.PI * 1.94); ctx.stroke();
+    ctx.restore();
   }
 
   /* castle apron: paved ground under and in front of the castle */

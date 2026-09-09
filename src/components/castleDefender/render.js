@@ -49,6 +49,9 @@ function lightTarget(s) {
 /* The Cairnhold sits under a storm that closes in as the night goes on. */
 function stormTarget(s) {
   if (!s.stage || s.stage.lighting !== "storm") return 0;
+  /* the Jarl is dead and the sky clears: the payoff of the whole kingdom
+     is that the weather stops fighting you */
+  if (s.phase === "victory") return 0;
   const w = s.wave + (s.waveState === "countdown" ? 1 : 0);
   return Math.min(1, 0.35 + w / 18);
 }
@@ -91,6 +94,10 @@ export function createRenderer() {
   let storm = 0;                  // the northern storm, eased toward stormTarget
   let blizz = 0;                  // 0..1, how hard the blizzard is blowing
   const flakes = [];              // wind-blown snow, only allocated on winter stages
+  const gusts = [];               // long wind streaks, the readable part of a blizzard
+  /* a player who asked for less motion still needs to see the storm, so the
+     grey and the tower badges stay and only the moving snow is cut back */
+  const calm = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   let lastGuardText = -9;
   let outro = null;               // the campaign victory sequence
   let frameDt = 1 / 60;           // last frame's dt, for effects drawn outside draw()
@@ -233,10 +240,11 @@ export function createRenderer() {
     });
   }
 
-  function denSprite(frame, dead) {
+  function denSprite(frame, dead, wake) {
     const n = 8;
     const f = ((frame % n) + n) % n;
-    return cache.get(`den:${dead ? "dead" : "live"}:${f}`, 170, 130, 78, 116, (ctx) => drawWolfDen(ctx, f / n, { dead }));
+    const w = Math.round((wake || 0) * 4) / 4;                 // quantised so the cache stays small
+    return cache.get(`den:${dead ? "dead" : "live"}:${f}:${w}`, 170, 130, 78, 116, (ctx) => drawWolfDen(ctx, f / n, { dead, wake: w }));
   }
 
   function towerSprite(type, level, winter) {
@@ -460,7 +468,7 @@ export function createRenderer() {
     if (u.state === "wind") return { anim: "brace", frame: 0 };
     if (u.state === "charge") return { anim: "charge", frame: Math.floor(u.animT * 14) };
     if (u.state === "fight") {
-      const atk = enemy ? def.atk : (u.kind === "hero" ? HERO.atk : def.atk);
+      const atk = def.atk || (u.kind === "hero" ? HERO.atk : 1);
       const phase = Math.max(0, Math.min(0.999, 1 - u.atkCd / atk));
       return { anim: "attack", frame: Math.floor(phase * FRAMES.attack) };
     }
@@ -469,10 +477,22 @@ export function createRenderer() {
       return { anim: "shoot", frame: Math.floor(phase * FRAMES.shoot) };
     }
     if (u.state === "walk") {
-      const speed = enemy ? def.speed : (u.kind === "hero" ? HERO.speed : def.speed);
+      const speed = def.speed || (u.kind === "hero" ? HERO.speed : 60);
       return { anim: "walk", frame: Math.floor((u.animT * speed / 56) * FRAMES.walk) };
     }
     return { anim: "idle", frame: Math.floor(((u.animT % IDLE_PERIOD) / IDLE_PERIOD) * FRAMES.idle) };
+  }
+
+  /* Two blue chevrons pointing down: "this one is wading". Small enough to
+     ignore at a glance, clear enough to explain why a charge stalled. */
+  function slowMark(ctx, x, y) {
+    ctx.save();
+    ctx.strokeStyle = rgba(FROST.iceLight, 0.85); ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    for (let i = 0; i < 2; i += 1) {
+      const yy = y + i * 4;
+      ctx.beginPath(); ctx.moveTo(x - 4, yy); ctx.lineTo(x, yy + 3); ctx.lineTo(x + 4, yy); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function hpBar(ctx, x, y, w, ratio, enemy, boss) {
@@ -519,7 +539,11 @@ export function createRenderer() {
       sp = wolfSprite(a, fr);
       if (e.state === "walk" && Math.random() < 0.25) fx.spawn("dust", e.x - e.face * 14, e.y + 3, { n: 1 });
     } else if (def.den) {
-      sp = denSprite(Math.floor((e.docked ? time * 2 : e.d / 14)), e.state === "dead");
+      /* the last second before a wolf comes out: the den shudders, the eyes
+         brighten and snow shakes off it, so the spawn is never a surprise */
+      const wake = e.state !== "dead" && e.unloadT > 0 && e.unloadT < 1 ? 1 - e.unloadT : 0;
+      sp = denSprite(Math.floor((e.docked ? time * 2 : e.d / 14)), e.state === "dead", wake);
+      if (wake > 0.25 && Math.random() < 0.5) fx.spawn("spark", e.x + (Math.random() - 0.5) * 40, e.y - 44, { n: 1, color: FROST.snow });
       if (e.state !== "dead" && e.docked && Math.random() < 0.05) fx.spawn("smoke", e.x - 10, e.y - 50, { n: 1, size: 5 });
       if (e.state === "dead" && Math.random() < 0.4) fx.spawn("fire", e.x + (Math.random() - 0.5) * 40, e.y - 20, { n: 1, size: 5 });
     } else if (def.tower) {
@@ -552,12 +576,23 @@ export function createRenderer() {
       ctx.restore();
     }
     if (e.boss) {
-      /* the warlord: a red glow that deepens as he rages, a shimmer while guarded */
+      /* Blackmoor burns; Vorne freezes. The Jarl never borrows the
+         warlord's red glow, or the two bosses read as the same fight. */
       const raged = e.boss.raged;
+      const cold = !!def.frost;
+      const aura = cold ? (raged ? "#9fe4ff" : FROST.ice) : (raged ? "#ff4a2a" : PAL.redLight);
       const g = ctx.createRadialGradient(e.x, e.y + 2, 4, e.x, e.y + 2, raged ? 70 : 48);
-      g.addColorStop(0, rgba(raged ? "#ff4a2a" : PAL.redLight, (raged ? 0.45 : 0.25) + Math.sin(time * (raged ? 9 : 4)) * 0.08)); g.addColorStop(1, rgba(PAL.redLight, 0));
+      g.addColorStop(0, rgba(aura, (raged ? 0.45 : 0.25) + Math.sin(time * (raged ? 9 : 4)) * 0.08)); g.addColorStop(1, rgba(aura, 0));
       ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, raged ? 70 : 48, raged ? 30 : 20, 0, 0, Math.PI * 2); ctx.fill();
-      if (e.boss.phase === 1 && e.state !== "dead") { ctx.strokeStyle = rgba("#cfd6e6", 0.45 + Math.sin(time * 3) * 0.15); ctx.lineWidth = 2; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 40, 17, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+      if (cold && raged && Math.random() < 0.5) fx.spawn("spark", e.x + (Math.random() - 0.5) * 60, e.y - 20 - Math.random() * 40, { n: 1, color: FROST.iceLight });
+      if (e.boss.phase === 1 && !cold && e.state !== "dead") { ctx.strokeStyle = rgba("#cfd6e6", 0.45 + Math.sin(time * 3) * 0.15); ctx.lineWidth = 2; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 40, 17, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+      /* the ice is down: the ground under him says so until it closes */
+      if (cold && e.shell <= 0 && !raged && e.state !== "dead" && e.boss.shellT > 0) {
+        const k = Math.max(0, Math.min(1, e.boss.shellT / (def.frost.shellBreak || 1)));
+        ctx.strokeStyle = rgba(PAL.goldLight, 0.5 + Math.sin(time * 9) * 0.25); ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 52 * (0.55 + k * 0.45), 22 * (0.55 + k * 0.45), 0, 0, Math.PI * 2); ctx.stroke();
+        if (Math.random() < 0.3) fx.spawn("spark", e.x + (Math.random() - 0.5) * 46, e.y - 30, { n: 1, color: PAL.goldLight });
+      }
       const op = openings.get(e.id);
       if (op && e.state !== "dead") {
         /* the attack window: a gold ring closing as it runs out */
@@ -577,10 +612,47 @@ export function createRenderer() {
       cache.blit(ctx, sp, e.x, e.y + ay, flip);
       ctx.restore();
     }
-    if (e.state !== "dead" && e.hp < e.maxHp) {
-      const w = def.boss === "final" ? 90 : def.boss ? 64 : def.horse ? 30 : 24;
+    if (e.shell > 0 && e.state !== "dead") {
+      /* the front face of the ice, over him rather than behind him: a
+         glaze, a lit edge, and cracks that spread as it is broken down */
+      const k = e.shell / (e.shellMax || 1);
+      const r = 40 + k * 12;
+      const cy = e.y - 34;
+      ctx.save();
+      const gl = ctx.createLinearGradient(e.x - r, cy - r, e.x + r, cy + r);
+      gl.addColorStop(0, rgba(FROST.iceLight, 0.34 + k * 0.12));
+      gl.addColorStop(0.45, rgba(FROST.ice, 0.14 + k * 0.1));
+      gl.addColorStop(1, rgba(FROST.iceLight, 0.28 + k * 0.14));
+      ctx.fillStyle = gl;
+      ctx.beginPath(); ctx.ellipse(e.x, cy, r * 1.15, r * 1.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgba(FROST.iceLight, 0.8); ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.ellipse(e.x, cy, r * 1.15, r * 1.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = rgba("#ffffff", 0.5); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(e.x - r * 0.45, cy - r * 0.25, r * 0.3, r * 0.75, -0.4, Math.PI * 0.7, Math.PI * 1.5); ctx.stroke();
+      /* cracks: none at full, a web of them just before it goes */
+      const cracks = Math.round((1 - k) * 7);
+      if (cracks > 0) {
+        ctx.strokeStyle = rgba("#ffffff", 0.55); ctx.lineWidth = 1.4;
+        for (let i = 0; i < cracks; i += 1) {
+          const a = (i / 7) * Math.PI * 2 + 0.6;
+          const x0 = e.x + Math.cos(a) * r * 0.25; const y0 = cy + Math.sin(a) * r * 0.3;
+          ctx.beginPath(); ctx.moveTo(x0, y0);
+          ctx.lineTo(x0 + Math.cos(a + 0.4) * r * 0.5, y0 + Math.sin(a + 0.4) * r * 0.6);
+          ctx.lineTo(x0 + Math.cos(a) * r * 1.05, y0 + Math.sin(a) * r * 1.25);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    /* Dens, rams and engines carry their bar even at full health: they look
+       like scenery, and a player has to be able to see they are targets. */
+    const structure = !!(def.den || def.ram || def.engine || def.tower);
+    if (e.state !== "dead" && (e.hp < e.maxHp || structure)) {
+      const w = def.boss === "final" ? 90 : def.boss ? 64 : structure ? 40 : def.horse ? 30 : 24;
       hpBar(ctx, e.x, e.y - def.h - 8, w, e.hp / e.maxHp, true, !!def.boss);
     }
+    if (e.chilled && e.state !== "dead") slowMark(ctx, e.x, e.y - def.h - (e.hp < e.maxHp || def.den ? 18 : 10));
+    if (e.state === "walk" && e.chilled && Math.random() < 0.25) fx.spawn("spark", e.x - e.face * 10, e.y + 2, { n: 1, color: "#ffffff" });
     if (e.stun > 0) {
       for (let i = 0; i < 3; i += 1) {
         const a = time * 6 + i * 2.1;
@@ -590,7 +662,9 @@ export function createRenderer() {
   }
 
   function drawUnit(ctx, u) {
-    const key = u.kind === "hero" ? "hero" : u.unit;
+    /* the hero is whoever this kingdom's hero is: Edric in the south,
+       Elara in the north, and never the other one's armour */
+    const key = u.kind === "hero" ? (FIGURES[u.unit] ? u.unit : "hero") : u.unit;
     const { anim, frame } = unitAnim(u, false);
     let sp;
     if (u.def && u.def.horse) {
@@ -608,6 +682,8 @@ export function createRenderer() {
       cache.blit(ctx, sp, u.x, u.y, flip);
       ctx.restore();
     }
+    if (u.state === "walk" && u.chilled && Math.random() < 0.3) fx.spawn("spark", u.x - u.face * 8, u.y + 2, { n: 1, color: "#ffffff" });
+    if (u.chilled && u.state !== "dead") slowMark(ctx, u.x, u.y - (u.def && u.def.horse ? 76 : 52));
     if (u.frozenT > 0 && u.state !== "dead") {
       /* held in the ice: a pale block and a rime outline */
       ctx.save();
@@ -627,6 +703,13 @@ export function createRenderer() {
     }
     const h = u.kind === "hero" ? 70 : u.def && u.def.horse ? 84 : 60;
     if (u.state !== "dead" && u.state !== "respawn" && u.hp < u.maxHp) hpBar(ctx, u.x, u.y - h - 6, u.kind === "hero" ? 34 : u.def && u.def.horse ? 30 : 22, u.hp / u.maxHp, false, false);
+    if (u.kind === "hero" && u.state !== "dead" && u.state !== "respawn" && u.hp < u.maxHp * 0.35) {
+      /* she is in trouble: a red pulse under her feet, visible without
+         hunting for a health bar three units deep in a melee */
+      const p = 0.5 + Math.sin(time * 7) * 0.3;
+      ctx.strokeStyle = rgba("#ff5a4a", 0.35 + p * 0.4); ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 20 + p * 5, 9 + p * 2, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     if (u.kind === "hero" && u.state !== "dead" && u.state !== "respawn") {
       /* gold pips for the level under the health bar position */
       for (let i = 0; i < u.level; i += 1) {
@@ -644,6 +727,21 @@ export function createRenderer() {
     ctx.scale(pop, pop);
     ctx.translate(-p.x, -p.y);
     cache.blit(ctx, towerSprite(t.type, t.level, s.stage.season === "winter"), p.x, p.y);
+    if (s.blizzT > 0 && t.buildT <= 0) {
+      /* the crew is working in the storm: shooting slower, seeing less */
+      const a = 0.55 + Math.sin(time * 3 + p.x * 0.03) * 0.2;
+      ctx.save();
+      ctx.strokeStyle = rgba(FROST.iceLight, a); ctx.lineWidth = 1.8;
+      const fx0 = p.x + 22; const fy0 = p.y - 52;
+      for (let i = 0; i < 3; i += 1) {
+        const ang = (i / 3) * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(fx0 - Math.cos(ang) * 5, fy0 - Math.sin(ang) * 5);
+        ctx.lineTo(fx0 + Math.cos(ang) * 5, fy0 + Math.sin(ang) * 5);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     const elapsed = lvl.rate ? lvl.rate - t.cd : 0;
     if (t.type === "archer") {
       const phase = lvl.rate ? Math.max(0, Math.min(0.999, elapsed / lvl.rate)) : 0;
@@ -1030,6 +1128,30 @@ export function createRenderer() {
         const u = s.units.find((x) => x.id === sel.hoverUnit);
         if (u && u.state !== "dead") { ctx.strokeStyle = rgba("#ffffff", 0.6); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 18, 8, 0, 0, Math.PI * 2); ctx.stroke(); }
       }
+      /* A ranged hero shoots at something well off her own position, so
+         the shot needs a line: without it the player cannot tell who she
+         has picked, or that she has picked anything at all. */
+      {
+        const hero = s.hero;
+        const tgt = hero && hero.target != null && hero.state !== "dead" ? s.enemies.find((x) => x.id === hero.target && x.state !== "dead") : null;
+        if (tgt && hero.def && hero.def.range) {
+          ctx.save();
+          ctx.strokeStyle = rgba(FROST.iceLight, 0.28); ctx.lineWidth = 1.4; ctx.setLineDash([5, 7]); ctx.lineDashOffset = -time * 26;
+          ctx.beginPath(); ctx.moveTo(hero.x, hero.y - 26); ctx.lineTo(tgt.x, tgt.y - 20); ctx.stroke();
+          ctx.setLineDash([]); ctx.lineDashOffset = 0;
+          const p = 0.6 + Math.sin(time * 5) * 0.25;
+          ctx.strokeStyle = rgba(FROST.iceLight, p); ctx.lineWidth = 2;
+          for (let i = 0; i < 4; i += 1) {
+            const a = i * Math.PI * 0.5 + Math.PI * 0.25;
+            const r0 = 13; const r1 = 19;
+            ctx.beginPath();
+            ctx.moveTo(tgt.x + Math.cos(a) * r0, tgt.y - 20 + Math.sin(a) * r0 * 0.6);
+            ctx.lineTo(tgt.x + Math.cos(a) * r1, tgt.y - 20 + Math.sin(a) * r1 * 0.6);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
       /* watchfire and royal rally glows */
       if (s.boostT > 0) {
         s.towers.forEach((t, i) => { if (!t || t.type === "barracks") return; const p = layout.plots[i]; const k = Math.min(1, s.boostT); ctx.strokeStyle = rgba("#ffb347", 0.35 * k + Math.sin(time * 5) * 0.1); ctx.lineWidth = 2; ctx.setLineDash([8, 8]); ctx.beginPath(); ctx.arc(p.x, p.y, 60 + Math.sin(time * 3) * 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); });
@@ -1119,11 +1241,11 @@ export function createRenderer() {
        on, and the blizzard blows snow across the whole field. */
     const wantStorm = stormTarget(s);
     storm += (wantStorm - storm) * Math.min(1, dt * 0.4);
-    const wantBlizz = s.blizzT > 0 ? 1 : 0;
+    const wantBlizz = s.blizzT > 0 && s.phase !== "victory" ? 1 : 0;
     blizz += (wantBlizz - blizz) * Math.min(1, dt * (wantBlizz ? 0.8 : 0.5));
     const winter = s.stage.season === "winter";
     if (winter && !opts.menu) {
-      const want = Math.round((14 + blizz * 120) * quality);
+      const want = Math.round((14 + blizz * 120) * quality * (calm ? 0.25 : 1));
       while (flakes.length < want) flakes.push({ x: Math.random() * layout.w, y: Math.random() * layout.h, s: 0.8 + Math.random() * 1.9, v: 0.5 + Math.random() });
       while (flakes.length > want) flakes.pop();
       const wind = 90 + blizz * 320;
@@ -1139,6 +1261,23 @@ export function createRenderer() {
           ctx.beginPath(); ctx.moveTo(fk.x, fk.y); ctx.lineTo(fk.x - blizz * 13 * fk.v, fk.y - blizz * 4 * fk.v); ctx.stroke();
         } else { ctx.beginPath(); ctx.arc(fk.x, fk.y, fk.s, 0, Math.PI * 2); ctx.fill(); }
       }
+      /* gusts: the thing that actually reads as a blizzard from across the
+         field, where individual flakes are far too small to see */
+      if (blizz > 0.05 && !calm) {
+        const wantG = Math.round(22 * blizz * quality);
+        while (gusts.length < wantG) gusts.push({ x: Math.random() * layout.w, y: Math.random() * layout.h, l: 60 + Math.random() * 190, v: 0.6 + Math.random() * 0.9 });
+        while (gusts.length > wantG) gusts.pop();
+        ctx.save();
+        ctx.lineCap = "round";
+        for (const gu of gusts) {
+          gu.x += (420 + gu.v * 300) * blizz * dt;
+          if (gu.x - gu.l > layout.w + 40) { gu.x = -40; gu.y = Math.random() * layout.h; gu.l = 60 + Math.random() * 190; }
+          ctx.strokeStyle = rgba("#ffffff", 0.16 * blizz * gu.v);
+          ctx.lineWidth = 2 + gu.v * 2.4;
+          ctx.beginPath(); ctx.moveTo(gu.x - gu.l, gu.y + gu.l * 0.06); ctx.lineTo(gu.x, gu.y); ctx.stroke();
+        }
+        ctx.restore();
+      } else if (gusts.length) gusts.length = 0;
       ctx.restore();
       if (storm > 0.01) {
         ctx.save(); ctx.globalCompositeOperation = "multiply";
@@ -1147,8 +1286,12 @@ export function createRenderer() {
         ctx.fillStyle = rgba("#9fc4d8", 0.06 * storm); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
       }
       if (blizz > 0.02) {
-        /* the storm greys the far side of the field out */
-        ctx.fillStyle = rgba("#cfe0f0", 0.3 * blizz); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+        /* the storm greys the field out, hardest at the edges, so the
+           shorter sight-lines the towers are suffering are visible */
+        ctx.fillStyle = rgba("#cfe0f0", 0.26 * blizz); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+        const vg = ctx.createRadialGradient(layout.w / 2, layout.h / 2, Math.min(layout.w, layout.h) * 0.24, layout.w / 2, layout.h / 2, Math.max(layout.w, layout.h) * 0.72);
+        vg.addColorStop(0, rgba("#cfe0f0", 0)); vg.addColorStop(1, rgba("#b9cfe4", 0.5 * blizz));
+        ctx.fillStyle = vg; ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
       }
       if (storm > 0.3 && !opts.menu) {
         ctx.save(); ctx.globalCompositeOperation = "lighter";
@@ -1271,6 +1414,16 @@ export function createRenderer() {
       fe.x = p.x + p.nx * fe.lat; fe.y = p.y + p.ny * fe.lat;
       fe.face = p.tx < 0 ? 1 : -1;
       if (fe.horse && Math.random() < 0.3) fx.spawn("dust", fe.x + fe.face * 14, fe.y + 3, { n: 1 });
+    }
+    /* the north: the watchfires along the pass are lit again as the storm
+       goes off the field, so the ending shows the kingdom being held
+       rather than only saying it */
+    if (s.stage.season === "winter" && it.phase >= 1) {
+      const lit = Math.min(1, (it.t - 2.6) / 2.2);
+      for (const tor of layout.torches || []) {
+        if (Math.random() < 0.5 * lit * quality) fx.spawn("fire", tor.x, tor.y - 28, { n: 1, size: 3 + lit * 3, spread: 4 });
+        if (Math.random() < 0.06 * lit) fx.spawn("smoke", tor.x, tor.y - 36, { n: 1, size: 5 });
+      }
     }
     /* gold sparks over the castle as the banners go up */
     if (it.banners > 0 && it.banners < 1 && Math.random() < 0.5 * quality) fx.spawn("spark", c.x + 20 + Math.random() * (c.w - 40), c.y + 10 + Math.random() * 40, { n: 3, color: PAL.goldLight, z: 40 });

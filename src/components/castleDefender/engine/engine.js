@@ -263,10 +263,23 @@ function heroStatsFor(s, level) {
   };
 }
 
-function unitSpeed(u) {
+function unitSpeed(u, s) {
   const f = u.formation && FORMATIONS[u.formation];
   const lance = u.abilityT > 0 && u.def.ability && u.def.ability.id === "lanceCharge" ? 1 + u.def.ability.speed : 1;
-  return (u.kind === "hero" ? (u.def.speed || HERO.speed) : u.def.speed) * (f ? f.speed : 1) * lance;
+  /* Snow does not care whose side you are on: the stage tips promise that
+     a drift slows everything that crosses it, so it slows your soldiers
+     and your hero too, and the renderer marks whoever is wading. */
+  let terrain = 1;
+  if (s) {
+    const ts = terrainSlow(s, u.x, u.y);
+    u.chilled = ts < 0.95;
+    /* Your soldiers know this ground and are not carrying a siege ladder
+       through it, so they wade at half the penalty the northerners take.
+       The full penalty on friendly units made the Cairnhold's landscape
+       map measurably harder than its portrait one. */
+    terrain = 1 - (1 - ts) * 0.5;
+  }
+  return (u.kind === "hero" ? (u.def.speed || HERO.speed) : u.def.speed) * (f ? f.speed : 1) * lance * terrain;
 }
 
 function unitDmg(s, u) {
@@ -405,6 +418,22 @@ function syncEnemyPos(s, e) {
 
 /* How fast anything moves over this patch of ground: snowdrifts and the
    ice left by a Frost Arrow both bite, and they do not stack past a half. */
+/* True when this point is on iced ground rather than a snowdrift: the
+   renderer rimes whatever stands there, so a player can see who the
+   Frost Arrow caught. */
+export function onFrost(s, x, y) {
+  for (const z of s.zones) {
+    if (!z.frost) continue;
+    if (dist2(x, y, z.x, z.y) < z.r * z.r) return true;
+  }
+  return false;
+}
+
+export function inDrift(s, x, y) {
+  for (const d of s.layout.drifts || []) if (dist2(x, y, d.x, d.y) < d.r * d.r) return true;
+  return false;
+}
+
 export function terrainSlow(s, x, y) {
   let worst = 1;
   for (const d of s.layout.drifts || []) {
@@ -651,7 +680,9 @@ function stepEnemy(s, e, dt) {
   if (e.boss && def.phases && e.boss.raged && def.phases.rage.speed) speed = def.phases.rage.speed;
   if (e.boss && def.frost && e.boss.raged && def.frost.rage.speed) speed = def.frost.rage.speed;
   if (inWallGap(s, e.x, e.y)) speed *= 0.6;          // squeezing through the siege gate under fire
-  speed *= terrainSlow(s, e.x, e.y);                 // snowdrifts and iced ground
+  const ts = terrainSlow(s, e.x, e.y);               // snowdrifts and iced ground
+  e.chilled = ts < 0.95;
+  speed *= ts;
   e.d += speed * dt;
   syncEnemyPos(s, e);
   if (e.d >= route.length) reachGate(s, e);
@@ -787,7 +818,10 @@ function stepWarlord(s, e, dt) {
     if (e.d > route.length - 36) { e.d = route.length - 36; syncEnemyPos(s, e); }
     e.gateT = (e.gateT ?? 1) - dt;
     if (e.gateT <= 0) {
-      e.gateT = b.raged ? 2 : 3;
+      /* He batters the gate more slowly while the ice is still on him:
+         reaching the gate should be the warning that the fight is going
+         badly, not the moment it is already lost. */
+      e.gateT = b.raged ? 3 : 4;
       const dmg = 3;
       s.castleHp = Math.max(0, s.castleHp - dmg);
       s.stats.gateHits += 1; s.stats.damageTaken += dmg; s.lastGateHit = s.t;
@@ -892,9 +926,15 @@ function stepVorne(s, e, dt) {
   /* the shell re-forms unless he is enraged */
   if (b.shellT > 0) {
     b.shellT -= dt;
-    if (b.shellT <= 0 && !b.raged) { e.shell = 1; s.events.push({ type: "shellReform", x: e.x, y: e.y, id: e.id }); }
+    if (b.shellT <= 0 && !b.raged) { e.shell = 1; b.reforms = (b.reforms || 0) + 1; s.events.push({ type: "shellReform", x: e.x, y: e.y, id: e.id }); }
   } else if (!b.raged && e.shell > 0 && e.shell < e.shellMax) {
-    e.shell = Math.min(e.shellMax, e.shell + fr.shellRegen * dt);
+    /* Two limits keep this fight from becoming a war of attrition the
+       player cannot win. The ice is chipped: each re-form comes back
+       thinner than the last. And while he is battering the gate he is
+       not tending it at all, so a player losing the castle always has a
+       way back into the fight. */
+    const cap = e.shellMax * Math.max(0.4, 1 - 0.2 * (b.reforms || 0));
+    if (!e.atGate && e.shell < cap) e.shell = Math.min(cap, e.shell + fr.shellRegen * dt);
   }
   /* Phase 1 is a march, not a wait: he comes down the road behind his
      ice from the moment he arrives, so the fight can never stall on a
@@ -1022,6 +1062,8 @@ export function startBlizzard(s, dur, src) {
   return true;
 }
 
+export const BLIZZ_WARN = 5;
+
 function stepBlizzard(s, dt) {
   if (s.blizzT > 0) {
     s.blizzT -= dt;
@@ -1030,7 +1072,12 @@ function stepBlizzard(s, dt) {
   }
   const cfg = s.stage.blizzard;
   if (!cfg) return;
+  const was = s.blizzCd;
   s.blizzCd -= dt;
+  /* the wind rises before the storm arrives: a player should have a few
+     seconds to spend a power or pull the hero back, not simply notice
+     afterwards that the towers went quiet */
+  if (was > BLIZZ_WARN && s.blizzCd <= BLIZZ_WARN) s.events.push({ type: "blizzardWarn", inS: Math.round(BLIZZ_WARN) });
   if (s.blizzCd <= 0) { s.blizzCd = cfg.every; startBlizzard(s, cfg.dur, "storm"); }
 }
 
@@ -1210,7 +1257,7 @@ function stepFighter(s, u, dt, opts) {
   if (u.hitT > 0) u.hitT -= dt;
   if (u.frozenT > 0) { u.frozenT -= dt; u.staggerT = Math.max(u.staggerT || 0, 0); }
   if (u.staggerT > 0) { u.staggerT -= dt; u.state = u.frozenT > 0 ? "frozen" : "idle"; return; }
-  const speed = unitSpeed(u);
+  const speed = unitSpeed(u, s);
   const atk = u.kind === "hero" ? (u.def.atk || HERO.atk) : u.def.atk;
 
   /* an ordered attack sticks to its target wherever it goes */
@@ -1353,7 +1400,7 @@ function stepSoldier(s, u, dt) {
   const busy = stepFighter(s, u, dt, { cx: u.home.x, cy: u.home.y, radius });
   if (busy) return;
   const arrived = dist2(u.x, u.y, u.home.x, u.home.y) < 9;
-  if (!arrived) { u.state = "walk"; moveToward(u, u.home.x, u.home.y, unitSpeed(u), dt); }
+  if (!arrived) { u.state = "walk"; moveToward(u, u.home.x, u.home.y, unitSpeed(u, s), dt); }
   else u.state = "idle";
 }
 
@@ -1432,7 +1479,7 @@ function stepHero(s, h, dt) {
   if (h.moveTarget) {
     h.state = "walk";
     h.target = null;
-    const done = moveToward(h, h.moveTarget.x, h.moveTarget.y, HD.speed, dt);
+    const done = moveToward(h, h.moveTarget.x, h.moveTarget.y, unitSpeed(h, s), dt);
     if (done) { h.post = { x: h.x, y: h.y }; h.moveTarget = null; h.state = "idle"; }
     h.outOfCombat += dt;
   } else {
@@ -1441,7 +1488,7 @@ function stepHero(s, h, dt) {
     else {
       h.outOfCombat += dt;
       const arrived = dist2(h.x, h.y, h.post.x, h.post.y) < 9;
-      if (!arrived) { h.state = "walk"; moveToward(h, h.post.x, h.post.y, HD.speed, dt); }
+      if (!arrived) { h.state = "walk"; moveToward(h, h.post.x, h.post.y, unitSpeed(h, s), dt); }
       else h.state = "idle";
     }
   }
@@ -2244,9 +2291,12 @@ export function heroCharge(s, x, y) {
   if (!alive(h) || h.charge || h.chargeCd > 0 || s.phase !== "playing") return false;
   if (HD.ability && HD.ability.kind === "frostArrow") {
     const ab = HD.ability;
-    const dx = x - h.x; const dy = y - h.y;
+    let dx = x - h.x; let dy = y - h.y;
     const l = Math.hypot(dx, dy);
-    if (l > ab.dist) return false;
+    /* Beyond her reach the arrow falls short rather than nothing happening:
+       a silent no-op reads as a broken button. The shell draws the reach
+       ring while aiming, so the limit is visible before the click. */
+    if (l > ab.dist) { const k = ab.dist / l; dx *= k; dy *= k; x = h.x + dx; y = h.y + dy; }
     const st = heroStatsFor(s, h.level);
     const up = heroUpgrade(s);
     const shots = up ? up.arrows : 1;
@@ -2486,7 +2536,7 @@ export function serializeGame(s) {
         phase: e.boss.phase, sweepCd: e.boss.sweepCd || 0, hornCd: e.boss.hornCd || 0, raged: !!e.boss.raged, atGate: !!e.atGate,
         openT: e.boss.openT || 0, roarT: e.boss.roarT || 0,
         novaCd: e.boss.novaCd || 0, howlCd: e.boss.howlCd || 0, blizzCd: e.boss.blizzCd || 0, shellT: e.boss.shellT || 0,
-        windT: e.boss.windT || 0, windKind: e.boss.windKind || null,
+        windT: e.boss.windT || 0, windKind: e.boss.windKind || null, reforms: e.boss.reforms || 0, patience: e.boss.patience || 0,
       } : null,
       shell: Math.round(e.shell || 0),
       routed: !!e.routed,
@@ -2555,6 +2605,7 @@ export function restoreGame(data, opts = {}) {
       en.boss.raged = !!e.boss.raged; en.atGate = !!e.boss.atGate; en.boss.openT = e.boss.openT || 0; en.boss.roarT = e.boss.roarT || 0;
       en.boss.novaCd = e.boss.novaCd || 0; en.boss.howlCd = e.boss.howlCd || 0; en.boss.blizzCd = e.boss.blizzCd || 0;
       en.boss.shellT = e.boss.shellT || 0; en.boss.windT = e.boss.windT || 0; en.boss.windKind = e.boss.windKind || null;
+      en.boss.reforms = e.boss.reforms || 0; en.boss.patience = e.boss.patience || 0;
     }
     if (e.shell != null) en.shell = e.shell;
     en.routed = !!e.routed;

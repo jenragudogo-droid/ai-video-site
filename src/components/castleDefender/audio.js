@@ -258,6 +258,8 @@ export function createCastleAudio() {
       tone("sine", 62, 58, t, 2.4, 0.07, sfxBus, "lin");
       for (let i = 0; i < 5; i += 1) tone("sine", 1500 + i * 260, 1100 + i * 260, t + i * 0.22, 0.5, 0.012);
     }],
+    /* the wind getting up: a rising hiss, no melody, so it reads as weather */
+    windRise: [3, (t) => { noise(t, 2.2, 0.1, 300, 0.5, "highpass", sfxBus, 1800); tone("sine", 90, 150, t, 2.0, 0.05, sfxBus, "lin"); }],
     windEase: [2, (t) => { noise(t, 1.4, 0.11, 2200, 0.5, "highpass", sfxBus, 500); tone("sine", 520, 392, t, 0.7, 0.03); }],
     /* Ice: struck, broken, re-formed. Bandpassed noise plus glassy partials. */
     shellHit: [0.05, (t) => { noise(t, 0.06, 0.13, 3200, 2.2, "bandpass"); tone("sine", 2300, 1700, t, 0.07, 0.03); }],
