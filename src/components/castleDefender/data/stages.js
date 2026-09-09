@@ -87,7 +87,11 @@ export const STAGES = [
           { points: [P(-60, 1420), P(120, 1400), P(250, 1290), P(330, 1140), P(240, 980), P(300, 800), P(470, 690), P(640, 570), P(560, 450), P(450, 400), P(450, 372)] },
           { points: [P(960, 980), P(800, 940), P(700, 820), P(740, 700), P(640, 570), P(560, 450), P(450, 400), P(450, 372)] },
         ],
-        plots: [P(160, 1170), P(400, 1060), P(120, 820), P(420, 830), P(600, 740), P(820, 1080), P(810, 620), P(330, 520), P(690, 440)],
+        /* The plot that is now at (500, 560) used to sit at (330, 520),
+           off the road and covering almost nothing. On identical builds
+           this map won 7 of 16 Hard runs where the landscape one won 16;
+           moved onto the last stretch before the gate, it wins 16. */
+        plots: [P(160, 1170), P(400, 1060), P(120, 820), P(420, 830), P(600, 740), P(820, 1080), P(810, 620), P(500, 560), P(690, 440)],
         castle: { x: 300, y: 90, w: 300, h: 270, gate: P(450, 360) },
         river: [P(960, 1520), P(720, 1440), P(480, 1330), P(250, 1280), P(60, 1200), P(-60, 1150)],
         bridges: [{ x: 250, y: 1283, angle: -0.95 }],

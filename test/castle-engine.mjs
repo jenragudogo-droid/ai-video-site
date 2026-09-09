@@ -24,7 +24,7 @@ import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, SUNSPEAR, SUN_TEASERS, SUN_HER
 import { KINGDOMS } from "../src/components/castleDefender/data/kingdoms.js";
 import { sampleRoute } from "../src/components/castleDefender/engine/path.js";
 import { STAGES } from "../src/components/castleDefender/data/stages.js";
-import { TOWERS, HERO, ELARA, HEROES, heroDefFor, heroStatsOf, heroStats, SOLDIERS } from "../src/components/castleDefender/data/towers.js";
+import { TOWERS, HERO, ELARA, HEROES, heroDefFor, heroStatsOf, heroStats, SOLDIERS, DIFFICULTY } from "../src/components/castleDefender/data/towers.js";
 import { ENEMIES, ENEMY_ORDER } from "../src/components/castleDefender/data/enemies.js";
 import { autoStep } from "./castle-auto-commander.js";
 import { displayWave, waveCard, plural } from "../src/components/castleDefender/hudText.js";
@@ -1780,6 +1780,128 @@ console.log("— resuming a fight in an awkward moment —");
   /* and the ground still slows what stands on it after a resume */
   if (r.zones.length) { const z = r.zones[0]; ok(onFrost(r, z.x, z.y) && terrainSlow(r, z.x, z.y) < 1, "the restored ice still bites"); }
   else ok(true, "the restored ice still bites");
+}
+
+console.log("— saving in the middle of the Ashford siege —");
+{
+  /* the moments a player is most likely to put the phone down in */
+  const cases = [
+    ["mid-wave, wall damaged", (g, b) => { g.wallHp = Math.round(g.wallMax * 0.4); b.boss.phase = 2; }],
+    ["Blackmoor winded", (g, b) => { b.boss.phase = 2; b.boss.openT = 1.7; }],
+    ["Blackmoor roaring", (g, b) => { b.boss.phase = 3; b.boss.roarT = 1.1; b.boss.raged = true; }],
+    ["Blackmoor behind his guard", (g, b) => { b.boss.phase = 1; }],
+  ];
+  for (const [name, setup] of cases) {
+    const g = mk("siege", { difficulty: "hard" });
+    g.gold = 5000;
+    const plot = g.layout.plots.findIndex((p, i) => canBuild(g, i, "barracks"));
+    buildTower(g, plot, "barracks"); for (let i = 0; i < 3; i += 1) upgradeTower(g, plot);
+    setMount(g, plot, true);
+    callWave(g); run(g, 20);
+    g.hero.chargeCd = 0; heroCharge(g, g.hero.x - 150, g.hero.y);
+    const knight = g.units.find((u) => u.unit === "royalKnight");
+    if (knight) triggerUnitAbility(g, [knight.id]);
+    const boss = spawnEnemy(g, "warlord", 0, 0);
+    setup(g, boss);
+    run(g, 0.4);
+    const r = restoreGame(JSON.parse(JSON.stringify(serializeGame(g))));
+    const rb = r.enemies.find((e) => e.boss);
+    ok(rb && rb.boss.phase === boss.boss.phase, `${name}: the phase comes back`);
+    ok(rb && Math.abs(rb.boss.openT - boss.boss.openT) < 0.001 && Math.abs(rb.boss.roarT - boss.boss.roarT) < 0.001, `${name}: the winded and roaring timers come back`);
+    ok(rb && Math.abs(rb.hp - boss.hp) < 0.001 && !!rb.boss.raged === !!boss.boss.raged, `${name}: his health and his rage come back`);
+    ok(Math.abs(r.hero.chargeCd - g.hero.chargeCd) < 0.001 && r.hero.chargeCd > 0, `${name}: the Royal Charge is still on cooldown`);
+    ok(r.wallHp === g.wallHp && r.difficulty === "hard", `${name}: the wall and the difficulty come back`);
+    const rk = r.units.find((u) => u.unit === "royalKnight");
+    ok(!knight || (rk && Math.abs((rk.abilityCd || 0) - (knight.abilityCd || 0)) < 0.001), `${name}: the Lance Charge cooldown comes back`);
+    ok(r.units.filter((u) => u.unit === "royalKnight").length === g.units.filter((u) => u.unit === "royalKnight").length, `${name}: no knight is lost or duplicated`);
+  }
+}
+
+console.log("— Hard is a fair fight, not a different game —");
+{
+  /* Hard must be pressure and money, not hidden rules */
+  const n = DIFFICULTY.normal; const h = DIFFICULTY.hard;
+  ok(h.hp > n.hp && h.hp < 1.35, `Hard adds ${Math.round((h.hp - 1) * 100)}% health, not a multiple`);
+  ok(h.gold < n.gold && h.gold >= 0.85, `and takes ${Math.round((1 - h.gold) * 100)}% of the income`);
+  ok(Object.keys(h).filter((k) => k !== "name" && k !== "desc").every((k) => k === "hp" || k === "gold"), "and changes nothing else: no speed, no extra spawns, no hidden mechanic");
+  const a = mk("stonebridge"); const b = mk("stonebridge", { difficulty: "hard" });
+  ok(a.stage.waves.length === b.stage.waves.length && JSON.stringify(a.stage.waves) === JSON.stringify(b.stage.waves), "the same waves arrive at the same times on both difficulties");
+  ok(a.layout.plots.length === b.layout.plots.length, "and you get the same ground to defend");
+}
+
+console.log("— the counter to cavalry is affordable when it is announced —");
+{
+  /* Stonebridge is built around cavalry and says so: wave 3 is titled
+     "Cavalry incoming" and the tips name the drill. A player who does
+     what the stage says must be able to pay for it. */
+  const g = mk("stonebridge", { difficulty: "hard" });
+  ok(g.stage.pikes === true, "the stage offers Pike Drill at all");
+  ok(DRILL_COST <= 60, `the drill costs ${DRILL_COST}, which is a wave's pocket money rather than a tower`);
+  ok((g.stage.waveTitles || {})["3"] && /cavalr/i.test(g.stage.waveTitles["3"]), "the wave the cavalry arrives on is named for it");
+  ok(g.stage.tips.some((t) => /pike/i.test(t)) && g.stage.tips.some((t) => /charge/i.test(t)), "and the tips name both answers: pikes and the Royal Charge");
+  /* it is buyable with a barracks up by the time the horses come */
+  g.gold = 90;
+  const plot = g.layout.plots.findIndex((p, i) => canBuild(g, i, "barracks"));
+  buildTower(g, plot, "barracks");
+  g.gold = DRILL_COST;
+  ok(canDrill(g, plot) && setDrill(g, plot, true) === true, "a fresh barracks can be drilled the moment it exists");
+  ok(g.towers[plot].pikes === true && g.gold === 0, "and the drill is what the pocket money bought");
+}
+
+console.log("— Warlord Blackmoor gives the player his openings —");
+{
+  const g = mk("siege", { difficulty: "hard" });
+  g.gold = 6000;
+  const boss = spawnEnemy(g, "warlord", 0, 0);
+  boss.boss.phase = 2;                                   // out from behind his guard
+  let opens = 0; let sweeps = 0; let gate = 0;
+  for (const e of run(g, 120)) {
+    if (e.type === "bossOpen") opens += 1;
+    if (e.type === "bossSweep") sweeps += 1;
+    if (e.type === "gateHit" && e.enemy === "warlord") gate += e.dmg;
+  }
+  ok(opens >= 2, `he is winded and open ${opens} times in two minutes, not once`);
+  ok(sweeps >= 2 && Math.abs(sweeps - opens) <= 1, "every sweep leaves him open: the telegraph is the counterplay");
+  ok(gate < g.castleMax, `and in two minutes at the gate he takes ${gate} of ${g.castleMax}, so reaching it is a warning rather than the end`);
+  ok(!ENEMIES.warlord.frost, "he is not the Jarl: no ice, no attrition");
+}
+
+console.log("— the same play wins in both orientations —");
+{
+  /* Greenhollow's portrait map used to lose runs its landscape twin won
+     with the identical build: seeds 7 and 10 were two of them. Geometry
+     is measured here by playing it, because coverage averages did not
+     tell the two maps apart. */
+  for (const seed of [7, 10]) {
+    for (const layout of ["landscape", "portrait"]) {
+      const g = mk("greenhollow", { layout, difficulty: "normal", seed });
+      const st = {}; let guard = 0;
+      while (g.phase === "playing" && guard < 200000) { autoStep(g, st); stepGame(g, DT); drainEvents(g); guard += 1; }
+      ok(g.phase === "victory", `greenhollow seed ${seed} (${layout}): the same commander wins`);
+    }
+  }
+}
+
+console.log("— the two orientations defend alike —");
+{
+  /* Greenhollow's portrait map won far less often than its landscape one
+     on identical builds, because its plots covered less of the roads. */
+  for (const st of STAGES) {
+    const depth = ["landscape", "portrait"].map((layout) => {
+      const g = mk(st.id, { layout });
+      let sum = 0; let n = 0;
+      for (const r of g.layout.routes) {
+        for (let d = 0; d < r.length; d += 20) {
+          const q = sampleRoute(r, d);
+          sum += g.layout.plots.filter((p) => Math.hypot(p.x - q.x, p.y - q.y) < 190).length;
+          n += 1;
+        }
+      }
+      return sum / n;
+    });
+    const ratio = Math.min(depth[0], depth[1]) / Math.max(depth[0], depth[1]);
+    ok(ratio > 0.8, `${st.id}: both maps put a comparable number of towers on the road (${depth.map((d) => d.toFixed(2)).join(" and ")})`);
+  }
 }
 
 console.log("— Ashford is exactly as it was —");
