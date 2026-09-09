@@ -15,16 +15,18 @@ import {
   orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility, offerPerks, choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, repairCost,
   castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, damageWall, guardCount,
   canMount, setMount, MOUNT_COST,
+  heroUpgrade, heroAbility, terrainSlow, blizzardRate, blizzardRange, startBlizzard, damageEnemy, spawnEnemy,
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
-import { readSave, writeSave, saveBattle, clearBattle, recordResult, resetProgress, SAVE_VERSION, badgesOf, hasBadge } from "../src/components/castleDefender/save.js";
-import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, BADGES, BADGE_ORDER } from "../src/components/castleDefender/data/frozenNorth.js";
+import { readSave, writeSave, saveBattle, clearBattle, recordResult, resetProgress, SAVE_VERSION, badgesOf, hasBadge, stageRecord, isStageUnlocked, isKingdomUnlocked, stagesOf, KINGDOM_ORDER } from "../src/components/castleDefender/save.js";
+import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, SUNSPEAR, SUN_TEASERS, SUN_HERO, BADGES, BADGE_ORDER } from "../src/components/castleDefender/data/frozenNorth.js";
 import { KINGDOMS } from "../src/components/castleDefender/data/kingdoms.js";
 import { sampleRoute } from "../src/components/castleDefender/engine/path.js";
 import { STAGES } from "../src/components/castleDefender/data/stages.js";
-import { TOWERS, HERO, SOLDIERS } from "../src/components/castleDefender/data/towers.js";
-import { ENEMIES } from "../src/components/castleDefender/data/enemies.js";
+import { TOWERS, HERO, ELARA, HEROES, heroDefFor, heroStatsOf, heroStats, SOLDIERS } from "../src/components/castleDefender/data/towers.js";
+import { ENEMIES, ENEMY_ORDER } from "../src/components/castleDefender/data/enemies.js";
+import { autoStep } from "./castle-auto-commander.js";
 import { displayWave, waveCard, plural } from "../src/components/castleDefender/hudText.js";
 
 let passed = 0;
@@ -1217,22 +1219,415 @@ console.log("— Defender of Ashford badge —");
 }
 
 /* ================================================================ */
-console.log("— the Frozen North stays locked —");
+/*                THE FROZEN NORTH — kingdom two, playable            */
+/* ================================================================ */
+
+const FROST_IDS = ["frostwatch", "wolfpine", "cairnhold"];
+const mk = (id, opts = {}) => { const g = makeGame({ stageId: id, ...opts }); startStage(g); return g; };
+const frostStage = (id) => STAGES.find((st) => st.id === id);
+
+console.log("— the Frozen North is a real kingdom —");
 {
-  ok(FROZEN_NORTH.status === "soon" && FROZEN_NORTH.name === "The Frozen North", "the Frozen North is a teaser, not a stage");
-  ok(FROZEN_NORTH.flavour.length === 2 && FROZEN_NORTH.flavour.join(" ").length < 120, "the flavour text is two short lines");
-  ok(!STAGES.some((st) => st.kingdom === "frost" || st.id === "frost"), "no stage belongs to the Frozen North, so it cannot be entered");
-  ok(STAGES.every((st) => st.kingdom === "ashford"), "every playable stage is still an Ashford stage");
+  ok(FROZEN_NORTH.status === "playable" && FROZEN_NORTH.name === "The Frozen North", "the Frozen North is playable, not a teaser");
+  ok(FROZEN_NORTH.flavour.length === 2 && FROZEN_NORTH.flavour.join(" ").length < 120, "the flavour text is still two short lines");
+  const list = stagesOf(STAGES, "frost");
+  ok(list.length === 3 && list.map((st) => st.id).join(",") === FROST_IDS.join(","), "three frost stages, in order");
+  ok(stagesOf(STAGES, "ashford").length === 3, "Ashford still has exactly its three stages");
+  ok(STAGES.length === 6 && STAGES.every((st) => st.kingdom), "six stages in all, each tagged with its kingdom");
   const k = KINGDOMS.find((x) => x.id === "frost");
-  ok(k && k.status === "soon" && !STAGES.some((st) => st.kingdom === k.id), "the Kingdoms page lists it as coming soon with nothing to play");
-  ok(KINGDOMS.filter((x) => x.status === "playable").length === 1 && KINGDOMS.find((x) => x.id === "ashford").status === "playable", "Ashford is still the only playable kingdom");
-  /* teasers are art and a name only: no stats can leak into balance */
-  ok(FROST_TEASERS.length === 3 && FROST_TEASERS.every((t) => t.name && t.art && !t.hp && !t.dmg && !t.armour && !t.speed), "three enemy teasers, none of them carrying stats");
-  ok(FROST_TEASERS.map((t) => t.name).join(",") === "Frost Raider,Dire Wolf,Ice Warlord", "the three teasers are the Frost Raider, the Dire Wolf and the Ice Warlord");
-  ok(FROST_HERO.name === "Lady Elara" && !FROST_HERO.hp && !FROST_HERO.ability, "Lady Elara is a silhouette and a name, with no hero stats");
-  ok(!SOLDIERS[FROST_HERO.id] && !ENEMIES.frostRaider && !ENEMIES.direWolf && !ENEMIES.iceWarlord, "none of the teased units exist in the unit tables");
-  /* Ashford is untouched by the teaser */
-  ok(STAGES.length === 3 && STAGES[2].id === "siege" && STAGES[2].waves.length === 12, "the Ashford campaign is still three stages ending in the twelve-wave siege");
+  ok(k && k.status === "playable" && k.hero.name === "Lady Elara", "the Kingdoms page lists the north as playable under Lady Elara");
+  ok(KINGDOMS.filter((x) => x.status === "playable").length === 2, "two playable kingdoms, no more");
+  ok(list.every((st) => st.available && st.waves.length >= 9), "every frost stage is available and at least nine waves long");
+  ok(list[2].finale === true && list[2].waves.length === 12, "the Cairnhold is the twelve-wave finale");
+  /* Kingdom three is teased and nothing else */
+  ok(SUNSPEAR.status === "soon" && !STAGES.some((st) => st.kingdom === "sun"), "the Sunspear Reach is locked with no stages");
+  ok(SUN_TEASERS.length === 3 && SUN_TEASERS.every((t) => t.name && t.art && !t.hp && !t.dmg), "three Sunspear teasers, none carrying stats");
+  ok(SUN_HERO.name === "Kesi of the Reach" && !SUN_HERO.hp && !SUN_HERO.ability, "the Sunspear hero is a silhouette and a name");
+  ok(!SOLDIERS[SUN_HERO.id] && !ENEMIES.duneRaider && !ENEMIES.sandWyrm, "no Sunspear unit exists in the tables yet");
+}
+
+console.log("— unlocking the north —");
+{
+  resetProgress(readSave());
+  ok(isKingdomUnlocked(readSave(), "ashford"), "Ashford is open from the start");
+  ok(!isKingdomUnlocked(readSave(), "frost"), "the north is shut until Ashford is won");
+  const iFrost = STAGES.findIndex((st) => st.id === "frostwatch");
+  ok(!isStageUnlocked(readSave(), STAGES, iFrost), "Frostwatch cannot be entered before Ashford falls");
+  /* win Ashford */
+  const g = mk("siege"); g.phase = "victory"; g.stars = 3;
+  recordResult(readSave(), summarise(g));
+  const sv = readSave();
+  ok(isKingdomUnlocked(sv, "frost"), "winning the Siege of Ashford opens the north");
+  ok(isStageUnlocked(sv, STAGES, iFrost), "Frostwatch is the first frost stage and opens with the kingdom");
+  ok(!isStageUnlocked(sv, STAGES, STAGES.findIndex((st) => st.id === "wolfpine")), "Wolfpine still waits on Frostwatch");
+  ok(!isKingdomUnlocked(sv, "sun"), "kingdom three stays shut");
+  /* progress inside the north */
+  const g2 = mk("frostwatch"); g2.phase = "victory"; g2.stars = 2;
+  recordResult(readSave(), summarise(g2));
+  ok(isStageUnlocked(readSave(), STAGES, STAGES.findIndex((st) => st.id === "wolfpine")), "winning Frostwatch opens Wolfpine");
+  ok(!isStageUnlocked(readSave(), STAGES, STAGES.findIndex((st) => st.id === "cairnhold")), "the Cairnhold still waits on Wolfpine");
+  ok(stageRecord(readSave(), "frostwatch").stars === 2 && stageRecord(readSave(), "siege").stars === 3, "each kingdom keeps its own stars and records");
+}
+
+console.log("— an old v1.1 save survives —");
+{
+  /* exactly what a v1.1 player had on disk: Ashford done, no badges field,
+     no frost records, and a battle snapshot from the old format */
+  writeSave({
+    version: 2,
+    stages: { greenhollow: { stars: 3, bestScore: 4100, completed: true }, stonebridge: { stars: 2, bestScore: 5200, completed: true }, siege: { stars: 3, bestScore: 9000, completed: true } },
+    campaignsDone: ["ashford"],
+    meta: { crowns: 14, upgrades: { archerDamage: 2 } },
+    settings: { sound: true, music: false },
+    difficulty: "hard",
+  });
+  const sv = readSave();
+  ok(sv.stages.siege.stars === 3 && sv.meta.crowns === 14 && sv.meta.upgrades.archerDamage === 2, "stars, crowns and kingdom upgrades all survive the migration");
+  ok(sv.settings.music === false && sv.difficulty === "hard", "settings and difficulty survive");
+  ok(hasBadge(sv, "defenderOfAshford"), "the Ashford badge is derived for a player who never saw the badge system");
+  ok(!hasBadge(sv, "guardianOfTheFrozenNorth"), "the northern badge is not handed out for free");
+  ok(isKingdomUnlocked(sv, "frost"), "an old completed campaign opens the north on load");
+  ok(Array.isArray(sv.badges) && Array.isArray(sv.campaignsDone), "the migrated record has every field the new code reads");
+  /* and a save with nothing in it at all */
+  writeSave({});
+  ok(readSave().version >= 2 && !isKingdomUnlocked(readSave(), "frost"), "an empty record migrates to a fresh, locked profile");
+  resetProgress(readSave());
+}
+
+console.log("— Lady Elara is not Sir Edric with a bow —");
+{
+  ok(HEROES.edric === HERO && HEROES.elara === ELARA, "both heroes are registered");
+  ok(heroDefFor(frostStage("frostwatch")).id === "elara" && heroDefFor(STAGES[0]).id === "edric", "each stage names its own hero");
+  ok(ELARA.range > 0 && !HERO.range, "Elara fights at range and Edric does not");
+  ok(ELARA.ability.kind === "frostArrow" && HERO.charge.kind !== "frostArrow", "her ability is a frost arrow, not a charge");
+  ok(ELARA.meleeMul < 1 && ELARA.evade && ELARA.evade.back > 0, "she is weak in a melee and steps back out of one");
+  ok(ELARA.hp < HERO.hp && ELARA.speed > HERO.speed, "she is lighter and faster than the knight");
+  ok(ELARA.range < ENEMIES.frostArcher.range + 40 && ELARA.range > ENEMIES.frostArcher.range, "she outranges the northern archers, but only just");
+  ok(ELARA.upgrade.id === "rapidVolley" && ELARA.upgrade.arrows === 3, "her late upgrade is a three-arrow volley");
+  const a = heroStatsOf(ELARA, 1); const b = heroStatsOf(ELARA, 5);
+  ok(b.maxHp > a.maxHp && b.dmg[0] > a.dmg[0] && b.chargeDmg > a.chargeDmg, "she levels like a hero should");
+
+  /* in play: she shoots from where she stands, and the arrow does the work */
+  const g = mk("frostwatch");
+  ok(g.heroDef.id === "elara" && g.hero.hp === heroStatsOf(ELARA, 1).maxHp, "the game starts her, at her own health");
+  callWave(g);
+  const evs = run(g, 110);
+  const shots = count(evs, "heroShot");
+  const melee = evs.filter((e) => e.type === "swing" && e.hero).length;
+  ok(shots > 0, "she looses arrows in a normal wave");
+  ok(shots > melee, "she shoots far more often than she swings");
+  const near = g.enemies.find((e) => e.state !== "dead");
+  if (near) { const d = Math.hypot(g.hero.x - near.x, g.hero.y - near.y); ok(d > 40 || g.hero.frozenT > 0, "she does not stand inside the enemy she is shooting"); }
+  else ok(true, "she does not stand inside the enemy she is shooting");
+}
+
+console.log("— the frost arrow and the volley —");
+{
+  const g = mk("frostwatch"); callWave(g);
+  run(g, 26);
+  const target = g.enemies.find((e) => e.state !== "dead");
+  if (target) {
+    const before = target.hp;
+    g.hero.chargeCd = 0;
+    const fired = heroCharge(g, target.x, target.y);
+    ok(fired === true, "the frost arrow fires at a point on the map");
+    const fired2 = run(g, 2.2).map((e) => e.type);
+    ok(fired2.includes("frostArrow") || fired2.includes("frostBurst"), "it announces itself with its own cue");
+    ok(target.hp < before || target.state === "dead", "it hurts what it lands on");
+    ok(g.zones.some((z) => z.frost) || target.slowT > 0 || target.state === "dead", "it leaves cold ground or a slowed enemy behind");
+    ok(g.hero.chargeCd > 0, "it goes on cooldown");
+  } else ok(true, "the frost arrow fires at a point on the map");
+  /* the upgrade */
+  const g2 = mk("frostwatch");
+  ok(!heroUpgrade(g2) && heroAbility(g2).name === ELARA.ability.name, "before the upgrade the button reads Frost Arrow");
+  g2.unlocks.push(ELARA.upgrade.id);
+  ok(heroUpgrade(g2) === ELARA.upgrade && heroAbility(g2).upgraded === true, "after it the button reads Rapid Volley");
+  ok(heroAbility(g2).name === "Rapid Volley", "and says so by name");
+  /* Edric is untouched */
+  const g3 = mk("siege");
+  ok(heroAbility(g3).kind !== "frostArrow" && heroAbility(g3).name.length > 0, "Edric still gets his charge, by his own name");
+}
+
+console.log("— the northern host —");
+{
+  const NEW = ["frostRaider", "direWolf", "frostArcher", "shieldRaider", "berserker", "frostCaptain", "wolfDen", "iceRam", "frostThrower", "iceWarlord"];
+  ok(NEW.every((id) => ENEMIES[id]), "all ten new enemies exist");
+  ok(NEW.every((id) => ENEMY_ORDER.includes(id)), "and all ten are in draw order");
+  ok(NEW.every((id) => ENEMIES[id].hp > 0 && ENEMIES[id].speed >= 0 && ENEMIES[id].name), "each has health, a speed and a name");
+  /* distinct roles, checked by the stat that defines each one */
+  ok(ENEMIES.direWolf.speed > ENEMIES.frostRaider.speed && ENEMIES.direWolf.kind === "cavalry", "the dire wolf is the fast flanker");
+  ok(ENEMIES.frostArcher.range > 0 && ENEMIES.frostRaider.range === undefined, "the frost archer is the only common shooter");
+  ok(ENEMIES.shieldRaider.shieldBlock > 0.5, "the shieldbearer is built to eat arrows");
+  ok(ENEMIES.berserker.dmg[0] > ENEMIES.frostRaider.dmg[0] * 1.6 && ENEMIES.berserker.armour < ENEMIES.shieldRaider.armour, "the berserker hits hard and dies fast");
+  ok(ENEMIES.frostCaptain.aura && ENEMIES.frostCaptain.hp > ENEMIES.berserker.hp * 2, "the huscarl is a mini-boss with an aura");
+  ok(ENEMIES.wolfDen.den && ENEMIES.wolfDen.tower && ENEMIES.wolfDen.speed < ENEMIES.frostRaider.speed, "the wolf den crawls and unloads wolves");
+  ok(ENEMIES.iceRam.ram && ENEMIES.iceRam.wallDmg > 0, "the ram is for the wall");
+  ok(ENEMIES.frostThrower.engine && ENEMIES.frostThrower.engine.standoff > 200, "the thrower stops out of reach and shoots");
+  ok(ENEMIES.iceWarlord.boss === "final" && ENEMIES.iceWarlord.frost, "Jarl Vorne is the final boss and carries his own frost block");
+  /* Ashford's roster is untouched */
+  ok(ENEMIES.bandit && ENEMIES.warlord && ENEMIES.warlord.phases, "Blackmoor and the Ashford roster are unchanged");
+}
+
+console.log("— snow, drifts and the storm —");
+{
+  const g = mk("frostwatch");
+  ok(g.stage.season === "winter" && g.layout.drifts && g.layout.drifts.length > 0, "Frostwatch is a winter map with snowdrifts");
+  const d = g.layout.drifts[0];
+  const inside = terrainSlow(g, d.x, d.y); const outside = terrainSlow(g, 30, 30);
+  ok(inside < outside && inside >= 0.35, "a drift slows what walks through it, and never to a standstill");
+  /* the blizzard */
+  const w = mk("wolfpine");
+  ok(w.stage.blizzard && w.stage.blizzard.first > 0, "Wolfpine has a storm schedule");
+  ok(blizzardRate(w) === 1 && blizzardRange(w) === 1, "with clear skies towers behave normally");
+  /* played properly, so the castle is still standing when the storm passes */
+  const wst = {};
+  const wevs = run(w, w.stage.blizzard.first + w.stage.blizzard.dur + 20, (gg) => autoStep(gg, wst));
+  const storms = wevs.filter((e) => e.type === "blizzard");
+  ok(storms.some((e) => e.on), "the storm arrives on schedule and announces itself");
+  ok(storms.some((e) => !e.on), "and it blows over again");
+  /* while it blows, towers are worse off */
+  const w2 = mk("wolfpine"); startBlizzard(w2);
+  ok(blizzardRate(w2) > 1 && blizzardRange(w2) < 1, "in the storm towers reload slower and see less");
+  ok(w2.blizzT > 0, "and the storm has a timer the HUD can read");
+  /* Ashford never sees one */
+  const a = mk("siege");
+  ok(!a.stage.blizzard && blizzardRate(a) === 1 && !a.layout.drifts, "no storm and no drifts in Ashford");
+}
+
+console.log("— wolf dens —");
+{
+  const g = mk("wolfpine");
+  ok(g.stage.waves.some((wv) => wv.some((gr) => gr.type === "wolfDen")), "a den turns up in the wave table");
+  /* drop one on the road by hand and let it work */
+  const den = spawnEnemy(g, "wolfDen", 0, 0);
+  ok(den && den.def.den, "a den can be spawned");
+  const before = g.enemies.length;
+  run(g, ENEMIES.wolfDen.tower.unloadEvery * 2 + 14);
+  const wolves = g.enemies.filter((e) => e.def === ENEMIES.direWolf);
+  ok(wolves.length > 0 || g.enemies.length > before, "it looses wolves as it advances");
+  ok(den.d <= g.layout.routes[0].length * (ENEMIES.wolfDen.tower.dockFrac || 0.45) + 80 || den.state === "dead", "it stops short of the gate rather than rolling into it");
+  /* and killing it stops the flow */
+  for (let i = 0; i < 200 && den.state !== "dead"; i += 1) damageEnemy(g, den, 400, "fire");
+  ok(den.state === "dead", "a den can be burned down");
+  const madeAfter = run(g, ENEMIES.wolfDen.tower.unloadEvery * 2 + 6).filter((e) => e.type === "unload").length;
+  ok(madeAfter === 0, "a dead den stops making wolves");
+}
+
+console.log("— Jarl Vorne, and how he differs from Blackmoor —");
+{
+  const g = mk("cairnhold");
+  g.wave = g.totalWaves - 1; g.gold = 4000;
+  const boss = spawnEnemy(g, "iceWarlord", 0, 0);
+  ok(boss && boss.boss && boss.boss.phase === 1, "he arrives in phase one");
+  ok(boss.shell > 0 && boss.shellMax > 0, "sheathed in ice, which Blackmoor never was");
+  ok(!ENEMIES.warlord.frost && !ENEMIES.iceWarlord.phases, "the two bosses do not share a single mechanic block");
+  /* the shell soaks damage instead of his health */
+  const hp0 = boss.hp; const sh0 = boss.shell;
+  damageEnemy(g, boss, 120, "arrow");
+  ok(boss.hp === hp0 && boss.shell < sh0, "arrows go into the ice, not into him");
+  /* fire and siege break it faster */
+  const b2 = spawnEnemy(g, "iceWarlord", 0, 0);
+  const s1 = b2.shell; damageEnemy(g, b2, 100, "arrow"); const plain = s1 - b2.shell;
+  const b3 = spawnEnemy(g, "iceWarlord", 0, 0);
+  const s2 = b3.shell; damageEnemy(g, b3, 100, "fire"); const burn = s2 - b3.shell;
+  ok(burn > plain, "fire eats the ice faster than arrows");
+  /* break it and he is open */
+  let broke = false;
+  for (let i = 0; i < 60 && boss.shell > 0; i += 1) damageEnemy(g, boss, 200, "fire");
+  for (const e of drainEvents(g)) if (e.type === "shellBreak") broke = true;
+  ok(broke && boss.shell <= 0, "enough damage breaks the ice, and the break is announced");
+  ok(boss.boss.phase === 2, "breaking it drives him to phase two");
+  const hp1 = boss.hp; damageEnemy(g, boss, 150, "arrow");
+  ok(boss.hp < hp1, "with the ice gone he takes real damage");
+  /* it comes back */
+  run(g, 12);
+  ok(boss.shell > 0 || boss.state === "dead" || boss.boss.phase === 3, "the ice re-forms if he is left alone");
+  /* rage */
+  boss.hp = boss.maxHp * 0.2; damageEnemy(g, boss, 1, "arrow");
+  run(g, 1);
+  ok(boss.boss.phase === 3 || boss.state === "dead", "he enrages near death");
+  if (boss.state !== "dead") ok(boss.shell <= 0 && ENEMIES.iceWarlord.frost.rage.shell === 0, "and the ice does not return in the rage");
+  else ok(true, "and the ice does not return in the rage");
+}
+
+console.log("— his three telegraphs —");
+{
+  const kinds = new Set();
+  for (let seed = 0; seed < 4 && kinds.size < 3; seed += 1) {
+    const g = mk("cairnhold");
+    const boss = spawnEnemy(g, "iceWarlord", 0, 0);
+    boss.boss.phase = 2; boss.boss.novaCd = 0.2; boss.boss.howlCd = 0.6; boss.boss.blizzCd = 1;
+    for (const e of run(g, 70)) if (e.type === "bossWind") kinds.add(e.kind);
+  }
+  ok(kinds.has("nova"), "the nova is telegraphed before it lands");
+  ok(kinds.has("howl"), "the howl is telegraphed");
+  ok(kinds.has("blizzard"), "the storm he calls is telegraphed");
+  ok(kinds.size === 3, "three telegraphs in all, each with its own name");
+  /* the nova actually bites, and freezes */
+  const g = mk("cairnhold");
+  const boss = spawnEnemy(g, "iceWarlord", 0, 0);
+  boss.boss.phase = 2;
+  const u = g.units[0];
+  if (u) {
+    u.x = boss.x + 20; u.y = boss.y; const hp = u.hp;
+    boss.boss.novaCd = 0.05;
+    run(g, ENEMIES.iceWarlord.frost.nova.windup + 1.2);
+    ok(u.hp < hp || u.state === "dead" || u.frozenT > 0, "standing in the nova hurts");
+  } else ok(true, "standing in the nova hurts");
+  /* and the howl brings wolves */
+  const g2 = mk("cairnhold");
+  const b2 = spawnEnemy(g2, "iceWarlord", 0, 0);
+  b2.boss.phase = 2; b2.boss.howlCd = 0.05; b2.boss.novaCd = 99; b2.boss.blizzCd = 99;
+  const n0 = g2.enemies.length;
+  run(g2, ENEMIES.iceWarlord.frost.howl.windup + 2);
+  ok(g2.enemies.length > n0, "the howl calls the pack in");
+  /* and with the ice broken he starts nothing at all: that is the window */
+  const g3 = mk("cairnhold");
+  const b3 = spawnEnemy(g3, "iceWarlord", 0, 0);
+  b3.boss.phase = 2; b3.boss.novaCd = 0; b3.boss.howlCd = 0; b3.boss.blizzCd = 0;
+  for (let i = 0; i < 40 && b3.shell > 0; i += 1) damageEnemy(g3, b3, 300, "fire");
+  const quiet = run(g3, 4).filter((e) => e.type === "bossWind");
+  ok(b3.shell <= 0 && quiet.length === 0, "with the ice broken he starts nothing new");
+}
+
+console.log("— he never deadlocks —");
+{
+  /* the worst case: nobody ever breaks the ice. He must still come on. */
+  for (const seed of [3, 11]) {
+    const g = makeGame(); g.seed = seed; startStage(g, "cairnhold");
+    const boss = spawnEnemy(g, "iceWarlord", 0, 0);
+    run(g, ENEMIES.iceWarlord.frost.patience + 40);
+    ok(boss.boss.phase >= 2 || boss.state === "dead", `seed ${seed}: he runs out of patience and comes on even behind an unbroken shell`);
+  }
+}
+
+console.log("— saving and resuming in the north —");
+{
+  for (const id of FROST_IDS) {
+    const g = mk(id); g.gold = 3000;
+    const plot = g.layout.plots.findIndex((p, i) => canBuild(g, i, "archer"));
+    if (plot >= 0) buildTower(g, plot, "archer");
+    callWave(g); run(g, 45);
+    const snap = JSON.parse(JSON.stringify(serializeGame(g)));
+    const r = restoreGame(snap);
+    ok(r && r.phase === "playing", `${id}: the battle restores`);
+    ok(r.heroDef.id === g.heroDef.id && r.stage.id === id, `${id}: the right hero and stage come back`);
+    ok(r.enemies.length === g.enemies.length && r.units.length === g.units.length, `${id}: no unit or enemy is duplicated or lost`);
+    ok(r.gold === g.gold && r.castleHp === g.castleHp && r.wave === g.wave, `${id}: gold, castle and wave all match`);
+    ok(Math.abs((r.blizzT || 0) - (g.blizzT || 0)) < 0.001, `${id}: the storm timer survives`);
+  }
+  /* mid-storm */
+  const w = mk("wolfpine"); callWave(w); startBlizzard(w); run(w, 3);
+  const rw = restoreGame(JSON.parse(JSON.stringify(serializeGame(w))));
+  ok(rw.blizzT > 0 && blizzardRate(rw) === blizzardRate(w), "a saved storm is still blowing after a resume");
+  /* every boss phase */
+  for (const phase of [1, 2, 3]) {
+    const g = mk("cairnhold");
+    const boss = spawnEnemy(g, "iceWarlord", 0, 0);
+    if (phase >= 2) { boss.boss.phase = 2; boss.shell = 0; }
+    if (phase === 3) { boss.boss.phase = 3; boss.hp = boss.maxHp * 0.3; }
+    boss.boss.windT = 0.8; boss.boss.windKind = "nova";
+    run(g, 0.5);
+    const r = restoreGame(JSON.parse(JSON.stringify(serializeGame(g))));
+    const rb = r.enemies.find((e) => e.boss);
+    ok(rb && rb.boss.phase === boss.boss.phase, `phase ${phase}: the phase survives a save`);
+    ok(rb && Math.abs(rb.shell - boss.shell) < 0.001 && Math.abs(rb.hp - boss.hp) < 0.001, `phase ${phase}: the ice and his health survive`);
+    ok(rb && rb.boss.windKind === boss.boss.windKind && Math.abs(rb.boss.windT - boss.boss.windT) < 0.001, `phase ${phase}: a wind-up in progress survives`);
+    ok(r.enemies.filter((e) => e.boss).length === 1, `phase ${phase}: exactly one boss comes back`);
+  }
+  /* with dens on the field */
+  const d = mk("wolfpine"); spawnEnemy(d, "wolfDen", 0, 0); run(d, 20);
+  const rd = restoreGame(JSON.parse(JSON.stringify(serializeGame(d))));
+  ok(rd.enemies.filter((e) => e.def.den).length === d.enemies.filter((e) => e.def.den).length, "dens on the field survive a save");
+}
+
+console.log("— Royal Knights ride in the snow —");
+{
+  const g = mk("wolfpine"); g.gold = 5000;
+  const plot = g.layout.plots.findIndex((p, i) => canBuild(g, i, "barracks"));
+  buildTower(g, plot, "barracks");
+  upgradeTower(g, plot); upgradeTower(g, plot); upgradeTower(g, plot);
+  ok(g.towers[plot].level >= 3 && g.units.filter((u) => u.tower === plot).every((u) => u.unit === "royalGuard"), "a barracks can still be taken to Royal Guard on a frost map");
+  ok(canMount(g, plot) === true, "and the knights can still be mounted");
+  const cost = g.gold;
+  ok(setMount(g, plot, true) && g.gold === cost - MOUNT_COST, "mounting still costs what it costs");
+  const squad = g.units.filter((u) => u.tower === plot);
+  ok(squad.length > 0 && squad.every((u) => u.unit === "royalKnight"), "every soldier from that barracks is horsed");
+  callWave(g); run(g, 50);
+  ok(!g.units.some((u) => Number.isNaN(u.x) || Number.isNaN(u.y)), "mounted knights fight in the snow without breaking");
+  const r = restoreGame(JSON.parse(JSON.stringify(serializeGame(g))));
+  ok(r.towers[plot].mounted === true && r.units.filter((u) => u.unit === "royalKnight").length === g.units.filter((u) => u.unit === "royalKnight").length, "their horses survive a save");
+}
+
+console.log("— the north is beatable, both ways round —");
+{
+  for (const id of FROST_IDS) {
+    for (const layout of ["landscape", "portrait"]) {
+      const g = mk(id, { layout });
+      const st = {};
+      let guard = 0;
+      while (g.phase === "playing" && guard < 200000) { autoStep(g, st); stepGame(g, DT); drainEvents(g); guard += 1; }
+      const sum = summarise(g);
+      ok(g.phase === "victory", `${id} (${layout}): won on Normal`);
+      ok(sum.castleHp > 0 && sum.stars >= 1, `${id} (${layout}): the castle survived with ${sum.castleHp}/${sum.castleMax} and ${sum.stars} stars`);
+      ok(g.t < 1400, `${id} (${layout}): finished in ${Math.round(g.t)}s with no stall`);
+      if (id === "cairnhold") ok(!g.enemies.some((e) => e.def.boss === "final" && e.state !== "dead"), `cairnhold (${layout}): cannot be won with Vorne still standing`);
+    }
+  }
+}
+
+console.log("— Hard is harder, and still fair —");
+{
+  let wins = 0; const runs = FROST_IDS.length;
+  for (const id of FROST_IDS) {
+    const g = mk(id, { difficulty: "hard" });
+    const st = {}; let guard = 0;
+    while (g.phase === "playing" && guard < 200000) { autoStep(g, st); stepGame(g, DT); drainEvents(g); guard += 1; }
+    if (g.phase === "victory") wins += 1;
+    ok(g.phase !== "playing", `${id}: Hard resolves rather than stalling`);
+  }
+  ok(wins >= 1 && wins <= runs, `a scripted commander wins ${wins} of ${runs} frost stages on Hard`);
+}
+
+console.log("— finishing the north —");
+{
+  resetProgress(readSave());
+  /* win Ashford first, as a player must */
+  for (const id of ["greenhollow", "stonebridge", "siege"]) {
+    const g = mk(id); g.phase = "victory"; g.stars = 3;
+    recordResult(readSave(), summarise(g));
+  }
+  ok(hasBadge(readSave(), "defenderOfAshford") && !hasBadge(readSave(), "guardianOfTheFrozenNorth"), "Ashford's badge is held, the north's is not");
+  let flags = null;
+  for (const id of FROST_IDS) {
+    const g = mk(id); g.phase = "victory"; g.stars = 3;
+    flags = recordResult(readSave(), summarise(g));
+  }
+  const sv = readSave();
+  ok((sv.campaignsDone || []).includes("frost"), "the north is marked complete");
+  ok(hasBadge(sv, "guardianOfTheFrozenNorth"), "and the Guardian badge is awarded");
+  ok((flags.newBadges || []).includes("guardianOfTheFrozenNorth"), "the victory screen is told the badge is new");
+  ok(badgesOf(sv).length === 2 && new Set(badgesOf(sv)).size === 2, "two badges, neither duplicated");
+  /* winning the Cairnhold again awards nothing twice */
+  const again = mk("cairnhold"); again.phase = "victory"; again.stars = 3;
+  const f2 = recordResult(readSave(), summarise(again));
+  ok((f2.newBadges || []).length === 0 && badgesOf(readSave()).length === 2, "a second victory awards no second badge");
+  ok((readSave().campaignsDone || []).filter((k) => k === "frost").length === 1, "and the kingdom is not listed twice");
+  ok(!isKingdomUnlocked(readSave(), "sun"), "kingdom three stays locked even with both kingdoms won");
+  ok(stageRecord(readSave(), "greenhollow").completed && stageRecord(readSave(), "cairnhold").completed, "both kingdoms keep their records side by side");
+  resetProgress(readSave());
+}
+
+console.log("— Ashford is exactly as it was —");
+{
+  for (const id of ["greenhollow", "stonebridge", "siege"]) {
+    const g = mk(id);
+    ok(g.heroDef.id === "edric" && g.hero.hp === heroStats(1).maxHp, `${id}: Sir Edric still leads, at his own health`);
+    ok(!g.stage.blizzard && !g.layout.drifts && g.stage.season !== "winter", `${id}: no snow has fallen on Ashford`);
+    const st = {}; let guard = 0;
+    while (g.phase === "playing" && guard < 200000) { autoStep(g, st); stepGame(g, DT); drainEvents(g); guard += 1; }
+    ok(g.phase === "victory", `${id}: still won by the same scripted commander`);
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

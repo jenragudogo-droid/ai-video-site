@@ -123,6 +123,8 @@ function frozenKeep(ctx, x, y, s) {
 
 /* One painted panel: sky, three ridges, the frozen keep, a ruin, pines
    and an iced river. Drawn to fill (0,0,w,h); the caller scales it. */
+export { frostPine };
+
 export function drawFrostScene(ctx, w, h) {
   ctx.save();
   ctx.lineJoin = "round"; ctx.lineCap = "round";
@@ -205,13 +207,18 @@ export function drawFrostScene(ctx, w, h) {
 
 /* A dire wolf, feet at y = 0, facing +x, about a soldier's height at
    the shoulder. Only ever drawn as a silhouette for now. */
-export function drawDireWolf(ctx) {
-  const dark = "#2a2f3a";
+export function drawDireWolf(ctx, t = 0, opts = {}) {
+  const dark = opts.color || "#2a2f3a";
+  const light = shade(dark, 0.18);
+  const c = Math.sin(t * Math.PI * 2);
+  const c2 = Math.sin(t * Math.PI * 2 + Math.PI * 0.6);
+  const bob = -Math.abs(c) * 2.5;
   ctx.save();
+  ctx.translate(0, bob);
   /* far legs */
   ctx.strokeStyle = dark; ctx.lineWidth = 7;
-  ctx.beginPath(); ctx.moveTo(-20, -34); ctx.lineTo(-24, -18); ctx.lineTo(-18, 0); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(20, -34); ctx.lineTo(26, -19); ctx.lineTo(22, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-20, -34); ctx.lineTo(-24 + c * 7, -18); ctx.lineTo(-18 + c * 12, 0 - bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(20, -34); ctx.lineTo(26 - c * 7, -19); ctx.lineTo(22 - c * 12, 0 - bob); ctx.stroke();
   /* tail, low and heavy */
   ctx.strokeStyle = dark; ctx.lineWidth = 9;
   ctx.beginPath(); ctx.moveTo(-26, -40); ctx.quadraticCurveTo(-44, -36, -50, -14); ctx.stroke();
@@ -226,11 +233,57 @@ export function drawDireWolf(ctx) {
   outlined(ctx, dark, () => { ctx.moveTo(34, -66); ctx.lineTo(52, -62); ctx.lineTo(60, -54); ctx.lineTo(50, -50); ctx.lineTo(36, -52); ctx.closePath(); }, 1.3);
   outlined(ctx, dark, () => { ctx.moveTo(36, -66); ctx.lineTo(34, -78); ctx.lineTo(44, -68); ctx.closePath(); }, 1.1);
   outlined(ctx, dark, () => { ctx.moveTo(28, -64); ctx.lineTo(24, -76); ctx.lineTo(35, -67); ctx.closePath(); }, 1.1);
+  /* eye and a hint of fang so it reads as alive, not a shadow */
+  if (!opts.flat) {
+    ctx.fillStyle = "#d8e6f2"; ctx.beginPath(); ctx.ellipse(46, -60, 2, 1.6, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e8eef6"; ctx.beginPath(); ctx.moveTo(54, -53); ctx.lineTo(57, -49); ctx.lineTo(52, -50); ctx.closePath(); ctx.fill();
+    /* a pale ruff along the back */
+    ctx.fillStyle = rgba(light, 0.5);
+    ctx.beginPath(); ctx.moveTo(-18, -54); ctx.quadraticCurveTo(2, -60, 22, -55); ctx.quadraticCurveTo(2, -52, -18, -50); ctx.closePath(); ctx.fill();
+  }
   /* near legs */
   ctx.strokeStyle = dark; ctx.lineWidth = 8;
-  ctx.beginPath(); ctx.moveTo(-14, -34); ctx.lineTo(-19, -17); ctx.lineTo(-12, 0); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(15, -34); ctx.lineTo(20, -18); ctx.lineTo(16, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-14, -34); ctx.lineTo(-19 + c2 * 7, -17); ctx.lineTo(-12 + c2 * 12, 0 - bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(15, -34); ctx.lineTo(20 - c2 * 7, -18); ctx.lineTo(16 - c2 * 12, 0 - bob); ctx.stroke();
   ctx.restore();
+}
+
+/* A wolf den: a low frame of timber and hide dragged onto the road,
+   with a dark mouth the wolves come out of. Faces +x, ground at y = 0. */
+export function drawWolfDen(ctx, t = 0, opts = {}) {
+  const dead = !!opts.dead;
+  ctx.fillStyle = rgba("#1a2436", 0.3);
+  ctx.beginPath(); ctx.ellipse(4, 2, 40, 12, 0, 0, Math.PI * 2); ctx.fill();
+  /* sled runners */
+  outlined(ctx, "#3a2c22", () => ctx.rect(-34, -8, 68, 6), 1.2);
+  for (const px of [-26, 0, 26]) outlined(ctx, "#4a3a2c", () => ctx.rect(px - 2.5, -14, 5, 8), 1);
+  /* the mound: hide stretched over bent timber */
+  outlined(ctx, dead ? "#3a3f4a" : "#5a4a3c", () => { ctx.moveTo(-32, -10); ctx.quadraticCurveTo(-28, -52, 0, -54); ctx.quadraticCurveTo(28, -52, 32, -10); ctx.closePath(); }, 1.5);
+  ctx.fillStyle = rgba("#000000", 0.22);
+  ctx.beginPath(); ctx.moveTo(4, -54); ctx.quadraticCurveTo(28, -50, 32, -10); ctx.lineTo(4, -10); ctx.closePath(); ctx.fill();
+  /* snow on the roof */
+  ctx.fillStyle = FROST.snow;
+  ctx.beginPath(); ctx.moveTo(-26, -34); ctx.quadraticCurveTo(-22, -50, 0, -53); ctx.quadraticCurveTo(20, -50, 24, -36); ctx.quadraticCurveTo(0, -46, -26, -34); ctx.closePath(); ctx.fill();
+  /* timber ribs */
+  ctx.strokeStyle = rgba("#2c2419", 0.55); ctx.lineWidth = 2;
+  for (const k of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(k * 26, -12); ctx.quadraticCurveTo(k * 30, -44, k * 12, -52); ctx.stroke(); }
+  /* the mouth */
+  outlined(ctx, "#12161f", () => { ctx.moveTo(24, -10); ctx.quadraticCurveTo(40, -14, 42, -30); ctx.quadraticCurveTo(30, -34, 24, -30); ctx.closePath(); }, 1.3);
+  if (!dead) {
+    /* two eyes in the dark, blinking with the gait */
+    const a = 0.5 + Math.sin(t * Math.PI * 2) * 0.3;
+    ctx.fillStyle = rgba("#d7ecf4", a);
+    ctx.beginPath(); ctx.arc(33, -24, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(38, -22, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+  /* skull totem on a pole: a northern marker */
+  ctx.strokeStyle = "#2c2419"; ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(-30, -12); ctx.lineTo(-34, -58); ctx.stroke();
+  outlined(ctx, dead ? "#6a7280" : FROST.bannerTrim, () => { ctx.moveTo(-38, -58); ctx.lineTo(-30, -60); ctx.lineTo(-28, -66); ctx.lineTo(-36, -68); ctx.closePath(); }, 1.1);
+  if (dead) {
+    ctx.fillStyle = rgba("#1a1410", 0.4);
+    ctx.beginPath(); ctx.ellipse(0, -20, 30, 18, 0, 0, Math.PI * 2); ctx.fill();
+  }
 }
 
 /* Render `draw` as a flat shadow: the shape only, in one cold colour,
@@ -255,20 +308,67 @@ export function drawAsSilhouette(ctx, w, h, draw, opts = {}) {
   ctx.drawImage(off, 0, 0, w, h);
   /* a cold highlight along the top so the shape lifts off the card */
   ctx.globalCompositeOperation = "source-atop";
+  const rim = opts.rim || FROST.iceLight;
   const lift = ctx.createLinearGradient(0, 0, 0, h);
-  lift.addColorStop(0, rgba(FROST.iceLight, 0.3)); lift.addColorStop(0.55, rgba(FROST.iceLight, 0));
+  lift.addColorStop(0, rgba(rim, 0.3)); lift.addColorStop(0.55, rgba(rim, 0));
   ctx.fillStyle = lift; ctx.fillRect(0, 0, w, h);
   ctx.restore();
 }
 
 /* the pale "?" that sits over a locked shadow card */
-export function drawFrostRune(ctx, x, y, r) {
+export function drawFrostRune(ctx, x, y, r, colour) {
+  const c = colour || FROST.iceLight;
   ctx.save();
-  ctx.strokeStyle = rgba(FROST.iceLight, 0.5); ctx.lineWidth = 1.6;
+  ctx.strokeStyle = rgba(c, 0.5); ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = rgba(FROST.iceLight, 0.6);
+  ctx.fillStyle = rgba(c, 0.6);
   ctx.font = `600 ${Math.round(r * 1.2)}px Cinzel, Georgia, serif`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText("?", x, y + 1);
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ * Snow on a baked sprite.
+ *
+ * Rather than repaint every roof, battlement and cart by hand for the
+ * north, this finds the top edge of whatever has already been drawn —
+ * the first few opaque pixels under a transparent gap, column by column
+ * — and lays snow along it. Anything the artists add later is covered
+ * automatically, and a summer sprite is never touched.
+ * ------------------------------------------------------------------ */
+export function snowCaps(ctx, opts = {}) {
+  const cv = ctx.canvas;
+  const w = cv.width; const h = cv.height;
+  if (!w || !h) return;
+  let img;
+  try { img = ctx.getImageData(0, 0, w, h); } catch { return; }        // tainted canvas: skip
+  const src = img.data;
+  const t = ctx.getTransform ? ctx.getTransform() : { a: 1 };
+  const depth = Math.max(2, Math.round((opts.depth || 3) * (t.a || 1)));
+  const alpha = opts.alpha == null ? 0.9 : opts.alpha;
+  const out = ctx.createImageData(w, h);
+  const dst = out.data;
+  const R = 242; const G = 247; const B = 252;
+  for (let x = 0; x < w; x += 1) {
+    let run = -1;                                   // -1 until the column has seen a gap
+    for (let y = 0; y < h; y += 1) {
+      const i = (y * w + x) * 4;
+      if (src[i + 3] > 40) {
+        if (run >= 0 && run < depth) {
+          const fade = 1 - (run / depth) * 0.55;
+          dst[i] = R; dst[i + 1] = G; dst[i + 2] = B;
+          dst[i + 3] = Math.round(255 * alpha * fade);
+        }
+        run = run < 0 ? 0 : run + 1;
+      } else run = 0;
+    }
+  }
+  const tmp = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(w, h) : Object.assign(document.createElement("canvas"), { width: w, height: h });
+  tmp.getContext("2d").putImageData(out, 0, 0);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-atop";     // never paint outside the sprite
+  ctx.drawImage(tmp, 0, 0);
   ctx.restore();
 }

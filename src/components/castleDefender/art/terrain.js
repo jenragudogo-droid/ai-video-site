@@ -9,6 +9,29 @@
 
 import { PAL, shade, rgba } from "./palette.js";
 import { drawSiegeCamp, drawTrench, drawScorch, drawWreckage } from "./siege.js";
+import { FROST, frostPine } from "./frost.js";
+
+/* Ground colours by season. A stage picks one with `season: "winter"`;
+   everything else keeps Ashford's summer palette exactly as it was. */
+const SEASONS = {
+  summer: {
+    grass: PAL.grass, grassLight: PAL.grassLight, grassDark: PAL.grassDark,
+    road: PAL.road, roadDark: PAL.roadDark, roadEdge: PAL.roadEdge, pebble: PAL.pebble,
+    river: PAL.river, riverDeep: PAL.riverDeep, riverFoam: PAL.riverFoam, riverBank: PAL.riverBank,
+    field: PAL.field, fieldDark: PAL.fieldDark, fieldEdge: "#b39a52",
+    apron: "#a89c86", patchLight: "#a8d060", patchDark: "#3e6a2c",
+    flower: ["#f2f0e8", "#e9c8e0"], light: PAL.sun,
+  },
+  winter: {
+    /* packed snow over frozen ground; roads are trodden slush, rivers are ice */
+    grass: "#dfe8f2", grassLight: "#f1f6fb", grassDark: "#bccbdd",
+    road: "#cfd8e4", roadDark: "#a8b6c8", roadEdge: "#8e9db2", pebble: "#eef3fa",
+    river: FROST.ice, riverDeep: FROST.iceDark, riverFoam: FROST.iceLight, riverBank: "#c3d2e4",
+    field: "#d8dfe8", fieldDark: "#b9c5d4", fieldEdge: "#9aa8bb",
+    apron: "#b8c2d0", patchLight: "#ffffff", patchDark: "#8ea6bd",
+    flower: ["#ffffff", "#dce9f5"], light: "rgba(210, 228, 245, 0.2)",
+  },
+};
 import { drawPlot } from "./towers.js";
 
 const OUT = "rgba(28, 20, 12, 0.55)";
@@ -60,6 +83,27 @@ export function drawOak(ctx, x, y, s, rng) {
   ctx.beginPath(); ctx.arc(x + 4 * s, cy - 14 * s, 6 * s, 0, Math.PI * 2); ctx.fill();
 }
 
+/* A bare northern oak: black limbs with snow along the upper side. */
+function winterOak(ctx, x, y, s, rng) {
+  ctx.fillStyle = rgba("#1a2436", 0.26);
+  ctx.beginPath(); ctx.ellipse(x + 6 * s, y + 3, 20 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fill();
+  outlined(ctx, "#3a2c22", () => { ctx.moveTo(x - 4 * s, y); ctx.lineTo(x + 4 * s, y); ctx.lineTo(x + 2.6 * s, y - 22 * s); ctx.lineTo(x - 2.6 * s, y - 22 * s); ctx.closePath(); }, 1.2);
+  const limb = (ang, len, wdt) => {
+    const ex = x + Math.sin(ang) * len * s; const ey = y - 22 * s - Math.cos(ang) * len * s;
+    ctx.strokeStyle = "#2e241c"; ctx.lineWidth = wdt * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x, y - 20 * s); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.strokeStyle = rgba(FROST.snow, 0.85); ctx.lineWidth = wdt * 0.45 * s;
+    ctx.beginPath(); ctx.moveTo(x - 1, y - 21 * s); ctx.lineTo(ex - 1, ey - 1.5 * s); ctx.stroke();
+    /* one fork per limb */
+    const fx = ex + Math.sin(ang + 0.5) * len * 0.45 * s; const fy = ey - Math.cos(ang + 0.5) * len * 0.45 * s;
+    ctx.strokeStyle = "#2e241c"; ctx.lineWidth = wdt * 0.5 * s;
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(fx, fy); ctx.stroke();
+  };
+  const k = rng();
+  limb(-0.9 - k * 0.1, 20, 4); limb(-0.35, 24, 4.4); limb(0.3 + k * 0.1, 22, 4); limb(0.85, 18, 3.4);
+  ctx.lineCap = "butt";
+}
+
 export function drawPine(ctx, x, y, s) {
   ctx.fillStyle = rgba("#1c2a12", 0.3);
   ctx.beginPath(); ctx.ellipse(x + 6 * s, y + 3, 16 * s, 7 * s, 0, 0, Math.PI * 2); ctx.fill();
@@ -72,11 +116,13 @@ export function drawPine(ctx, x, y, s) {
   ctx.fillStyle = rgba("#dfffa0", 0.25); ctx.beginPath(); ctx.moveTo(x - 6 * s, y - 40 * s); ctx.lineTo(x, y - 52 * s); ctx.lineTo(x - 2 * s, y - 42 * s); ctx.closePath(); ctx.fill();
 }
 
-function drawBush(ctx, x, y, s) {
-  ctx.fillStyle = rgba("#1c2a12", 0.22);
+function drawBush(ctx, x, y, s, winter) {
+  ctx.fillStyle = rgba(winter ? "#8fa0b4" : "#1c2a12", 0.22);
   ctx.beginPath(); ctx.ellipse(x + 3, y + 2, 12 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill();
-  for (const [bx, by, br] of [[0, -6, 9], [-8, -3, 7], [8, -3, 7]]) outlined(ctx, "#4f8a38", () => ctx.arc(x + bx * s, y + by * s, br * s, 0, Math.PI * 2), 1.1);
-  ctx.fillStyle = rgba("#dfffa0", 0.25); ctx.beginPath(); ctx.arc(x - 4 * s, y - 10 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
+  /* a bush in the north keeps its leaves but loses its summer green */
+  const leaf = winter ? "#3f5c46" : "#4f8a38";
+  for (const [bx, by, br] of [[0, -6, 9], [-8, -3, 7], [8, -3, 7]]) outlined(ctx, leaf, () => ctx.arc(x + bx * s, y + by * s, br * s, 0, Math.PI * 2), 1.1);
+  ctx.fillStyle = rgba(winter ? "#e8f2fa" : "#dfffa0", winter ? 0.35 : 0.25); ctx.beginPath(); ctx.arc(x - 4 * s, y - 10 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawRock(ctx, x, y, s, rng) {
@@ -120,7 +166,9 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.lineJoin = "round"; ctx.lineCap = "round";
-  const rng = mulberry(stage.number * 977 + (layout.name === "portrait" ? 31 : 7));
+  const rng = mulberry(stage.number * 977 + (layout.name === "portrait" ? 31 : 7) + (stage.kingdom === "frost" ? 5000 : 0));
+  const winter = stage.season === "winter";
+  const P = SEASONS[winter ? "winter" : "summer"];
 
   /* helper: is (x,y) free of roads/plots/river/castle for decoration */
   const riverPts = layout.river ? sampleLine(layout.river) : [];
@@ -141,30 +189,33 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
 
   /* meadow */
   const g = ctx.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, PAL.grassLight); g.addColorStop(0.5, PAL.grass); g.addColorStop(1, PAL.grassDark);
+  g.addColorStop(0, P.grassLight); g.addColorStop(0.5, P.grass); g.addColorStop(1, P.grassDark);
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   /* soft patches */
   for (let i = 0; i < 90; i += 1) {
     const x = rng() * w; const y = rng() * h; const r = 40 + rng() * 120;
     const pg = ctx.createRadialGradient(x, y, 0, x, y, r);
     const light = rng() > 0.5;
-    pg.addColorStop(0, rgba(light ? "#a8d060" : "#3e6a2c", light ? 0.22 : 0.2)); pg.addColorStop(1, rgba("#000000", 0));
+    /* snow shows every mark, so the north wants a fainter hand here:
+       at summer strength the patches read as grey smudges on white */
+    const strength = winter ? 0.45 : 1;
+    pg.addColorStop(0, rgba(light ? P.patchLight : P.patchDark, (light ? 0.22 : 0.2) * strength)); pg.addColorStop(1, rgba("#000000", 0));
     ctx.fillStyle = pg; ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.6, rng() * Math.PI, 0, Math.PI * 2); ctx.fill();
   }
   /* fields */
   for (const f of layout.fields || []) {
     /* ploughed strips with wheat, a hedge on the top edge and hay bales */
-    outlined(ctx, "#b39a52", () => ctx.rect(f.x, f.y, f.w, f.h), 1.2);
+    outlined(ctx, P.fieldEdge, () => ctx.rect(f.x, f.y, f.w, f.h), 1.2);
     for (let yy = f.y + 4; yy < f.y + f.h - 2; yy += 8) {
-      ctx.fillStyle = (yy / 8) % 2 ? PAL.field : PAL.fieldDark;
+      ctx.fillStyle = (yy / 8) % 2 ? P.field : P.fieldDark;
       ctx.fillRect(f.x + 2, yy, f.w - 4, 5);
-      ctx.strokeStyle = rgba("#7a5a1e", 0.5); ctx.lineWidth = 1;
+      ctx.strokeStyle = rgba(winter ? "#8ea6bd" : "#7a5a1e", 0.5); ctx.lineWidth = 1;
       for (let xx = f.x + 4; xx < f.x + f.w - 2; xx += 5) { ctx.beginPath(); ctx.moveTo(xx, yy + 5); ctx.lineTo(xx + 1, yy); ctx.stroke(); }
     }
-    for (let xx = f.x - 2; xx < f.x + f.w + 2; xx += 12) drawBush(ctx, xx, f.y - 2, 0.55);
+    for (let xx = f.x - 2; xx < f.x + f.w + 2; xx += 12) drawBush(ctx, xx, f.y - 2, 0.55, winter);
     for (const [bx, by] of [[f.x + f.w - 18, f.y + f.h - 8], [f.x + f.w - 34, f.y + f.h - 6]]) {
-      outlined(ctx, "#d9b95a", () => ctx.ellipse(bx, by, 9, 6, 0, 0, Math.PI * 2), 1.1);
-      ctx.strokeStyle = "#a8863a"; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(bx, by, 5, 3.2, 0, 0, Math.PI * 2); ctx.stroke();
+      outlined(ctx, winter ? "#c9c6bb" : "#d9b95a", () => ctx.ellipse(bx, by, 9, 6, 0, 0, Math.PI * 2), 1.1);
+      ctx.strokeStyle = winter ? "#9aa2ac" : "#a8863a"; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(bx, by, 5, 3.2, 0, 0, Math.PI * 2); ctx.stroke();
     }
   }
   /* grass tufts and flowers */
@@ -172,19 +223,28 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   for (let i = 0; i < tufts; i += 1) {
     const x = rng() * w; const y = rng() * h;
     if (!clear(x, y, -30)) continue;
-    if (rng() < 0.18) drawFlower(ctx, x, y, rng() < 0.5 ? "#f2f0e8" : "#e9c8e0");
-    else drawTuft(ctx, x, y, 0.7 + rng() * 0.8, rng() < 0.5 ? PAL.grassLight : PAL.grassDark);
+    if (rng() < 0.18) drawFlower(ctx, x, y, rng() < 0.5 ? P.flower[0] : P.flower[1]);
+    else drawTuft(ctx, x, y, 0.7 + rng() * 0.8, rng() < 0.5 ? (winter ? "#c8d6e6" : PAL.grassLight) : (winter ? "#a9bcd2" : PAL.grassDark));
   }
 
   /* river */
   if (layout.river) {
     const pts = riverPts;
-    strokePath(ctx, pts, 72, PAL.riverBank);
-    strokePath(ctx, pts, 60, shade(PAL.riverBank, -0.2));
-    strokePath(ctx, pts, 50, PAL.riverDeep);
-    strokePath(ctx, pts, 40, PAL.river);
-    strokePath(ctx, pts, 18, rgba("#7fb6c8", 0.35));
-    ctx.globalAlpha = 0.5; strokePath(ctx, pts.map((p, i) => ({ x: p.x + Math.sin(i * 0.7) * 5, y: p.y })), 1.6, PAL.riverFoam, [14, 22]); ctx.globalAlpha = 1;
+    strokePath(ctx, pts, 72, P.riverBank);
+    strokePath(ctx, pts, 60, shade(P.riverBank, -0.2));
+    strokePath(ctx, pts, 50, P.riverDeep);
+    strokePath(ctx, pts, 40, P.river);
+    strokePath(ctx, pts, 18, rgba(winter ? "#d7ecf4" : "#7fb6c8", 0.35));
+    ctx.globalAlpha = 0.5; strokePath(ctx, pts.map((p, i) => ({ x: p.x + Math.sin(i * 0.7) * 5, y: p.y })), 1.6, P.riverFoam, [14, 22]); ctx.globalAlpha = 1;
+    if (winter) {
+      /* cracks and pressure ridges across the ice instead of foam */
+      ctx.strokeStyle = rgba(FROST.iceLight, 0.7); ctx.lineWidth = 1.2;
+      for (let i = 4; i < pts.length - 4; i += 9) {
+        const a = pts[i]; const b = pts[Math.min(pts.length - 1, i + 4)];
+        let nx = b.y - a.y; let ny = -(b.x - a.x); const l = Math.hypot(nx, ny) || 1;
+        ctx.beginPath(); ctx.moveTo(a.x - (nx / l) * 16, a.y - (ny / l) * 16); ctx.lineTo(a.x + (nx / l) * 16, a.y + (ny / l) * 16); ctx.stroke();
+      }
+    }
     /* bank stones */
     for (let i = 0; i < pts.length; i += 6) {
       const p = pts[i]; const side = i % 12 ? 1 : -1;
@@ -199,10 +259,10 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   for (const route of layout.routes) {
     const pts = route.pts;
     const wm = route.width || 1;
-    strokePath(ctx, pts, 76 * wm, PAL.roadEdge);
-    strokePath(ctx, pts, 64 * wm, PAL.roadDark);
-    strokePath(ctx, pts, 52 * wm, PAL.road);
-    ctx.globalAlpha = 0.35; strokePath(ctx, pts, 22 * wm, shade(PAL.road, 0.12)); ctx.globalAlpha = 1;
+    strokePath(ctx, pts, 76 * wm, P.roadEdge);
+    strokePath(ctx, pts, 64 * wm, P.roadDark);
+    strokePath(ctx, pts, 52 * wm, P.road);
+    ctx.globalAlpha = 0.35; strokePath(ctx, pts, 22 * wm, shade(P.road, 0.12)); ctx.globalAlpha = 1;
     /* wheel ruts */
     ctx.globalAlpha = 0.28;
     for (const off of [-11 * wm, 11 * wm]) {
@@ -211,14 +271,14 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
         let nx = q.y - p.y; let ny = -(q.x - p.x); const l = Math.hypot(nx, ny) || 1;
         return { x: p.x + (nx / l) * off, y: p.y + (ny / l) * off };
       });
-      strokePath(ctx, rut, 2.2, PAL.roadEdge);
+      strokePath(ctx, rut, 2.2, P.roadEdge);
     }
     ctx.globalAlpha = 1;
     /* pebbles */
     for (let i = 0; i < pts.length; i += 4) {
       const p = pts[i];
       const px = p.x + (rng() - 0.5) * 40; const py = p.y + (rng() - 0.5) * 40;
-      ctx.fillStyle = rng() < 0.5 ? PAL.pebble : PAL.roadEdge;
+      ctx.fillStyle = rng() < 0.5 ? P.pebble : P.roadEdge;
       ctx.beginPath(); ctx.ellipse(px, py, 1.6 + rng() * 1.6, 1 + rng(), 0, 0, Math.PI * 2); ctx.fill();
     }
     /* grass creeping over the edge */
@@ -226,7 +286,7 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
       const p = pts[i]; const q = pts[Math.min(pts.length - 1, i + 1)];
       let nx = q.y - p.y; let ny = -(q.x - p.x); const l = Math.hypot(nx, ny) || 1;
       const side = rng() < 0.5 ? 1 : -1;
-      drawTuft(ctx, p.x + (nx / l) * 36 * side, p.y + (ny / l) * 36 * side, 0.9, PAL.grassDark);
+      drawTuft(ctx, p.x + (nx / l) * 36 * side, p.y + (ny / l) * 36 * side, 0.9, winter ? "#a9bcd2" : PAL.grassDark);
     }
   }
 
@@ -236,9 +296,9 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.angle);
     ctx.fillStyle = rgba("#000000", 0.22); ctx.fillRect(-46, -30, 92, 66);
     outlined(ctx, PAL.stoneDark, () => ctx.rect(-46, -31, 92, 62), 1.4);
-    ctx.fillStyle = PAL.road; ctx.fillRect(-46, -24, 92, 48);
+    ctx.fillStyle = P.road; ctx.fillRect(-46, -24, 92, 48);
     ctx.fillStyle = rgba("#000000", 0.1); ctx.fillRect(-46, 14, 92, 10);
-    for (let i = 0; i < 26; i += 1) { ctx.fillStyle = i % 2 ? PAL.pebble : PAL.roadEdge; ctx.beginPath(); ctx.ellipse(-40 + (i * 37) % 84, -18 + (i * 23) % 40, 1.6, 1, 0, 0, Math.PI * 2); ctx.fill(); }
+    for (let i = 0; i < 26; i += 1) { ctx.fillStyle = i % 2 ? P.pebble : P.roadEdge; ctx.beginPath(); ctx.ellipse(-40 + (i * 37) % 84, -18 + (i * 23) % 40, 1.6, 1, 0, 0, Math.PI * 2); ctx.fill(); }
     for (const py of [-31, 24]) {
       outlined(ctx, PAL.stone, () => ctx.rect(-46, py, 92, 7), 1.2);
       ctx.strokeStyle = rgba("#000000", 0.16); ctx.lineWidth = 1;
@@ -289,15 +349,36 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     for (const [a, b] of layout.outerWall.segments) {
       const dx = b.x - a.x; const dy = b.y - a.y; const L = Math.hypot(dx, dy);
       ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(Math.atan2(dy, dx));
-      ctx.fillStyle = rgba("#8a7a58", 0.5); ctx.fillRect(-6, -30, L + 12, 60);
+      /* trodden earth in the south, trodden snow in the north: the warm
+         strip read as a tan slab lying on white ground */
+      const strip = ctx.createLinearGradient(0, -30, 0, 30);
+      const band = winter ? "#a8b4c2" : "#8a7a58";
+      strip.addColorStop(0, rgba(band, 0)); strip.addColorStop(0.5, rgba(band, winter ? 0.4 : 0.5)); strip.addColorStop(1, rgba(band, 0));
+      ctx.fillStyle = strip; ctx.fillRect(-6, -30, L + 12, 60);
       ctx.restore();
     }
   }
 
+  /* snowdrifts: pale banks across the road that slow everything crossing */
+  for (const dr of layout.drifts || []) {
+    const g2 = ctx.createRadialGradient(dr.x, dr.y, dr.r * 0.2, dr.x, dr.y, dr.r);
+    g2.addColorStop(0, rgba(FROST.snow, 0.95)); g2.addColorStop(0.7, rgba(FROST.snow, 0.75)); g2.addColorStop(1, rgba(FROST.snow, 0));
+    ctx.fillStyle = g2; ctx.beginPath(); ctx.ellipse(dr.x, dr.y, dr.r, dr.r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgba(FROST.snowDeep, 0.5); ctx.lineWidth = 1.4;
+    for (let k = 0; k < 3; k += 1) {
+      ctx.beginPath();
+      ctx.ellipse(dr.x + (k - 1) * dr.r * 0.2, dr.y + (k - 1) * dr.r * 0.14, dr.r * (0.66 - k * 0.16), dr.r * (0.4 - k * 0.1), 0.2, Math.PI * 0.05, Math.PI * 0.95);
+      ctx.stroke();
+    }
+    /* wind-carved ridge along the top edge */
+    ctx.strokeStyle = rgba("#ffffff", 0.85); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(dr.x, dr.y - dr.r * 0.16, dr.r * 0.8, dr.r * 0.42, 0, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+  }
+
   /* castle apron: paved ground under and in front of the castle */
-  outlined(ctx, "#a89c86", () => ctx.rect(c.x - 6, c.y - 6, c.w + 12, c.h + 12), 1);
+  outlined(ctx, P.apron, () => ctx.rect(c.x - 6, c.y - 6, c.w + 12, c.h + 12), 1);
   const ag = ctx.createRadialGradient(c.gate.x, c.gate.y + 40, 10, c.gate.x, c.gate.y + 40, 120);
-  ag.addColorStop(0, rgba(PAL.road, 0.9)); ag.addColorStop(1, rgba(PAL.road, 0));
+  ag.addColorStop(0, rgba(P.road, 0.9)); ag.addColorStop(1, rgba(P.road, 0));
   ctx.fillStyle = ag; ctx.beginPath(); ctx.ellipse(c.gate.x, c.gate.y + 40, 120, 60, 0, 0, Math.PI * 2); ctx.fill();
 
   /* forests */
@@ -326,7 +407,14 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   for (const r of layout.rocks || []) decor.push({ x: r.x, y: r.y, kind: "rock", s: 0.8 + rng() * 0.5 });
   decor.sort((a, b) => a.y - b.y);
   for (const d of decor) {
-    if (d.kind === "oak") drawOak(ctx, d.x, d.y, d.s, rng);
+    if (winter) {
+      /* a northern forest: snow-laden pines and bare, frosted oaks */
+      if (d.kind === "pine") frostPine(ctx, d.x, d.y, d.s);
+      else if (d.kind === "oak") winterOak(ctx, d.x, d.y, d.s, rng);
+      else if (d.kind === "bush") { drawBush(ctx, d.x, d.y, d.s, true); ctx.fillStyle = rgba(FROST.snow, 0.75); ctx.beginPath(); ctx.ellipse(d.x - 2 * d.s, d.y - 9 * d.s, 8 * d.s, 4 * d.s, 0, 0, Math.PI * 2); ctx.fill(); }
+      else { drawRock(ctx, d.x, d.y, d.s, rng); ctx.fillStyle = rgba(FROST.snow, 0.8); ctx.beginPath(); ctx.ellipse(d.x - 1 * d.s, d.y - 7 * d.s, 7 * d.s, 3 * d.s, 0, 0, Math.PI * 2); ctx.fill(); }
+    }
+    else if (d.kind === "oak") drawOak(ctx, d.x, d.y, d.s, rng);
     else if (d.kind === "pine") drawPine(ctx, d.x, d.y, d.s);
     else if (d.kind === "bush") drawBush(ctx, d.x, d.y, d.s);
     else drawRock(ctx, d.x, d.y, d.s, rng);
@@ -346,10 +434,10 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
 
   /* light and vignette */
   const lg = ctx.createRadialGradient(w * 0.3, h * 0.25, 40, w * 0.3, h * 0.25, Math.max(w, h) * 0.8);
-  lg.addColorStop(0, stage.time === "dusk" ? rgba("#ffb070", 0.16) : PAL.sun); lg.addColorStop(1, rgba("#000000", 0));
+  lg.addColorStop(0, stage.time === "dusk" ? rgba("#ffb070", 0.16) : P.light); lg.addColorStop(1, rgba("#000000", 0));
   ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
   const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
-  vg.addColorStop(0, rgba("#000000", 0)); vg.addColorStop(1, rgba("#1a1408", 0.4));
+  vg.addColorStop(0, rgba("#000000", 0)); vg.addColorStop(1, rgba(winter ? "#1a2436" : "#1a1408", 0.4));
   ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
 
   return { canvas, w, h, scale };

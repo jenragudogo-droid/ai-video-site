@@ -7,18 +7,20 @@ import {
   canDrill, setDrill, DRILL_COST, canMount, setMount, MOUNT_COST,
   serializeGame, restoreGame, orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility,
   castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, guardCount,
+  heroAbility,
   choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, upgradeCostFor, repairCost,
 } from "./castleDefender/engine/engine.js";
 import { createRenderer } from "./castleDefender/render.js";
 import { createCastleAudio } from "./castleDefender/audio.js";
 import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked, saveBattle, clearBattle, saveDifficulty, buyUpgrade, badgesOf,
+  KINGDOM_ORDER, isKingdomUnlocked, stagesOf,
 } from "./castleDefender/save.js";
 import { PERK_BY_ID, RARITY, POWERS } from "./castleDefender/data/perks.js";
 import { CATEGORIES, KINGDOM_UPGRADES, upgradeCost as kingdomCost } from "./castleDefender/data/progression.js";
 import { STAGES } from "./castleDefender/data/stages.js";
 import { KINGDOMS } from "./castleDefender/data/kingdoms.js";
-import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, BADGES } from "./castleDefender/data/frozenNorth.js";
-import { TOWERS, TOWER_ORDER, ABILITIES, HERO, heroStats, DIFFICULTY, SOLDIERS, PIKE_UNITS } from "./castleDefender/data/towers.js";
+import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, SUNSPEAR, SUN_TEASERS, SUN_HERO, BADGES } from "./castleDefender/data/frozenNorth.js";
+import { TOWERS, TOWER_ORDER, ABILITIES, HERO, heroStatsOf, DIFFICULTY, SOLDIERS, PIKE_UNITS } from "./castleDefender/data/towers.js";
 import { ENEMIES } from "./castleDefender/data/enemies.js";
 import { fullscreenElement, onFullscreenChange, toggleGameFullscreen, unlockPageScroll } from "./fullscreen.js";
 import { displayWave, waveCard, plural } from "./castleDefender/hudText.js";
@@ -62,6 +64,27 @@ const TOUCH = [
 
 /* Snowfall over the teaser panel: a fixed set so React never reshuffles
    it, and CSS does the drifting (and stops under reduced motion). */
+/* The campaign map reads the kingdom order from the save module, so a new
+   kingdom appears here the moment it has stages and an entry below. */
+const REALMS = {
+  ashford: {
+    eyebrow: "Kingdom one",
+    name: "The Realm of Ashford",
+    blurb: "Green country, stone walls and the road south. Hold the gate against Blackmoor's warband.",
+    badge: "defenderOfAshford",
+    doneNote: "Greenhollow, Stonebridge Ford and the Siege of Ashford are all won.",
+    hero: { id: "hero", name: "Sir Edric", note: "Knight of Ashford · sword and Royal Charge" },
+  },
+  frost: {
+    eyebrow: "Kingdom two",
+    name: "The Frozen North",
+    blurb: "Snow, wolves and a storm that fights beside them. Take the pass, the hollow and the Cairnhold.",
+    badge: "guardianOfTheFrozenNorth",
+    doneNote: "Frostwatch Pass, Wolfpine Hollow and the Cairnhold are all held.",
+    hero: { id: "elara", name: "Lady Elara", note: "Ranger of the North · bow, evasion and Frost Arrow" },
+  },
+};
+
 const SNOW = [12, 47, 78, 26, 61, 90, 5, 35, 68, 84, 19, 54, 73, 41].map((x, i) => ({
   x, d: (i * 0.83) % 5, t: 6 + ((i * 1.7) % 5), s: i % 3 === 0 ? 3 : 2,
 }));
@@ -256,7 +279,9 @@ export default function CastleDefender() {
       if (!s) return "calm";
       if (s.enemies.some((e) => e.def.boss && e.state !== "dead" && !(e.boss && e.boss.phase === 1))) return "boss";
       if (s.stage.finale && s.waveState === "active") return "siege";
-      return s.waveState === "active" ? "battle" : "calm";
+      if (s.waveState !== "active") return "calm";
+      /* the north gets its own colder battle theme */
+      return s.stage.kingdom === "frost" ? "frost" : "battle";
     }
     return null;
   }, []);
@@ -318,7 +343,7 @@ export default function CastleDefender() {
     const sum = summarise(s);
     const res = recordResult(readSave(), sum);
     setProfile(res.save);
-    setResults({ ...sum, newBest: res.newBest, newStars: res.newStars, newWave: res.newWave, crowns: res.crowns, realmComplete: res.realmComplete });
+    setResults({ ...sum, newBest: res.newBest, newStars: res.newStars, newWave: res.newWave, crowns: res.crowns, realmComplete: res.realmComplete, newBadges: res.newBadges || [] });
     setSelected(-1); setMode(null); setHeroSel(false);
     rendererRef.current?.setSelection({ plot: -1, hover: -1, range: null, target: null });
     setStarsShown(0);
@@ -354,9 +379,9 @@ export default function CastleDefender() {
         case "die": if (!e.boss) a?.play("die"); break;
         case "coin": a?.play("coin"); break;
         case "unitDown": a?.play("unitDown"); break;
-        case "heroDown": a?.play("heroDown"); banner("Sir Edric has fallen", "He returns at the gate in 12 seconds", "alert", 2400); break;
+        case "heroDown": { const hn = (s.heroDef || HERO); a?.play("heroDown"); banner(`${hn.name} has fallen`, `${hn.id === "elara" ? "She" : "He"} returns at the gate in 12 seconds`, "alert", 2400); break; }
         case "heroReturn": a?.play("heroReturn"); break;
-        case "heroLevel": a?.play("heroLevel"); banner(`Sir Edric reaches level ${e.level}`, "More health, harder blows, a faster charge", "good", 2200); break;
+        case "heroLevel": a?.play("heroLevel"); banner(`${(s.heroDef || HERO).name} reaches level ${e.level}`, "More health, harder blows, a faster recharge", "good", 2200); break;
         case "build": a?.play("build"); scheduleSave(); break;
         case "upgrade": a?.play("upgrade"); scheduleSave(); break;
         case "sell": a?.play("sell"); scheduleSave(); break;
@@ -375,7 +400,11 @@ export default function CastleDefender() {
         case "gateHit": a?.play(e.siege ? "gateHitSiege" : "gateHit"); break;
         case "spawn": if (e.enemy === "outrider" || e.enemy === "scoutCav") a?.play("hooves"); else if (e.enemy === "knightCav") a?.play("gallop"); else if (e.enemy === "ram") a?.play("spawnRam"); break;
         case "miniboss":
-          if (e.enemy === "cavCommander") { a?.play("commanderEnter"); banner("Captain Malric rides", "The Black Rider. He charges with a horn's warning and rallies the cavalry.", "boss", 3600); }
+          if (e.enemy === "wolfDen") { a?.play("wolfHowl"); banner("Wolf den", "It keeps loosing wolves until it burns. Kill the den.", "boss", 3000); }
+          else if (e.enemy === "frostCaptain") { a?.play("commanderEnter"); banner("A huscarl of the Jarl", "Everything near his horn fights harder. Cut him down.", "boss", 3200); }
+          else if (e.enemy === "iceRam") { a?.play("spawnRam"); banner("Iron-Shod Ram", "It breaks the ice wall on its way to the gate.", "boss", 3000); }
+          else if (e.enemy === "frostThrower") { a?.play("spawnRam"); banner("Frost trebuchet", "It halts in the snow and throws at the wall. Kill it first.", "boss", 3000); }
+          else if (e.enemy === "cavCommander") { a?.play("commanderEnter"); banner("Captain Malric rides", "The Black Rider. He charges with a horn's warning and rallies the cavalry.", "boss", 3600); }
           else if (e.enemy === "siegeCatapult") { a?.play("spawnRam"); banner("Siege catapult", "It will halt in the field and pound the wall. Kill it first.", "boss", 3000); }
           else if (e.enemy === "siegeTower") { a?.play("spawnRam"); banner("Siege tower", "Slow and vast. Burn it before it reaches the wall.", "boss", 3000); }
           else if (e.enemy === "siegeRam") { a?.play("spawnRam"); banner("Iron Ram", "It will smash the outer wall on its way to the gate.", "boss", 3000); }
@@ -402,7 +431,7 @@ export default function CastleDefender() {
         case "unitAbility": a?.play(e.id === "braceSpears" ? "brace" : "shieldBrace"); saveNow(); break;
         case "perkOffer": a?.play("perk"); saveNow(); break;
         case "perk": a?.play("perk"); banner(e.name, `${RARITY[e.rarity]?.name || ""} perk chosen`, "good", 2000); saveNow(); break;
-        case "unlock": a?.play(e.hero ? "kingsCharge" : "unlock"); banner(e.hero ? "King's Charge" : `New power: ${e.name}`, e.hero ? "Sir Edric's charge now strikes wider and harder, and ends in a shockwave." : POWERS[e.id]?.desc || "", "good", 3400); scheduleSave(); break;
+        case "unlock": a?.play(e.hero ? "kingsCharge" : "unlock"); banner(e.hero ? e.name : `New power: ${e.name}`, e.hero ? (e.desc || "") : POWERS[e.id]?.desc || "", "good", 3400); scheduleSave(); break;
         /* Stage III siege */
         case "siegeHalt": a?.play("march"); banner("Siege catapult in range", "It will pound the wall and the castle until it burns", "alert", 2600); break;
         case "catapultWarn": a?.play("catapultWind"); break;
@@ -415,16 +444,30 @@ export default function CastleDefender() {
         case "unload": a?.play("march"); break;
         case "towerBurn": a?.play("towerBurn"); break;
         case "engineerRepair": a?.play("hammer"); break;
-        case "bossEnter": a?.play("bossEnter"); banner("Warlord Blackmoor", "He waits at his camp behind his guard. Break the guard to draw him out.", "boss", 4200); break;
+        case "bossEnter":
+          a?.play("bossEnter");
+          if (e.enemy === "iceWarlord") banner("Jarl Vorne", "The ice takes every blow for him. Break it, then strike before it closes.", "boss", 4200);
+          else banner("Warlord Blackmoor", "He waits at his camp behind his guard. Break the guard to draw him out.", "boss", 4200);
+          break;
         case "bossPhase":
-          if (e.phase === 2) { a?.play("bossEnter"); banner("Blackmoor advances", "The Ironbreaker is coming for the gate. Watch for the sweep.", "boss", 3600); }
+          if (e.boss === "vorne" || s.stage.kingdom === "frost") {
+            if (e.phase === 2) { a?.play("bossEnter"); banner("Vorne comes down the road", "The ice re-forms after every break. Watch the ring before the nova.", "boss", 3600); }
+            else { a?.play("bossRage"); banner("Vorne is enraged", "The ice will not return, and the storm comes with him.", "boss", 3800); }
+          }
+          else if (e.phase === 2) { a?.play("bossEnter"); banner("Blackmoor advances", "The Ironbreaker is coming for the gate. Watch for the sweep.", "boss", 3600); }
           else { a?.play("bossRage"); a?.play("bossRoar"); banner("Blackmoor is enraged", "He roars, untouchable, then comes on faster. Strike after every sweep.", "boss", 3800); }
           scheduleSave();
           break;
-        case "bossWind": a?.play(e.kind === "sweep" ? "bossSweepWind" : "bossHornWind"); break;
+        case "bossWind": a?.play(e.kind === "sweep" ? "bossSweepWind" : e.kind === "nova" ? "novaWind" : e.kind === "blizzard" ? "bossHornWind" : "bossHornWind"); break;
         case "bossSweep": a?.play("bossSweep"); break;
         case "bossHorn": a?.play("chargeHorn"); banner("The horn of Blackmoor", "Reinforcements answer the call", "alert", 2200); break;
-        case "bossDown": a?.play("bossDown"); if (e.routed) { a?.play("rout"); banner("Blackmoor falls", "The warband breaks and runs!", "good", 3600); } else banner("Blackmoor falls", "The Warlord is dead. Hold the gate!", "good", 3600); break;
+        case "bossDown": {
+          const nm = s.stage.kingdom === "frost" ? "Vorne falls" : "Blackmoor falls";
+          a?.play("bossDown");
+          if (e.routed) { a?.play("rout"); banner(nm, s.stage.kingdom === "frost" ? "The host breaks and runs for the snow!" : "The warband breaks and runs!", "good", 3600); }
+          else banner(nm, "Hold the gate!", "good", 3600);
+          break;
+        }
         case "bossOpen": a?.play("bossOpen"); break;
         case "bossRoarEnd": a?.play("chargeGo"); break;
         case "wallCrack": a?.play("wallCrack"); banner("The outer wall is cracking", "Half its strength is gone. Emergency Repair mends it.", "alert", 2800); break;
@@ -434,6 +477,21 @@ export default function CastleDefender() {
         case "emergencyRepair": a?.play("emergencyRepair"); if (s) s.lastRepair = s.t; scheduleSave(); break;
         case "barrage": a?.play("barrage"); break;
         case "formation": a?.play(e.kind === "pikeWall" ? "pikeWall" : e.kind === "shieldWall" ? "shieldWall" : "close"); saveNow(); break;
+        /* the Frozen North */
+        case "blizzard":
+          if (e.on) { a?.play("blizzard"); banner("Blizzard", "Your towers shoot slower and see less until it blows over", "alert", 3000); }
+          else { a?.play("windEase"); banner("The wind eases", "", "good", 1600); }
+          scheduleSave();
+          break;
+        case "shellBreak": a?.play("shellBreak"); banner("The ice breaks", "Strike the Jarl before it closes again", "good", 2600); break;
+        case "shellReform": a?.play("shellReform"); break;
+        case "shellHit": break;
+        case "bossNova": a?.play("frostNova"); break;
+        case "bossHowl": a?.play("wolfHowl"); banner("The pack answers", "Wolves are coming in from the roads", "alert", 2400); break;
+        case "frostArrow": a?.play("frostArrow"); break;
+        case "frostBurst": a?.play("frostBurst"); break;
+        case "heroShot": a?.play("bowShot"); break;
+        case "heroEvade": a?.play("evade"); break;
         case "watchfire": a?.play("watchfire"); break;
         case "royalRally": a?.play("royalRally"); break;
         case "towerAbility": a?.play(e.id === "skewer" ? "bolt" : e.id === "barrage" ? "catapult" : "volley"); break;
@@ -450,7 +508,9 @@ export default function CastleDefender() {
     const s = gameRef.current;
     if (!s) return;
     const h = s.hero;
-    const st = heroStats(h.level);
+    const HD = s.heroDef || HERO;
+    const st = heroStatsOf(HD, h.level);
+    const ab = heroAbility(s);
     const boss = s.enemies.find((e) => e.def.boss && e.state !== "dead");
     const sel = selRef.current;
     const t = sel >= 0 ? s.towers[sel] : null;
@@ -463,9 +523,17 @@ export default function CastleDefender() {
       chargeCd: h.chargeCd, chargeMax: st.chargeCd,
       volley: s.abilities.volley, reinforce: s.abilities.reinforce,
       canRepair: s.gold >= repairCost(s) && s.castleHp < s.castleMax,
-      boss: boss ? { name: boss.def.name, ratio: boss.hp / boss.maxHp, phase: boss.boss ? boss.boss.phase : 0, final: boss.def.boss === "final", guards: boss.boss && boss.boss.phase === 1 ? guardCount(s) : 0, open: !!(boss.boss && boss.boss.openT > 0), roar: !!(boss.boss && boss.boss.roarT > 0) } : null,
+      boss: boss ? {
+        name: boss.def.name, ratio: boss.hp / boss.maxHp, phase: boss.boss ? boss.boss.phase : 0, final: boss.def.boss === "final",
+        guards: boss.boss && boss.boss.phase === 1 && boss.def.phases ? guardCount(s) : 0,
+        open: !!(boss.boss && boss.boss.openT > 0), roar: !!(boss.boss && boss.boss.roarT > 0),
+        shell: boss.shellMax ? Math.max(0, boss.shell) / boss.shellMax : 0, hasShell: !!boss.shellMax, frost: !!boss.def.frost,
+      } : null,
       wall: s.wallHp != null ? { hp: s.wallHp, max: s.wallMax } : null,
       kingsCharge: kingsCharge(s), formations: !!s.stage.formations, finale: !!s.stage.finale,
+      hero: { id: HD.id, name: HD.name, ranged: !!HD.range, ability: { name: ab.name, desc: ab.desc, key: ab.key || "Q", upgraded: !!ab.upgraded, kind: ab.kind || "charge" } },
+      kingdom: s.stage.kingdom || "ashford",
+      blizzard: s.blizzT > 0 ? Math.ceil(s.blizzT) : 0,
       tower: t ? { type: t.type, level: t.level, abilityCd: t.abilityCd, canUp: canUpgrade(s, sel), upCost: upgradeCostFor(s, t.type, t.level), sell: sellValue(s, sel), pikes: !!t.pikes, canDrill: canDrill(s, sel), mounted: !!t.mounted, canMount: canMount(s, sel), squad: t.type === "barracks" ? squadOf(s, sel).length : 0 } : null,
       repairCost: repairCost(s),
       buildCosts: Object.fromEntries(TOWER_ORDER.map((k) => [k, buildCost(s, k)])),
@@ -986,7 +1054,7 @@ export default function CastleDefender() {
     holdRef.current = setTimeout(() => {
       holdRef.current = null;
       const s = gameRef.current;
-      if (s && s.hero.chargeCd <= 0) { setHeroSel(true); setMode("charge"); audioRef.current?.play("open"); banner("Royal Charge", coarse ? "Tap where Sir Edric should charge" : "Click where Sir Edric should charge", "good", 1400); }
+      if (s && s.hero.chargeCd <= 0) { const ab = heroAbility(s); const hn = (s.heroDef || HERO).name; setHeroSel(true); setMode("charge"); audioRef.current?.play("open"); banner(ab.name, `${coarse ? "Tap" : "Click"} where ${hn} should ${ab.kind === "frostArrow" ? "shoot" : "charge"}`, "good", 1400); }
       else audioRef.current?.play("error");
     }, 420);
   }, [banner, coarse]);
@@ -1091,6 +1159,8 @@ export default function CastleDefender() {
   const controlList = coarse ? TOUCH : KEYS;
   const sheetTop = !coarse;
 
+  const heroName = hud?.hero?.name || "Sir Edric";
+  const heroKind = hud?.hero?.ability?.kind || "charge";
   const modeHint = useMemo(() => {
     if (!mode && !heroSel) return null;
     const tap = coarse ? "Tap" : "Click";
@@ -1099,18 +1169,21 @@ export default function CastleDefender() {
     if (mode === "reinforce") return `${tap} where the levies should stand`;
     if (mode === "barrage") return `${tap} where the stones should fall`;
     if (mode === "ability") return `${tap} a target inside the tower's range`;
-    if (mode === "charge") return `${tap} where Sir Edric should charge`;
+    if (mode === "charge") return `${tap} where ${heroName} should ${heroKind === "frostArrow" ? "put the arrow" : "charge"}`;
     if (mode === "unitMove") return `${tap} where the soldiers should go`;
     if (mode === "unitAttack") return `${tap} the enemy to attack`;
     if (mode === "unitTower") return `${tap} the tower to defend`;
-    if (heroSel) return `${tap} where Sir Edric should go`;
+    if (heroSel) return `${tap} where ${heroName} should go`;
     return null;
-  }, [mode, heroSel, coarse]);
+  }, [mode, heroSel, coarse, heroName, heroKind]);
   const battle = profile.battle;
   const battleWave = battle ? displayWave(battle.wave, battle.waveState, battle.mode === "endless" ? Infinity : (STAGES.find((st) => st.id === battle.stageId)?.waves.length || 0)) : null;
   const battleStage = battle ? STAGES.find((st) => st.id === battle.stageId) : null;
   const crowns = profile.meta?.crowns || 0;
   const realmDone = (profile.campaignsDone || []).includes("ashford");
+  const northDone = (profile.campaignsDone || []).includes("frost");
+  const outroFrost = (game?.stage.kingdom || "ashford") === "frost";
+  const winFrost = (results?.kingdom || "ashford") === "frost";
   const badges = badgesOf(profile);
 
   /* ------------------------------ view ------------------------------ */
@@ -1143,6 +1216,12 @@ export default function CastleDefender() {
               <span className="cdBar"><span className={`cdBarFill ${hud.castleHp / hud.castleMax < 0.35 ? "is-low" : ""}`} style={{ width: `${(hud.castleHp / hud.castleMax) * 100}%` }} /></span>
               <span className="cdBarText">{hud.castleHp}/{hud.castleMax}</span>
             </div>
+            {hud.blizzard > 0 && (
+              <div className="cdStat cdStat--blizz" title="The storm: your towers shoot slower and see less">
+                <span className="cdWaveLabel">Blizzard</span>
+                <strong>{hud.blizzard}s</strong>
+              </div>
+            )}
             {hud.wall && (
               <div className={`cdStat cdStat--wall ${hud.wall.hp <= 0 ? "is-down" : ""}`} title={hud.wall.hp > 0 ? `Outer wall ${Math.round(hud.wall.hp)} / ${hud.wall.max}: slows the warband at the siege gate while it stands` : "The outer wall has fallen; the breach road is open"}>
                 <span className="cdWaveLabel">Wall</span>
@@ -1166,13 +1245,18 @@ export default function CastleDefender() {
           </div>
 
           {hud.boss && (
-            <div className={`cdBoss ${hud.boss.final ? "cdBoss--final" : ""} ${hud.boss.phase === 3 ? "is-raged" : ""} ${hud.boss.open ? "is-open" : ""} ${hud.boss.roar ? "is-roar" : ""}`}>
+            <div className={`cdBoss ${hud.boss.final ? "cdBoss--final" : ""} ${hud.boss.phase === 3 ? "is-raged" : ""} ${hud.boss.open || (hud.boss.frost && hud.boss.shell <= 0) ? "is-open" : ""} ${hud.boss.roar ? "is-roar" : ""}`}>
               <span>
                 {hud.boss.final && hud.boss.phase ? <i className="cdBossPips" aria-hidden="true">{[1, 2, 3].map((n) => <b key={n} className={n <= hud.boss.phase ? "is-on" : ""} />)}</i> : null}
                 {hud.boss.name}
-                {hud.boss.final && hud.boss.phase ? <em className="cdBossPhase">{hud.boss.open ? "Winded · strike now" : hud.boss.roar ? "Roaring · untouchable" : hud.boss.phase === 1 ? `Behind his guard · ${hud.boss.guards} left` : hud.boss.phase === 2 ? "Phase 2 · Marching on the gate" : "Phase 3 · Enraged"}</em> : null}
+                {hud.boss.final && hud.boss.phase ? <em className="cdBossPhase">{
+                  hud.boss.frost
+                    ? (hud.boss.shell > 0 ? "Sheathed in ice · break it" : hud.boss.phase === 3 ? "Phase 3 · Enraged" : "The ice is broken · strike now")
+                    : hud.boss.open ? "Winded · strike now" : hud.boss.roar ? "Roaring · untouchable" : hud.boss.phase === 1 ? `Behind his guard · ${hud.boss.guards} left` : hud.boss.phase === 2 ? "Phase 2 · Marching on the gate" : "Phase 3 · Enraged"
+                }</em> : null}
               </span>
               <span className="cdBar cdBar--boss"><span className="cdBarFill is-boss" style={{ width: `${hud.boss.ratio * 100}%` }} /></span>
+              {hud.boss.hasShell && <span className="cdBar cdBar--shell" title="The ice shell takes every blow until it breaks"><span className="cdBarFill is-shell" style={{ width: `${hud.boss.shell * 100}%` }} /></span>}
             </div>
           )}
 
@@ -1197,21 +1281,21 @@ export default function CastleDefender() {
               onPointerUp={onHeroUp}
               onPointerCancel={() => { if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null; } }}
               onContextMenu={(e) => e.preventDefault()}
-              aria-label="Sir Edric"
-              title="Select Sir Edric (H). Hold for Royal Charge (Q)"
+              aria-label={hud.hero.name}
+              title={`Select ${hud.hero.name} (H). Hold for ${hud.hero.ability.name} (${hud.hero.ability.key})`}
             >
-              <IconCanvas kind="figure" id="hero" w={46} h={54} renderer={rendererRef} className="cdHeroPortrait" />
+              <IconCanvas kind="figure" id={hud.hero.id === "elara" ? "elara" : "hero"} w={46} h={54} renderer={rendererRef} className="cdHeroPortrait" />
               <span className="cdHeroInfo">
-                <strong>Sir Edric</strong>
+                <strong>{hud.hero.name}</strong>
                 <span className="cdBar cdBar--hero"><span className="cdBarFill is-hero" style={{ width: `${Math.max(0, hud.heroHp / hud.heroMax) * 100}%` }} /></span>
                 <span className="cdPips">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= hud.heroLevel ? "is-on" : ""} />)}</span>
                 {(hud.heroState === "dead" || hud.heroState === "respawn") && <em>returns in {Math.max(1, Math.ceil(hud.heroRespawn))}s</em>}
               </span>
             </button>
-            <button type="button" className={`cdAbility cdAbility--charge ${hud.chargeCd <= 0 ? "is-ready" : ""} ${mode === "charge" ? "is-on" : ""}`} onClick={chargeNow} disabled={hud.chargeCd > 0 || hud.heroState === "dead" || hud.heroState === "respawn"} title="Royal Charge (Q)">
+            <button type="button" className={`cdAbility cdAbility--charge ${hud.chargeCd <= 0 ? "is-ready" : ""} ${mode === "charge" ? "is-on" : ""}`} onClick={chargeNow} disabled={hud.chargeCd > 0 || hud.heroState === "dead" || hud.heroState === "respawn"} title={`${hud.hero.ability.name} (${hud.hero.ability.key}): ${hud.hero.ability.desc || ""}`}>
               <span className="cdCd" style={{ "--p": hud.chargeMax ? Math.max(0, hud.chargeCd) / hud.chargeMax : 0 }} />
-              <span className="cdAbilityLabel">{hud.kingsCharge ? "King's" : "Charge"}</span>
-              {hud.kingsCharge && <span className="cdCrownBadge" aria-hidden="true">👑</span>}
+              <span className="cdAbilityLabel">{hud.hero.ability.kind === "frostArrow" ? (hud.hero.ability.upgraded ? "Volley" : "Frost") : hud.hero.ability.upgraded ? "King's" : "Charge"}</span>
+              {hud.hero.ability.upgraded && <span className="cdCrownBadge" aria-hidden="true">{hud.hero.ability.kind === "frostArrow" ? "❄" : "👑"}</span>}
               {hud.chargeCd > 0 && <span className="cdCdText">{Math.ceil(hud.chargeCd)}</span>}
             </button>
           </div>
@@ -1415,13 +1499,19 @@ export default function CastleDefender() {
 
       {/* ------------------------------ intro ------------------------------ */}
       {screen === "outro" && (
-        <div className="cdIntro cdIntro--outro" onClick={() => rendererRef.current?.skipOutro()}>
+        <div className={`cdIntro cdIntro--outro ${outroFrost ? "cdIntro--north" : ""}`} onClick={() => rendererRef.current?.skipOutro()}>
           <div className="cdLetterbox cdLetterbox--top" />
           <div className="cdLetterbox cdLetterbox--bottom" />
           <div className={`cdIntroText cdIntroText--${introPhase}`}>
-            {introPhase === 0 && (<><p className="cdEyebrow">The warband breaks</p><h3>Blackmoor is fallen</h3></>)}
-            {introPhase === 1 && (<><p className="cdEyebrow">The Realm of Ashford</p><h3>Ashford stands</h3></>)}
-            {introPhase === 2 && (<><p className="cdEyebrow">Greenhollow · Stonebridge Ford · The Siege of Ashford</p><h3>The campaign is won</h3></>)}
+            {introPhase === 0 && (outroFrost
+              ? (<><p className="cdEyebrow">The ice gives way</p><h3>Vorne is broken</h3></>)
+              : (<><p className="cdEyebrow">The warband breaks</p><h3>Blackmoor is fallen</h3></>))}
+            {introPhase === 1 && (outroFrost
+              ? (<><p className="cdEyebrow">The Frozen North</p><h3>The Cairnhold holds</h3></>)
+              : (<><p className="cdEyebrow">The Realm of Ashford</p><h3>Ashford stands</h3></>))}
+            {introPhase === 2 && (outroFrost
+              ? (<><p className="cdEyebrow">Frostwatch Pass · Wolfpine Hollow · The Cairnhold</p><h3>The north is yours</h3></>)
+              : (<><p className="cdEyebrow">Greenhollow · Stonebridge Ford · The Siege of Ashford</p><h3>The campaign is won</h3></>))}
           </div>
           <button type="button" className="cdSkip" onClick={(e) => { e.stopPropagation(); rendererRef.current?.skipOutro(); }}>Skip ▸</button>
         </div>
@@ -1432,8 +1522,8 @@ export default function CastleDefender() {
           <div className="cdLetterbox cdLetterbox--top" />
           <div className="cdLetterbox cdLetterbox--bottom" />
           <div className={`cdIntroText cdIntroText--${introPhase}`}>
-            {introPhase === 0 && (<><p className="cdEyebrow">The Realm of Ashford</p><h3>Stage {game?.stage.numeral} · {game?.stage.name}</h3></>)}
-            {introPhase === 1 && (<><p className="cdEyebrow">From the west</p><h3>{game?.stage.id === "stonebridge" ? "The warband rides on Stonebridge" : "The Blackmoor Warband approaches"}</h3></>)}
+            {introPhase === 0 && (<><p className="cdEyebrow">{game?.stage.kingdom === "frost" ? "The Frozen North" : "The Realm of Ashford"}</p><h3>Stage {game?.stage.numeral} · {game?.stage.name}</h3></>)}
+            {introPhase === 1 && (<><p className="cdEyebrow">{game?.stage.kingdom === "frost" ? "Out of the snow" : "From the west"}</p><h3>{game?.stage.kingdom === "frost" ? (game?.stage.id === "cairnhold" ? "Jarl Vorne comes to the Cairnhold" : "The northern host is moving") : game?.stage.id === "stonebridge" ? "The warband rides on Stonebridge" : "The Blackmoor Warband approaches"}</h3></>)}
             {introPhase >= 2 && (<>{(game?.stage.intro || []).map((l) => <h3 key={l} className="cdIntroLine">{l}</h3>)}</>)}
           </div>
           <button type="button" className="cdSkip" onClick={(e) => { e.stopPropagation(); skipIntro(); }}>Skip ▸</button>
@@ -1478,7 +1568,7 @@ export default function CastleDefender() {
           <div className="cdPage">
             <div className="cdPageHead">
               <button type="button" className="cdBack" onClick={() => setScreen("menu")}>‹ Back</button>
-              <h3>The Realm of Ashford</h3>
+              <h3>The Campaign</h3>
               <button type="button" className="cdBack cdCrownBtn" onClick={() => { setScreen("kingdom"); audioRef.current?.play("open"); }} title="Spend crowns on permanent upgrades">👑 {crowns} · Kingdom upgrades</button>
               {badges.map((id) => (
                 <span key={id} className="cdBadge" title={BADGES[id].desc}><i aria-hidden="true">{BADGES[id].icon}</i>{BADGES[id].name}</span>
@@ -1489,57 +1579,133 @@ export default function CastleDefender() {
                 ))}
               </div>
             </div>
-            {(profile.campaignsDone || []).includes("ashford") && (
-              <div className="cdRealmDone">
-                <p className="cdEyebrow">The Realm of Ashford</p>
-                <strong>Realm complete</strong>
-                <span>Greenhollow, Stonebridge Ford and the Siege of Ashford are all won. The next kingdom is being raised.</span>
-              </div>
-            )}
             <div className="cdStageList">
-              {STAGES.map((st, i) => {
-                const rec = stageRecord(profile, st.id);
-                const open = isStageUnlocked(profile, STAGES, i);
+              {KINGDOM_ORDER.map((kid) => {
+                const realm = REALMS[kid];
+                if (!realm) return null;
+                const list = stagesOf(STAGES, kid);
+                if (!list.length) return null;
+                const open = isKingdomUnlocked(profile, kid);
+                const done = (profile.campaignsDone || []).includes(kid);
+                const won = list.filter((st) => stageRecord(profile, st.id).completed).length;
+                const stars = list.reduce((n, st) => n + (difficulty === "hard" ? stageRecord(profile, st.id).hardStars : stageRecord(profile, st.id).stars), 0);
                 return (
-                  <article key={st.id} className={`cdStage ${open ? "" : "is-locked"}`}>
-                    <div className="cdStageNum">{st.numeral}</div>
-                    <div className="cdStageBody">
-                      <h4>{st.name}</h4>
-                      <p className="cdStageSub">{st.subtitle}{st.waves.length ? ` · ${st.waves.length} waves` : ""}</p>
-                      <p className="cdStageIntro">{st.intro.join(" ")}</p>
-                      {open ? (
-                        <div className="cdStageMeta">
-                          <Stars n={difficulty === "hard" ? rec.hardStars : rec.stars} />
-                          <span>Best {fmt(rec.bestScore)}</span>
-                          {rec.bestWave > 0 && <span>Endless: wave {rec.bestWave}</span>}
+                  <section key={kid} className={`cdRealm ${open ? "" : "is-locked"} ${kid === "frost" ? "cdRealm--frost" : ""}`} aria-label={realm.name}>
+                    <header className="cdRealmHead">
+                      <div className="cdRealmTitle">
+                        <p className="cdEyebrow">{realm.eyebrow}</p>
+                        <h4>{realm.name}</h4>
+                        <p className="cdRealmBlurb">{realm.blurb}</p>
+                      </div>
+                      {open && (
+                        <div className="cdRealmMeta">
+                          <span className="cdRealmStars" title="Stars in this kingdom">★ {stars} / {list.length * 3}</span>
+                          <span>{won} of {list.length} stages won</span>
+                          {done && badges.includes(realm.badge) && (
+                            <span className="cdBadge cdBadge--realm" title={BADGES[realm.badge].desc}><i aria-hidden="true">{BADGES[realm.badge].icon}</i>{BADGES[realm.badge].name}</span>
+                          )}
                         </div>
-                      ) : (
-                        <p className="cdLocked">{st.available ? "Complete the previous stage to unlock" : st.unlockNote}</p>
                       )}
-                    </div>
-                    {open && (
-                      <div className="cdStageActions">
-                        <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(st.id, { difficulty })}>Play</button>
-                        {rec.completed && <button type="button" className="cdBtn" onClick={() => startRun(st.id, { difficulty, mode: "endless" })}>Endless</button>}
+                    </header>
+
+                    {open && done && (
+                      <div className="cdRealmDone">
+                        <strong>Kingdom complete</strong>
+                        <span>{realm.doneNote}</span>
                       </div>
                     )}
-                  </article>
+
+                    {open && (
+                      <div className="cdRealmHero">
+                        <IconCanvas kind="figure" id={realm.hero.id} w={46} h={56} renderer={rendererRef} className="cdRealmHeroArt" />
+                        <div>
+                          <p className="cdEyebrow">Your hero here</p>
+                          <strong>{realm.hero.name}</strong>
+                          <span>{realm.hero.note}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {open ? list.map((st) => {
+                      const i = STAGES.indexOf(st);
+                      const rec = stageRecord(profile, st.id);
+                      const unlocked = isStageUnlocked(profile, STAGES, i);
+                      return (
+                        <article key={st.id} className={`cdStage ${unlocked ? "" : "is-locked"}`}>
+                          <div className="cdStageNum">{st.numeral}</div>
+                          <div className="cdStageBody">
+                            <h4>{st.name}</h4>
+                            <p className="cdStageSub">{st.subtitle}{st.waves.length ? ` · ${st.waves.length} waves` : ""}</p>
+                            <p className="cdStageIntro">{st.intro.join(" ")}</p>
+                            {unlocked ? (
+                              <div className="cdStageMeta">
+                                <Stars n={difficulty === "hard" ? rec.hardStars : rec.stars} />
+                                <span>Best {fmt(rec.bestScore)}</span>
+                                {rec.bestWave > 0 && <span>Endless: wave {rec.bestWave}</span>}
+                              </div>
+                            ) : (
+                              <p className="cdLocked">{st.available ? "Complete the previous stage to unlock" : st.unlockNote}</p>
+                            )}
+                          </div>
+                          {unlocked && (
+                            <div className="cdStageActions">
+                              <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(st.id, { difficulty })}>Play</button>
+                              {rec.completed && <button type="button" className="cdBtn" onClick={() => startRun(st.id, { difficulty, mode: "endless" })}>Endless</button>}
+                            </div>
+                          )}
+                        </article>
+                      );
+                    }) : (
+                      <div className="cdFrostArt cdFrostArt--locked">
+                        <IconCanvas kind="scene" id="frostNorth" w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
+                        <div className="cdSnow" aria-hidden="true">{SNOW.map((f, i) => <i key={i} style={{ left: `${f.x}%`, animationDelay: `${f.d}s`, animationDuration: `${f.t}s`, width: f.s, height: f.s }} />)}</div>
+                        <div className="cdFrostText">
+                          <p className="cdEyebrow">{list.length} stages · a new hero</p>
+                          <h4>{FROZEN_NORTH.name}</h4>
+                          <p className="cdFrostFlavour">{FROZEN_NORTH.flavour.map((line) => <span key={line}>{line}</span>)}</p>
+                          <span className="cdSoon cdSoon--frost">🔒 Win the Siege of Ashford to march north</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!open && (
+                      <>
+                        <div className="cdShadowRow">
+                          {FROST_TEASERS.map((t) => (
+                            <div key={t.id} className="cdShadowCard">
+                              <IconCanvas kind="shade" id={t.id} w={78} h={78} renderer={rendererRef} className="cdShadowArt" fluid />
+                              <strong>{t.name}</strong>
+                              <span>{t.note}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="cdShadowCard cdShadowCard--hero">
+                          <IconCanvas kind="shade" id={FROST_HERO.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
+                          <div>
+                            <p className="cdEyebrow">New hero</p>
+                            <strong>{FROST_HERO.name}</strong>
+                            <span>{FROST_HERO.note}</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </section>
                 );
               })}
-              {realmDone && (
-                <section className="cdFrost" aria-label={`${FROZEN_NORTH.name}, coming soon`}>
+
+              {northDone && (
+                <section className="cdFrost cdFrost--sun" aria-label={`${SUNSPEAR.name}, coming soon`}>
                   <div className="cdFrostArt">
-                    <IconCanvas kind="scene" id="frostNorth" w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
-                    <div className="cdSnow" aria-hidden="true">{SNOW.map((f, i) => <i key={i} style={{ left: `${f.x}%`, animationDelay: `${f.d}s`, animationDuration: `${f.t}s`, width: f.s, height: f.s }} />)}</div>
+                    <IconCanvas kind="scene" id="sunReach" w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
                     <div className="cdFrostText">
-                      <p className="cdEyebrow">{FROZEN_NORTH.eyebrow}</p>
-                      <h4>{FROZEN_NORTH.name}</h4>
-                      <p className="cdFrostFlavour">{FROZEN_NORTH.flavour.map((line) => <span key={line}>{line}</span>)}</p>
-                      <span className="cdSoon cdSoon--frost">🔒 Coming soon</span>
+                      <p className="cdEyebrow">{SUNSPEAR.eyebrow}</p>
+                      <h4>{SUNSPEAR.name}</h4>
+                      <p className="cdFrostFlavour">{SUNSPEAR.flavour.map((line) => <span key={line}>{line}</span>)}</p>
+                      <span className="cdSoon cdSoon--sun">🔒 Coming soon</span>
                     </div>
                   </div>
                   <div className="cdShadowRow">
-                    {FROST_TEASERS.map((t) => (
+                    {SUN_TEASERS.map((t) => (
                       <div key={t.id} className="cdShadowCard">
                         <IconCanvas kind="shade" id={t.id} w={78} h={78} renderer={rendererRef} className="cdShadowArt" fluid />
                         <strong>{t.name}</strong>
@@ -1548,22 +1714,23 @@ export default function CastleDefender() {
                     ))}
                   </div>
                   <div className="cdShadowCard cdShadowCard--hero">
-                    <IconCanvas kind="shade" id={FROST_HERO.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
+                    <IconCanvas kind="shade" id={SUN_HERO.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
                     <div>
                       <p className="cdEyebrow">New hero — coming soon</p>
-                      <strong>{FROST_HERO.name}</strong>
-                      <span>{FROST_HERO.note}</span>
+                      <strong>{SUN_HERO.name}</strong>
+                      <span>{SUN_HERO.note}</span>
                     </div>
                   </div>
                 </section>
               )}
+
               {realmDone && (
                 <article className="cdStage cdStage--next is-locked">
                   <div className="cdStageNum">✦</div>
                   <div className="cdStageBody">
                     <h4>New Game+</h4>
-                    <p className="cdStageSub">The Realm of Ashford, again</p>
-                    <p className="cdStageIntro">Replay Ashford with tougher enemies and new rewards.</p>
+                    <p className="cdStageSub">The whole campaign, again</p>
+                    <p className="cdStageIntro">Replay every kingdom with tougher enemies and new rewards.</p>
                     <p className="cdLocked">Coming soon</p>
                   </div>
                 </article>
@@ -1771,26 +1938,34 @@ export default function CastleDefender() {
       {screen === "victory" && results && (
         <div className="cdOverlay">
           <div className={`cdCard cdCard--result ${results.finale && results.mode !== "endless" ? "cdCard--conquered" : ""}`}>
-            <p className="cdEyebrow">{results.mode === "endless" ? "The siege ends" : results.finale ? "Realm of Ashford" : `Stage ${game?.stage.numeral} complete`}</p>
+            <p className="cdEyebrow">{results.mode === "endless" ? "The siege ends" : results.finale ? (winFrost ? "The Frozen North" : "Realm of Ashford") : `Stage ${game?.stage.numeral} complete`}</p>
             <h3>{results.finale && results.mode !== "endless" ? "Conquered" : "Victory"}</h3>
             <Stars n={starsShown} big />
-            <p className="cdResultLine">{results.finale && results.mode !== "endless" ? "Warlord Blackmoor is dead and the siege is broken. The Realm of Ashford is yours." : results.stars === 3 ? "The walls barely scratched. Ashford salutes you." : results.stars === 2 ? "The gate held, though the masons have work to do." : "Won by a thread. The castle needs rebuilding."}{results.crowns ? ` +${results.crowns} crowns for the kingdom.` : ""}</p>
+            <p className="cdResultLine">{results.finale && results.mode !== "endless" ? (winFrost ? "Jarl Vorne is broken and the storm has passed. The Frozen North is yours." : "Warlord Blackmoor is dead and the siege is broken. The Realm of Ashford is yours.") : results.stars === 3 ? (winFrost ? "Barely a mark on the walls. The north salutes you." : "The walls barely scratched. Ashford salutes you.") : results.stars === 2 ? "The gate held, though the masons have work to do." : "Won by a thread. The castle needs rebuilding."}{results.crowns ? ` +${results.crowns} crowns for the kingdom.` : ""}</p>
             {results.finale && results.mode !== "endless" && (
               <div className="cdConquered">
                 <div className="cdConqueredRow"><span>Best score</span><strong>{fmt(Math.max(results.score, stageRecord(profile, results.stageId).bestScore || 0))}</strong></div>
                 <div className="cdConqueredRow"><span>Crowns earned</span><strong>👑 {results.crowns || 0}</strong></div>
                 <div className="cdConqueredRow"><span>Perks earned</span><strong>{results.perks && results.perks.length ? results.perks.map((id) => PERK_BY_ID[id]?.name || id).join(" · ") : "None chosen"}</strong></div>
-                <div className="cdConqueredRow"><span>Kingdom</span><strong>{results.realmComplete ? "Realm complete · first conquest" : "Realm complete"}</strong></div>
+                <div className="cdConqueredRow"><span>Kingdom</span><strong>{winFrost ? "The Frozen North" : "The Realm of Ashford"}{results.realmComplete ? " · first conquest" : ""}</strong></div>
+                {(results.newBadges || []).length > 0 && (
+                  <div className="cdConqueredRow"><span>Badge earned</span><strong>{results.newBadges.map((id) => `${BADGES[id]?.icon || "★"} ${BADGES[id]?.name || id}`).join(" · ")}</strong></div>
+                )}
               </div>
             )}
             <div className="cdResultGrid">
               <div><strong>{fmt(results.score)}</strong><span>Score{results.newBest ? " · new best" : ""}</span></div>
               <div><strong>{results.castleHp}/{results.castleMax}</strong><span>Castle health</span></div>
               <div><strong>{results.kills}</strong><span>Enemies felled</span></div>
-              <div><strong>{results.heroLevel}</strong><span>Sir Edric's level</span></div>
+              <div><strong>{results.heroLevel}</strong><span>{results.hero === "elara" ? "Lady Elara's level" : "Sir Edric's level"}</span></div>
             </div>
             <div className="cdCol">
-              {(() => { const idx = STAGES.findIndex((st) => st.id === results.stageId); const next = STAGES[idx + 1]; if (results.finale && results.mode !== "endless") return <div className="cdBtn cdBtn--soon" aria-disabled="true"><span>Next kingdom</span><small>Coming soon</small></div>; return next && next.available && results.mode !== "endless"
+              {(() => { const idx = STAGES.findIndex((st) => st.id === results.stageId); const next = STAGES[idx + 1]; if (results.finale && results.mode !== "endless") {
+                  const nk = STAGES.find((st) => (st.kingdom || "ashford") !== (results.kingdom || "ashford") && KINGDOM_ORDER.indexOf(st.kingdom || "ashford") > KINGDOM_ORDER.indexOf(results.kingdom || "ashford"));
+                  return nk
+                    ? <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(nk.id)}>March north · {nk.name}</button>
+                    : <div className="cdBtn cdBtn--soon" aria-disabled="true"><span>Next kingdom</span><small>Coming soon</small></div>;
+                } return next && next.available && results.mode !== "endless"
                 ? <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(next.id)}>Next stage · {next.name}</button>
                 : <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(results.stageId, { mode: "endless" })}>Endless siege on this map</button>; })()}
               <div className="cdRow">
@@ -1798,7 +1973,7 @@ export default function CastleDefender() {
                 <button type="button" className="cdBtn cdBtn--ghost" onClick={quitToMenu}>Main menu</button>
               </div>
               {results.stageId === "greenhollow" && !STAGES[1].available && <p className="cdNote">Stage II, Stonebridge Ford, is in development.</p>}
-              {results.finale && results.mode !== "endless" && <p className="cdNote">Endless siege on the Ashford map is open from the campaign page.</p>}
+              {results.finale && results.mode !== "endless" && <p className="cdNote">Endless siege on this map is open from the campaign page.</p>}
             </div>
           </div>
         </div>
@@ -1813,7 +1988,7 @@ export default function CastleDefender() {
             <div className="cdResultGrid">
               <div><strong>{fmt(results.score)}</strong><span>Score{results.newBest ? " · new best" : ""}</span></div>
               <div><strong>{results.kills}</strong><span>Enemies felled</span></div>
-              <div><strong>{results.heroLevel}</strong><span>Sir Edric's level</span></div>
+              <div><strong>{results.heroLevel}</strong><span>{results.hero === "elara" ? "Lady Elara's level" : "Sir Edric's level"}</span></div>
               <div><strong>{Math.round(results.time)}s</strong><span>Held for</span></div>
             </div>
             <div className="cdCol">

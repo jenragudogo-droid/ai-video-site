@@ -18,7 +18,8 @@ import {
 } from "./art/towers.js";
 import { FIGURES, figurePose, drawFigure, drawHorse, drawRam } from "./art/figures.js";
 import { drawSiegeCatapult, drawSiegeTower, drawOuterWall } from "./art/siege.js";
-import { drawFrostScene, drawDireWolf, drawAsSilhouette, drawFrostRune } from "./art/frost.js";
+import { drawFrostScene, drawDireWolf, drawWolfDen, drawAsSilhouette, drawFrostRune, snowCaps, FROST } from "./art/frost.js";
+import { drawSunScene, drawSandWyrm, SUN } from "./art/sunspear.js";
 import { PAL, rgba } from "./art/palette.js";
 import { towerLevel } from "./engine/engine.js";
 import { HERO, TOWERS } from "./data/towers.js";
@@ -43,6 +44,13 @@ function lightTarget(s) {
   if (!s.stage || s.stage.lighting !== "siege") return 0;
   const w = s.wave + (s.waveState === "countdown" ? 1 : 0);
   return w >= 9 ? 2 : w >= 5 ? 1 : 0;
+}
+
+/* The Cairnhold sits under a storm that closes in as the night goes on. */
+function stormTarget(s) {
+  if (!s.stage || s.stage.lighting !== "storm") return 0;
+  const w = s.wave + (s.waveState === "countdown" ? 1 : 0);
+  return Math.min(1, 0.35 + w / 18);
 }
 const IDLE_PERIOD = 2.856;      // matches sin(t * 2.2)
 const dist2 = (ax, ay, bx, by) => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
@@ -80,6 +88,9 @@ export function createRenderer() {
   const catMarks = new Map();     // catapult shots being wound up: id -> { tx, ty, r, t, max, kind, x, y }
   const bossMarks = [];           // boss wind-ups: { x, y, r, t, max, kind, id }
   let light = 0;                  // current lighting phase, eased toward lightTarget
+  let storm = 0;                  // the northern storm, eased toward stormTarget
+  let blizz = 0;                  // 0..1, how hard the blizzard is blowing
+  const flakes = [];              // wind-blown snow, only allocated on winter stages
   let lastGuardText = -9;
   let outro = null;               // the campaign victory sequence
   let frameDt = 1 / 60;           // last frame's dt, for effects drawn outside draw()
@@ -205,12 +216,38 @@ export function createRenderer() {
     });
   }
 
-  function towerSprite(type, level) {
-    return cache.get(`tower:${type}:${level}`, TOWER_BOX.w, TOWER_BOX.h, TOWER_BOX.ax, TOWER_BOX.ay, (ctx) => drawTowerBody(ctx, type, level));
+  function wolfSprite(anim, frame) {
+    const n = anim === "dead" ? 6 : 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`wolf:${anim}:${f}`, 190, 130, 84, 116, (ctx) => {
+      if (anim === "dead") {
+        const k = (f + 0.5) / n;
+        ctx.globalAlpha = k > 0.65 ? 1 - (k - 0.65) / 0.35 : 1;
+        ctx.rotate(-k * 1.1); ctx.translate(0, k * 4);
+        drawDireWolf(ctx, 0.1);
+        return;
+      }
+      /* a lunge on the attack frames, a loping gait otherwise */
+      if (anim === "attack") { const k = f / n; ctx.translate(k * 8, -k * 5); ctx.rotate(-k * 0.18); drawDireWolf(ctx, 0.25); return; }
+      drawDireWolf(ctx, anim === "walk" ? f / n : 0.1);
+    });
   }
 
-  function castleSprite(castle, dmg) {
-    return cache.get(`castle:${castle.w}x${castle.h}:${dmg}`, castle.w + 70, castle.h + 150, 35, 118, (ctx) => drawCastle(ctx, castle, dmg));
+  function denSprite(frame, dead) {
+    const n = 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`den:${dead ? "dead" : "live"}:${f}`, 170, 130, 78, 116, (ctx) => drawWolfDen(ctx, f / n, { dead }));
+  }
+
+  function towerSprite(type, level, winter) {
+    return cache.get(`tower:${type}:${level}:${winter ? "w" : "s"}`, TOWER_BOX.w, TOWER_BOX.h, TOWER_BOX.ax, TOWER_BOX.ay, (ctx) => {
+      drawTowerBody(ctx, type, level);
+      if (winter) snowCaps(ctx, { depth: 2.4, alpha: 0.85 });
+    });
+  }
+
+  function castleSprite(castle, dmg, winter) {
+    return cache.get(`castle:${castle.w}x${castle.h}:${dmg}:${winter ? "w" : "s"}`, castle.w + 70, castle.h + 150, 35, 118, (ctx) => drawCastle(ctx, castle, dmg, { winter }));
   }
 
   /* ------------------------------ flags ------------------------------ */
@@ -377,6 +414,37 @@ export function createRenderer() {
       case "oil": fx.spawn("fire", e.x, e.y, { n: 24, spread: e.r }); fx.spawn("ember", e.x, e.y, { n: 12 }); fx.spawn("smoke", e.x, e.y, { n: 8, size: 10 }); fx.spawn("scorch", e.x, e.y, { size: e.r * 0.6, max: 20 }); fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(PAL.fire, 0.8), max: 0.6, width: 4 }); break;
       case "emergencyRepair": { const c = s.layout.castle; for (let i = 0; i < 6; i += 1) fx.spawn("spark", c.x + 20 + (i / 5) * (c.w - 40), c.y + c.h - 20, { n: 4, color: PAL.goldLight }); fx.spawn("text", e.x, e.y - 90, { text: "MASONS AT WORK", size: 12, color: PAL.goldLight, max: 1.6, bold: true }); break; }
       case "barrage": fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(PAL.goldLight, 0.6), max: 1, width: 3 }); break;
+      /* the Frozen North */
+      case "shellHit": fx.spawn("spark", e.x, e.y - 34, { n: 3, color: FROST.iceLight }); break;
+      case "shellBreak":
+        fx.spawn("ring", e.x, e.y, { size: 130, color: rgba(FROST.iceLight, 0.95), max: 0.7, width: 5 });
+        fx.spawn("debris", e.x, e.y - 30, { n: 20, color: FROST.ice });
+        fx.spawn("spark", e.x, e.y - 34, { n: 22, color: FROST.iceLight });
+        fx.spawn("text", e.x, e.y - 120, { text: "THE ICE BREAKS", size: 14, color: FROST.iceLight, max: 1.8, bold: true });
+        gateShake = Math.max(gateShake, 0.25);
+        break;
+      case "shellReform": fx.spawn("ring", e.x, e.y, { size: 90, color: rgba(FROST.ice, 0.8), max: 0.6, width: 4 }); fx.spawn("text", e.x, e.y - 110, { text: "THE ICE RETURNS", size: 12, color: FROST.ice, max: 1.2, bold: true }); break;
+      case "bossNova":
+        fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(FROST.iceLight, 0.95), max: 0.6, width: 6 });
+        fx.spawn("ring", e.x, e.y, { size: e.r * 1.3, color: rgba(FROST.ice, 0.8), max: 0.45, width: 4 });
+        for (let i = 0; i < 18; i += 1) { const a = (i / 18) * Math.PI * 2; fx.spawn("spark", e.x + Math.cos(a) * e.r * 0.6, e.y + Math.sin(a) * e.r * 0.35, { n: 1, color: FROST.iceLight }); }
+        gateShake = Math.max(gateShake, 0.28);
+        break;
+      case "bossHowl":
+        fx.spawn("ring", e.x, e.y, { size: 320, color: rgba(FROST.iceLight, 0.55), max: 1.2, width: 4 });
+        fx.spawn("text", e.x, e.y - 120, { text: "THE PACK ANSWERS", size: 13, color: FROST.iceLight, max: 1.8, bold: true });
+        break;
+      case "blizzard":
+        if (e.on) { fx.spawn("text", s.layout.castle.gate.x, s.layout.castle.gate.y - 90, { text: "BLIZZARD", size: 16, color: FROST.iceLight, max: 2.2, bold: true }); }
+        break;
+      case "frostArrow": fx.spawn("ring", e.x, e.y, { size: e.r * 1.6, color: rgba(FROST.iceLight, 0.7), max: 0.8, width: 3 }); break;
+      case "frostBurst":
+        fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(FROST.iceLight, 0.9), max: 0.55, width: 5 });
+        fx.spawn("spark", e.x, e.y - 10, { n: 16, color: FROST.iceLight });
+        fx.spawn("debris", e.x, e.y, { n: 8, color: FROST.ice });
+        break;
+      case "heroEvade": fx.spawn("dust", e.x, e.y, { n: 6 }); fx.spawn("ring", e.x, e.y, { size: 34, color: rgba(FROST.iceLight, 0.6), max: 0.35 }); break;
+      case "heroShot": break;
       case "formation": fx.spawn("ring", e.x, e.y, { size: 44, color: e.kind ? rgba(PAL.goldLight, 0.9) : "rgba(255,255,255,0.6)", max: 0.5 }); if (e.kind) fx.spawn("text", e.x, e.y - 70, { text: e.kind === "pikeWall" ? "PIKE WALL" : "SHIELD WALL", size: 11, color: PAL.goldLight, max: 1.2, bold: true }); break;
       default: break;
     }
@@ -443,6 +511,17 @@ export function createRenderer() {
       sp = catapultSprite(e.stopped ? 0 : Math.floor(e.d / 14), Math.round(Math.max(0, Math.min(1, arm)) * 6), e.state === "dead");
       if (e.state !== "dead" && !e.stopped && Math.random() < 0.08) fx.spawn("dust", e.x - 40 * e.face, e.y + 4, { n: 1 });
       if (e.state === "dead") { if (Math.random() < 0.5) fx.spawn("fire", e.x + (Math.random() - 0.5) * 60, e.y - 20, { n: 1, size: 5 }); if (Math.random() < 0.2) fx.spawn("smoke", e.x, e.y - 40, { n: 1, size: 8 }); }
+    } else if (def.beast) {
+      const a = e.state === "dead" ? "dead" : e.state === "fight" ? "attack" : e.state === "walk" ? "walk" : "idle";
+      const fr = a === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 6)
+        : a === "walk" ? Math.floor(e.animT * def.speed / 52 * 8)
+          : a === "attack" ? Math.floor(Math.max(0, Math.min(0.999, 1 - e.atkCd / def.atk)) * 8) : Math.floor(e.animT * 5);
+      sp = wolfSprite(a, fr);
+      if (e.state === "walk" && Math.random() < 0.25) fx.spawn("dust", e.x - e.face * 14, e.y + 3, { n: 1 });
+    } else if (def.den) {
+      sp = denSprite(Math.floor((e.docked ? time * 2 : e.d / 14)), e.state === "dead");
+      if (e.state !== "dead" && e.docked && Math.random() < 0.05) fx.spawn("smoke", e.x - 10, e.y - 50, { n: 1, size: 5 });
+      if (e.state === "dead" && Math.random() < 0.4) fx.spawn("fire", e.x + (Math.random() - 0.5) * 40, e.y - 20, { n: 1, size: 5 });
     } else if (def.tower) {
       sp = siegeTowerSprite(e.docked ? 0 : Math.floor(e.d / 14), e.docked ? 1 : 0, e.state === "dead");
       if (e.state !== "dead" && !e.docked && Math.random() < 0.1) fx.spawn("dust", e.x - 40 * e.face, e.y + 4, { n: 1 });
@@ -453,6 +532,25 @@ export function createRenderer() {
       sp = figureSprite(figureKey("enemy", e.type, true), e.id % 2, anim, frame);
     }
     const hitFlash = e.hitT > 0.12;
+    if (e.shell > 0 && e.state !== "dead") {
+      /* the ice closed over him: a faceted shell that thins as it breaks */
+      const k = e.shell / (e.shellMax || 1);
+      const r = 40 + k * 12;
+      ctx.save();
+      const g = ctx.createRadialGradient(e.x, e.y - 34, 4, e.x, e.y - 34, r * 1.3);
+      g.addColorStop(0, rgba(FROST.iceLight, 0.06)); g.addColorStop(0.65, rgba(FROST.ice, 0.2 + k * 0.22)); g.addColorStop(1, rgba(FROST.ice, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y - 34, r * 1.3, r * 1.45, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgba(FROST.iceLight, 0.35 + k * 0.45); ctx.lineWidth = 2;
+      for (let i = 0; i < 7; i += 1) {
+        const a = (i / 7) * Math.PI * 2 + time * 0.35;
+        const rr = r * (0.7 + ((i * 37) % 10) / 30);
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * rr * 0.35, e.y - 34 + Math.sin(a) * rr * 0.4);
+        ctx.lineTo(e.x + Math.cos(a) * rr, e.y - 34 + Math.sin(a) * rr * 1.1);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     if (e.boss) {
       /* the warlord: a red glow that deepens as he rages, a shimmer while guarded */
       const raged = e.boss.raged;
@@ -510,6 +608,17 @@ export function createRenderer() {
       cache.blit(ctx, sp, u.x, u.y, flip);
       ctx.restore();
     }
+    if (u.frozenT > 0 && u.state !== "dead") {
+      /* held in the ice: a pale block and a rime outline */
+      ctx.save();
+      ctx.globalAlpha = 0.42; ctx.globalCompositeOperation = "lighter";
+      cache.blit(ctx, sp, u.x, u.y, flip);
+      ctx.restore();
+      ctx.strokeStyle = rgba(FROST.iceLight, 0.75); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(u.x, u.y - 26, 17, 30, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = rgba(FROST.ice, 0.2); ctx.fill();
+      if (Math.random() < 0.2) fx.spawn("spark", u.x, u.y - 30, { n: 1, color: FROST.iceLight });
+    }
     if (u.state === "charge" && Math.random() < 0.6) fx.spawn("dust", u.x - u.face * 10, u.y, { n: 1 });
     if (u.abilityT > 0 && u.state !== "dead") {
       const rider = !!(u.def && u.def.horse);
@@ -534,7 +643,7 @@ export function createRenderer() {
     ctx.translate(p.x, p.y);
     ctx.scale(pop, pop);
     ctx.translate(-p.x, -p.y);
-    cache.blit(ctx, towerSprite(t.type, t.level), p.x, p.y);
+    cache.blit(ctx, towerSprite(t.type, t.level, s.stage.season === "winter"), p.x, p.y);
     const elapsed = lvl.rate ? lvl.rate - t.cd : 0;
     if (t.type === "archer") {
       const phase = lvl.rate ? Math.max(0, Math.min(0.999, elapsed / lvl.rate)) : 0;
@@ -702,6 +811,20 @@ export function createRenderer() {
     /* ground decorations: zones, particles, plots, ranges, markers */
     for (const z of s.zones) {
       const k = Math.min(1, z.t / 1);
+      if (z.frost) {
+        /* iced ground: a pale sheet with rime cracks */
+        ctx.fillStyle = rgba(FROST.ice, 0.34 * k);
+        ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r, z.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = rgba(FROST.iceLight, 0.6 * k); ctx.lineWidth = 1.4;
+        for (let i = 0; i < 6; i += 1) {
+          const a = (i / 6) * Math.PI * 2 + z.x * 0.01;
+          ctx.beginPath(); ctx.moveTo(z.x, z.y); ctx.lineTo(z.x + Math.cos(a) * z.r * 0.85, z.y + Math.sin(a) * z.r * 0.5); ctx.stroke();
+        }
+        ctx.strokeStyle = rgba(FROST.iceLight, 0.75 * k); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r * 0.95, z.r * 0.52, 0, 0, Math.PI * 2); ctx.stroke();
+        if (Math.random() < 0.25 * quality) fx.spawn("spark", z.x + (Math.random() - 0.5) * z.r * 1.6, z.y + (Math.random() - 0.5) * z.r * 0.9, { n: 1, color: FROST.iceLight });
+        continue;
+      }
       const fl = 0.85 + Math.sin(zoneFlicker * 18 + z.x) * 0.15;
       ctx.fillStyle = rgba("#ff7a1e", 0.28 * k * fl);
       ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r, z.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
@@ -769,7 +892,19 @@ export function createRenderer() {
       if (!e || e.state === "dead" || m.t <= -0.1) { bossMarks.splice(i, 1); continue; }
       const k = 1 - Math.max(0, m.t) / m.max;
       const pulse = 0.6 + Math.sin(time * 14) * 0.3;
-      if (m.kind === "sweep") {
+      if (m.kind === "nova") {
+        /* a ring of ice closing on him: stand outside it */
+        const g = ctx.createRadialGradient(e.x, e.y + 2, 6, e.x, e.y + 2, m.r);
+        g.addColorStop(0, rgba(FROST.ice, 0.1 * pulse)); g.addColorStop(0.7, rgba(FROST.ice, 0.3 * pulse * k)); g.addColorStop(1, rgba(FROST.ice, 0));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, m.r, m.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = rgba(FROST.iceLight, (0.55 + k * 0.45) * pulse); ctx.lineWidth = 4; ctx.setLineDash([14, 9]); ctx.lineDashOffset = time * 50;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, m.r * (1 - k * 0.55), m.r * 0.55 * (1 - k * 0.55), 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      } else if (m.kind === "howl" || m.kind === "blizzard") {
+        ctx.strokeStyle = rgba(FROST.iceLight, (0.4 + k * 0.5) * pulse); ctx.lineWidth = 3;
+        for (let r = 0; r < 3; r += 1) { const rr = 40 + ((time * 130 + r * 62) % 190); ctx.globalAlpha = 1 - rr / 230; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, rr, rr * 0.5, 0, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+      } else if (m.kind === "sweep") {
         const g = ctx.createRadialGradient(e.x, e.y + 2, 6, e.x, e.y + 2, m.r);
         g.addColorStop(0, rgba("#ff5a3c", 0.12 * pulse)); g.addColorStop(0.7, rgba("#ff5a3c", 0.25 * pulse * k)); g.addColorStop(1, rgba("#ff5a3c", 0));
         ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, m.r, m.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
@@ -925,7 +1060,7 @@ export function createRenderer() {
     /* shadows */
     ctx.fillStyle = PAL.shadow;
     const shadow = (x, y, r) => { ctx.beginPath(); ctx.ellipse(x + 3, y + 2, r, r * 0.42, 0, 0, Math.PI * 2); ctx.fill(); };
-    for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.def.engine ? 56 : e.def.tower ? 48 : e.def.ram ? 44 * (e.def.scale || 1) : e.type === "ram" ? 44 : e.def.horse ? 26 * (HORSES[e.def.horse]?.size || 1) : e.boss ? 20 : 12);
+    for (const e of s.enemies) if (e.state !== "dead" || e.deadT > 0.8) shadow(e.x, e.y, e.def.beast ? 24 : e.def.den ? 42 : e.def.engine ? 56 : e.def.tower ? 48 : e.def.ram ? 44 * (e.def.scale || 1) : e.type === "ram" ? 44 : e.def.horse ? 26 * (HORSES[e.def.horse]?.size || 1) : e.boss ? 20 : 12);
     for (const u of s.units) if (u.state !== "dead" && u.state !== "respawn") shadow(u.x, u.y, u.def && u.def.horse ? 26 * (HORSES[u.def.horse]?.size || 1) : 11);
     if (s.hero.state !== "dead" && s.hero.state !== "respawn") shadow(s.hero.x, s.hero.y, 13);
     for (const pr of s.projectiles) { ctx.fillStyle = rgba("#000000", 0.22); ctx.beginPath(); ctx.ellipse(pr.x, pr.y + 2, pr.kind === "stone" ? 5 : 4, 2, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -980,6 +1115,51 @@ export function createRenderer() {
     fx.update(dt);
     fx.drawAir(ctx);
 
+    /* Winter weather: the storm darkens the Cairnhold as the night wears
+       on, and the blizzard blows snow across the whole field. */
+    const wantStorm = stormTarget(s);
+    storm += (wantStorm - storm) * Math.min(1, dt * 0.4);
+    const wantBlizz = s.blizzT > 0 ? 1 : 0;
+    blizz += (wantBlizz - blizz) * Math.min(1, dt * (wantBlizz ? 0.8 : 0.5));
+    const winter = s.stage.season === "winter";
+    if (winter && !opts.menu) {
+      const want = Math.round((14 + blizz * 120) * quality);
+      while (flakes.length < want) flakes.push({ x: Math.random() * layout.w, y: Math.random() * layout.h, s: 0.8 + Math.random() * 1.9, v: 0.5 + Math.random() });
+      while (flakes.length > want) flakes.pop();
+      const wind = 90 + blizz * 320;
+      const fall = 40 + blizz * 150;
+      ctx.save();
+      for (const fk of flakes) {
+        fk.x += wind * fk.v * dt; fk.y += fall * fk.v * dt;
+        if (fk.x > layout.w + 20) { fk.x = -20; fk.y = Math.random() * layout.h; }
+        if (fk.y > layout.h + 20) { fk.y = -20; fk.x = Math.random() * layout.w; }
+        ctx.fillStyle = rgba("#ffffff", (0.3 + blizz * 0.5) * (0.4 + fk.v * 0.5));
+        if (blizz > 0.3) {
+          ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = fk.s * 0.8;
+          ctx.beginPath(); ctx.moveTo(fk.x, fk.y); ctx.lineTo(fk.x - blizz * 13 * fk.v, fk.y - blizz * 4 * fk.v); ctx.stroke();
+        } else { ctx.beginPath(); ctx.arc(fk.x, fk.y, fk.s, 0, Math.PI * 2); ctx.fill(); }
+      }
+      ctx.restore();
+      if (storm > 0.01) {
+        ctx.save(); ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = rgba("#7d90b8", 0.45 * storm); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+        ctx.restore();
+        ctx.fillStyle = rgba("#9fc4d8", 0.06 * storm); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+      }
+      if (blizz > 0.02) {
+        /* the storm greys the far side of the field out */
+        ctx.fillStyle = rgba("#cfe0f0", 0.3 * blizz); ctx.fillRect(-200, -200, layout.w + 400, layout.h + 400);
+      }
+      if (storm > 0.3 && !opts.menu) {
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        const glow = (x, y, r, a) => { const fl = 0.85 + Math.sin(time * 8 + x * 0.05) * 0.12; const rg = ctx.createRadialGradient(x, y, 4, x, y, r * fl); rg.addColorStop(0, rgba("#ffb060", a * storm * fl)); rg.addColorStop(1, rgba("#ff8a30", 0)); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(x, y, r * fl, r * fl * 0.7, 0, 0, Math.PI * 2); ctx.fill(); };
+        for (const t of layout.torches || []) { glow(t.x, t.y - 20, 88, 0.36); if (Math.random() < 0.3 * quality) fx.spawn("fire", t.x, t.y - 30, { n: 1, size: 3, spread: 3 }); }
+        for (const cp of layout.camps || []) glow(cp.x + 4, cp.y - 10, 74, 0.32);
+        const cc = layout.castle; glow(cc.x + cc.w / 2, cc.y + cc.h - 20, 190, 0.2);
+        ctx.restore();
+      }
+    }
+
     /* Stage III lighting: afternoon, sunset, then a night siege lit by torches and fire */
     const lt = lightTarget(s);
     light += (lt - light) * Math.min(1, dt * 0.35);
@@ -1023,7 +1203,7 @@ export function createRenderer() {
   }
 
   function drawCastleLive(ctx, s, castle, dmg) {
-    const sp = castleSprite(castle, dmg);
+    const sp = castleSprite(castle, dmg, s && s.stage && s.stage.season === "winter");
     cache.blit(ctx, sp, castle.x, castle.y);
     castleFlags(castle).forEach((f, i) => drawFlag(ctx, castle.x + f.x, castle.y + f.y, f.h, f.size, f.color, f.trim, i * 1.3));
     if (outro && outro.banners > 0) {
@@ -1190,22 +1370,25 @@ export function createRenderer() {
       ctx.translate(w / 2, h * 0.9); const k = Math.min(w / 140, h / 110); ctx.scale(k, k);
       drawRam(ctx, 0.2);
     } else if (kind === "scene") {
-      /* a painted panel that fills the whole box (the Frozen North teaser) */
+      /* a painted panel that fills the whole box (a kingdom teaser) */
       if (id === "frostNorth") drawFrostScene(ctx, w, h);
+      else if (id === "sunReach") drawSunScene(ctx, w, h);
     } else if (kind === "shade") {
       /* locked teaser art: the shape only, as a cold shadow */
       const dpr = Math.min(2, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
+      const warm = id === "duneRaider" || id === "sandWyrm" || id === "sunGuard" || id === "kesi";
       drawAsSilhouette(ctx, w, h, (c) => {
         c.save();
-        if (id === "direWolf") { c.translate(w / 2, h * 0.94); const k = Math.min(w / 130, h / 92); c.scale(k, k); drawDireWolf(c); }
+        if (id === "direWolf") { c.translate(w / 2, h * 0.94); const k = Math.min(w / 130, h / 92); c.scale(k, k); drawDireWolf(c, 0.1, { flat: true }); }
+        else if (id === "sandWyrm") { c.translate(w / 2, h * 0.94); const k = Math.min(w / 120, h / 92); c.scale(k, k); drawSandWyrm(c); }
         else {
           const spec = FIGURES[id] || FIGURES.militia;
           c.translate(w / 2, h * 0.94); const k = Math.min(w / 78, h / ((spec.h || 58) + 34)); c.scale(k, k);
           drawFigure(c, spec, figurePose("idle", 0.4, { bow: spec.weapon === "bow" }), 0);
         }
         c.restore();
-      }, { dpr });
-      drawFrostRune(ctx, w * 0.5, h * 0.2, Math.min(w, h) * 0.12);
+      }, { dpr, color: warm ? SUN.shadow : FROST.shadow, rim: warm ? SUN.duneLit : FROST.iceLight });
+      drawFrostRune(ctx, w * 0.5, h * 0.2, Math.min(w, h) * 0.12, warm ? SUN.duneLit : FROST.iceLight);
     }
     ctx.restore();
   }
@@ -1220,7 +1403,7 @@ export function createRenderer() {
     startOutro, skipOutro() { outro = null; }, get outro() { return outro; },
     fx, cache, drawIcon,
     get fit() { return fit; },
-    reset() { fx.clear(); trails.clear(); warnings.clear(); catMarks.clear(); bossMarks.length = 0; openings.clear(); light = 0; intro = null; outro = null; gateShake = 0; heroMark = null; sel = { plot: -1, hover: -1, range: null, units: null, squad: false, hoverUnit: null, target: null }; },
+    reset() { fx.clear(); trails.clear(); warnings.clear(); catMarks.clear(); bossMarks.length = 0; openings.clear(); light = 0; storm = 0; blizz = 0; flakes.length = 0; intro = null; outro = null; gateShake = 0; heroMark = null; sel = { plot: -1, hover: -1, range: null, units: null, squad: false, hoverUnit: null, target: null }; },
     stats() { return { ...cache.stats(), particles: fx.count }; },
   };
 }

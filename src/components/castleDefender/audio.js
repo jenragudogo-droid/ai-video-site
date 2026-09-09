@@ -242,6 +242,49 @@ export function createCastleAudio() {
     bossOpen: [0.4, (t) => { tone("sine", 1047, 1047, t, 0.25, 0.08); tone("sine", 1568, 1568, t + 0.08, 0.35, 0.07); noise(t, 0.12, 0.05, 4000, 0.5, "highpass"); }],
     bossRoar: [1.6, (t) => { tone("sawtooth", 70, 55, t, 1.4, 0.12, sfxBus, "lin"); noise(t, 1.4, 0.16, 300, 0.6); for (let i = 0; i < 6; i += 1) drum(t + i * 0.16, 0.14, i % 2 === 0, sfxBus); horn(65, t + 0.3, 1.2, 0.16, sfxBus); }],
     rout: [1.5, (t) => { horn(392, t, 0.3, 0.12, sfxBus); horn(523, t + 0.25, 0.3, 0.12, sfxBus); horn(659, t + 0.5, 0.4, 0.14, sfxBus); horn(784, t + 0.8, 0.9, 0.16, sfxBus); for (let i = 0; i < 8; i += 1) noise(t + 1.0 + i * 0.07, 0.05, 0.08, 800, 1.2, "bandpass"); }],
+    /* ---------------------------- the Frozen North --------------------------- */
+    /* A wolf on a ridge: a slow rise, a held note, a fall, over thin wind. */
+    wolfHowl: [1.6, (t) => {
+      tone("sawtooth", 240, 430, t, 0.5, 0.07, sfxBus, "lin");
+      tone("sawtooth", 430, 415, t + 0.5, 0.7, 0.08, sfxBus, "lin");
+      tone("sawtooth", 415, 210, t + 1.15, 0.55, 0.06, sfxBus, "lin");
+      tone("sine", 860, 830, t + 0.5, 0.7, 0.02);
+      noise(t, 1.8, 0.05, 700, 0.5, "bandpass");
+    }],
+    /* The storm arriving: noise swelling up through a rising filter. */
+    blizzard: [4, (t) => {
+      noise(t, 2.6, 0.16, 900, 0.4, "highpass", sfxBus, 2600);
+      noise(t + 0.3, 2.4, 0.1, 400, 0.5);
+      tone("sine", 62, 58, t, 2.4, 0.07, sfxBus, "lin");
+      for (let i = 0; i < 5; i += 1) tone("sine", 1500 + i * 260, 1100 + i * 260, t + i * 0.22, 0.5, 0.012);
+    }],
+    windEase: [2, (t) => { noise(t, 1.4, 0.11, 2200, 0.5, "highpass", sfxBus, 500); tone("sine", 520, 392, t, 0.7, 0.03); }],
+    /* Ice: struck, broken, re-formed. Bandpassed noise plus glassy partials. */
+    shellHit: [0.05, (t) => { noise(t, 0.06, 0.13, 3200, 2.2, "bandpass"); tone("sine", 2300, 1700, t, 0.07, 0.03); }],
+    shellBreak: [1.2, (t) => {
+      noise(t, 0.5, 0.34, 2600, 0.8, "highpass");
+      tone("sine", 90, 40, t, 0.4, 0.18);
+      [2960, 2350, 1970, 1560, 1180].forEach((f, i) => tone("triangle", f, f * 0.72, t + i * 0.045, 0.3, 0.055));
+      for (let i = 0; i < 7; i += 1) noise(t + 0.12 + i * 0.06, 0.07, 0.12, 4200 - i * 380, 2.4, "bandpass");
+    }],
+    shellReform: [1.5, (t) => { [740, 988, 1319, 1760].forEach((f, i) => tone("sine", f, f, t + i * 0.1, 0.35, 0.05)); noise(t, 0.4, 0.07, 3400, 1.4, "bandpass"); }],
+    /* The nova: a held rising shimmer, then cold weight. */
+    novaWind: [1, (t) => { tone("sine", 700, 1500, t, 1.1, 0.045, sfxBus, "lin"); noise(t, 1.1, 0.07, 2400, 1.6, "bandpass"); }],
+    frostNova: [0.6, (t) => {
+      tone("sine", 150, 44, t, 0.7, 0.3);
+      noise(t, 0.55, 0.28, 1500, 0.6);
+      [1760, 1319, 988].forEach((f, i) => tone("triangle", f, f * 0.6, t + 0.04 + i * 0.05, 0.4, 0.06));
+      noise(t + 0.1, 0.5, 0.1, 5200, 0.6, "highpass");
+    }],
+    /* Elara: a bowstring, an icy head, a small burst where it lands. */
+    bowShot: [0.05, (t) => { tone("triangle", 300, 150, t, 0.09, 0.06); noise(t, 0.1, 0.1, 2800, 1.4, "bandpass"); }],
+    frostArrow: [0.4, (t) => { tone("sine", 1200, 2200, t, 0.3, 0.05, sfxBus, "lin"); noise(t, 0.3, 0.1, 3200, 1.6, "bandpass"); tone("triangle", 660, 990, t, 0.2, 0.04); }],
+    frostBurst: [0.25, (t) => {
+      noise(t, 0.3, 0.2, 2000, 0.9);
+      tone("sine", 200, 70, t, 0.3, 0.12);
+      [1568, 1175, 880].forEach((f, i) => tone("sine", f, f * 0.68, t + i * 0.05, 0.28, 0.045));
+    }],
+    evade: [0.25, (t) => { noise(t, 0.14, 0.09, 1800, 1.1, "bandpass", sfxBus, 3600); tone("sine", 880, 1320, t, 0.1, 0.025); }],
     drill: [0.4, (t) => { for (let i = 0; i < 3; i += 1) { noise(t + i * 0.09, 0.04, 0.14, 1200, 1); tone("square", 500, 380, t + i * 0.09, 0.05, 0.04); } tone("triangle", 660, 990, t + 0.3, 0.2, 0.06, sfxBus, "lin"); }],
   };
 
@@ -263,7 +306,12 @@ export function createCastleAudio() {
   const SIEGE_PHRASES = [
     [0, 0, 2, 3, 0, 0, 5, 3], [0, 3, 2, 0, -1, 0, 2, 3], [7, 5, 3, 2, 0, 0, 2, 0], [3, 3, 5, 7, 5, 3, 2, 0],
   ];
-  const tempo = () => (mode === "boss" ? 132 : mode === "siege" ? 120 : mode === "battle" ? 112 : mode === "menu" ? 72 : 84);
+  /* The north: the same D Dorian world, but minor-leaning and sparser, so a
+     frost stage sounds like the same game in a colder place. */
+  const FROST_PHRASES = [
+    [7, 5, 3, 5, 7, -1, 10, 7], [0, 3, 7, 3, 0, -1, -1, 2], [10, 9, 7, 5, 3, -1, 2, 0], [7, 7, 10, 12, 10, 7, 5, -1],
+  ];
+  const tempo = () => (mode === "boss" ? 132 : mode === "siege" ? 120 : mode === "battle" ? 112 : mode === "frost" ? 96 : mode === "menu" ? 72 : 84);
 
   const startDrone = () => {
     if (drone || !ctx) return;
@@ -288,13 +336,13 @@ export function createCastleAudio() {
     const step = 60 / bpm / 2;            // eighth notes
     const i = beat % 8;
     if (i === 0) { bar += 1; if (bar % 2 === 0) phraseIdx = Math.floor(Math.random() * 100); }
-    const bank = mode === "boss" ? BOSS_PHRASES : mode === "siege" ? SIEGE_PHRASES : mode === "battle" ? BATTLE_PHRASES : PHRASES;
+    const bank = mode === "boss" ? BOSS_PHRASES : mode === "siege" ? SIEGE_PHRASES : mode === "frost" ? FROST_PHRASES : mode === "battle" ? BATTLE_PHRASES : PHRASES;
     const phrase = bank[phraseIdx % bank.length];
     const deg = phrase[i];
     const lead = mode === "menu" ? (bar % 2 === 0) : true;
     if (deg >= 0 && lead) {
       const f = SCALE[deg];
-      if (mode === "menu" || mode === "calm") {
+      if (mode === "menu" || mode === "calm" || mode === "frost") {
         pluck(f, t, step * 1.8, 0.16);
         if (i % 4 === 0 && bar % 4 === 1) flute(f * 2, t, step * 3.5, 0.05);
       } else {

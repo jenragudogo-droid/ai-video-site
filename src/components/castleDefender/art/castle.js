@@ -8,6 +8,7 @@
  * ------------------------------------------------------------------ */
 
 import { PAL, shade, rgba } from "./palette.js";
+import { snowCaps } from "./frost.js";
 
 const OUT = "rgba(28, 20, 12, 0.6)";
 
@@ -75,7 +76,7 @@ function roundTower(ctx, cx, top, r, h, color, damage, seed) {
 }
 
 /* Draws the whole castle; (0,0) is the footprint's top-left corner. */
-export function drawCastle(ctx, castle, damage = 0) {
+export function drawCastle(ctx, castle, damage = 0, opts = {}) {
   const { w, h } = castle;
   const stone = damage >= 3 ? shade(PAL.stone, -0.12) : PAL.stone;
   const wallH = 34;               // visible south face height of the curtain wall
@@ -86,7 +87,7 @@ export function drawCastle(ctx, castle, damage = 0) {
   ctx.beginPath(); ctx.ellipse(w / 2 + 12, h - 6, w * 0.62, 34, 0, 0, Math.PI * 2); ctx.fill();
 
   /* courtyard: packed earth with a cobbled path, a well, stores and a garden */
-  outlined(ctx, "#9a8c72", () => ctx.rect(14, 10, w - 28, h - 40), 1);
+  outlined(ctx, opts.winter ? "#b9bdc4" : "#9a8c72", () => ctx.rect(14, 10, w - 28, h - 40), 1);
   ctx.save(); ctx.beginPath(); ctx.rect(14, 10, w - 28, h - 40); ctx.clip();
   ctx.fillStyle = rgba("#000000", 0.08);
   for (let i = 0; i < 60; i += 1) { const cx = 14 + ((i * 53) % (w - 28)); const cy = 10 + ((i * 37) % (h - 40)); ctx.beginPath(); ctx.ellipse(cx, cy, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -95,9 +96,9 @@ export function drawCastle(ctx, castle, damage = 0) {
   ctx.strokeStyle = rgba("#000000", 0.12); ctx.lineWidth = 1;
   for (let yy = 44; yy < h - 30; yy += 7) { ctx.beginPath(); ctx.moveTo(w / 2 - 16, yy); ctx.lineTo(w / 2 + 16, yy); ctx.stroke(); }
   for (let yy = 44; yy < h - 30; yy += 14) { ctx.beginPath(); ctx.moveTo(w / 2, yy); ctx.lineTo(w / 2, yy + 7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(w / 2 - 8, yy + 7); ctx.lineTo(w / 2 - 8, yy + 14); ctx.stroke(); ctx.beginPath(); ctx.moveTo(w / 2 + 8, yy + 7); ctx.lineTo(w / 2 + 8, yy + 14); ctx.stroke(); }
-  /* kitchen garden */
-  outlined(ctx, "#6e8a3e", () => ctx.rect(22, h - 120, 46, 60), 1);
-  ctx.strokeStyle = "#4d6a2a"; ctx.lineWidth = 2; for (let yy = h - 114; yy < h - 64; yy += 8) { ctx.beginPath(); ctx.moveTo(25, yy); ctx.lineTo(65, yy); ctx.stroke(); }
+  /* kitchen garden — under snow in the north, and nothing is growing */
+  outlined(ctx, opts.winter ? "#8f9aa4" : "#6e8a3e", () => ctx.rect(22, h - 120, 46, 60), 1);
+  ctx.strokeStyle = opts.winter ? "#6f7c88" : "#4d6a2a"; ctx.lineWidth = 2; for (let yy = h - 114; yy < h - 64; yy += 8) { ctx.beginPath(); ctx.moveTo(25, yy); ctx.lineTo(65, yy); ctx.stroke(); }
   /* the well */
   const wx = w * 0.72; const wy = h * 0.62;
   ctx.fillStyle = rgba("#000000", 0.18); ctx.beginPath(); ctx.ellipse(wx + 3, wy + 3, 13, 6, 0, 0, Math.PI * 2); ctx.fill();
@@ -223,6 +224,8 @@ export function drawCastle(ctx, castle, damage = 0) {
       outlined(ctx, PAL.rockLight, () => ctx.arc(rx, ry, r, 0, Math.PI * 2), 1);
     }
   }
+  /* the north: snow lies along every top edge the castle already has */
+  if (opts.winter) snowCaps(ctx, { depth: 3, alpha: 0.92 });
 }
 
 /* Banner poles, in castle-local coordinates. size scales the cloth. */

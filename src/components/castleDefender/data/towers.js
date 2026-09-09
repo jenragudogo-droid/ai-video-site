@@ -125,22 +125,63 @@ export const HERO = {
   id: "edric", name: "Sir Edric", title: "Knight of Ashford",
   hp: 320, hpPerLevel: 60, dmg: [15, 21], dmgPerLevel: 3, armour: 0.3, atk: 0.9, speed: 125, r: 15,
   regen: 8, respawn: 12, engageRange: 70,
-  charge: { name: "Royal Charge", cd: 20, dist: 260, dmg: 60, dmgPerLevel: 12, stun: 1.0, kb: 45, width: 42 },
+  charge: { name: "Royal Charge", kind: "charge", key: "Q", cd: 20, dist: 260, dmg: 60, dmgPerLevel: 12, stun: 1.0, kb: 45, width: 42, desc: "Sir Edric charges in a line, knocking down everyone he passes and breaking a cavalry charge." },
   /* Stage III upgrade: wider, harder, longer, and a shockwave where it ends */
   kingsCharge: { name: "King's Charge", dist: 330, dmgMul: 1.4, stun: 1.6, kb: 80, width: 64, wave: 90, waveDmg: 0.6, desc: "Sir Edric's charge strikes wider and harder, throws riders back further, and ends in a shockwave." },
   xpLevels: [0, 40, 100, 180, 290],
   maxLevel: 5,
 };
 
-export function heroStats(level) {
-  const l = Math.max(1, Math.min(HERO.maxLevel, level));
+/* Lady Elara of the Frozen North. Where Sir Edric closes and holds a
+   line, she keeps her distance: she shoots from range, gives ground
+   when something reaches her, and her ability freezes a patch of road
+   rather than smashing through it. Lighter, faster, far more fragile. */
+export const ELARA = {
+  id: "elara", name: "Lady Elara", title: "Ranger of the North",
+  hp: 210, hpPerLevel: 40, dmg: [18, 25], dmgPerLevel: 4, armour: 0.15, atk: 1.0, speed: 150, r: 14,
+  regen: 10, respawn: 12, engageRange: 235,
+  /* she shoots anything inside this and only draws the short sword when cornered */
+  range: 200, arrowSpeed: 620, meleeMul: 0.7,
+  /* and steps back out of reach rather than trading blows */
+  evade: { within: 46, back: 96, cd: 3.5 },
+  ability: {
+    kind: "frostArrow", name: "Frost Arrow", key: "Q",
+    cd: 18, dist: 460, dmg: 70, dmgPerLevel: 14, radius: 78, slow: 0.55, dur: 4,
+    desc: "A frost-headed arrow: it bursts where you tap, hurting everything close and leaving the ground iced.",
+  },
+  /* the Frozen North's answer to King's Charge, unlocked mid-campaign */
+  upgrade: {
+    id: "rapidVolley", name: "Rapid Volley",
+    arrows: 3, spread: 46, dmgMul: 0.8, slow: 0.7, dur: 5, radiusMul: 1.15,
+    desc: "Three frost arrows instead of one, a wider fall and a deeper chill.",
+  },
+  xpLevels: [0, 40, 100, 180, 290],
+  maxLevel: 5,
+};
+
+/* every hero the game knows; a stage picks one with `hero: "..."` */
+export const HEROES = { edric: HERO, elara: ELARA };
+
+export function heroDefFor(stage) {
+  return HEROES[(stage && stage.hero) || "edric"] || HERO;
+}
+
+/* level-scaled stats for any hero. `chargeDmg`/`chargeCd` keep their
+   names so every caller works whether the ability is a charge or a shot. */
+export function heroStatsOf(def, level) {
+  const l = Math.max(1, Math.min(def.maxLevel, level));
+  const ab = def.charge || def.ability;
   return {
-    maxHp: HERO.hp + HERO.hpPerLevel * (l - 1),
-    dmg: [HERO.dmg[0] + HERO.dmgPerLevel * (l - 1), HERO.dmg[1] + HERO.dmgPerLevel * (l - 1)],
-    chargeDmg: HERO.charge.dmg + HERO.charge.dmgPerLevel * (l - 1),
-    chargeCd: HERO.charge.cd - (l - 1) * 1.5,
-    armour: HERO.armour + (l - 1) * 0.03,
+    maxHp: def.hp + def.hpPerLevel * (l - 1),
+    dmg: [def.dmg[0] + def.dmgPerLevel * (l - 1), def.dmg[1] + def.dmgPerLevel * (l - 1)],
+    chargeDmg: ab.dmg + (ab.dmgPerLevel || 0) * (l - 1),
+    chargeCd: ab.cd - (l - 1) * 1.5,
+    armour: def.armour + (l - 1) * 0.03,
   };
+}
+
+export function heroStats(level) {
+  return heroStatsOf(HERO, level);
 }
 
 export const ABILITIES = {

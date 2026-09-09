@@ -168,6 +168,98 @@ export const ENEMIES = {
     stage: 3,
     desc: "The Warlord himself, with the Ironbreaker. He commands from his camp, then comes for the gate in person.",
   },
+
+  /* ---------------- The Frozen North ---------------- */
+  /* The north fights differently from the warband: fewer heavy blocks
+     of infantry, more speed, flanking and harassment. Wolves slip past
+     a line, shield raiders shrug off arrows, archers never come close
+     and berserkers delete a squad if they reach it. */
+  frostRaider: {
+    name: "Frost Raider", kind: "infantry",
+    hp: 105, speed: 74, armour: 0.12, gateDmg: 1, bounty: 11, xp: 6,
+    dmg: [8, 12], atk: 0.95, r: 14, h: 59,
+    kingdom: "frost",
+    desc: "Fur and iron, and quicker than a man-at-arms. They come in numbers and keep coming.",
+  },
+  direWolf: {
+    name: "Dire Wolf", kind: "cavalry", beast: true,
+    hp: 78, speed: 168, armour: 0.05, gateDmg: 1, bounty: 12, xp: 6,
+    dmg: [9, 13], atk: 0.8, r: 18, h: 60, blockTime: 1.0,
+    kingdom: "frost",
+    desc: "Runs the flank and slips a block in a heartbeat. Arrows and blades kill it easily, if they land.",
+  },
+  frostArcher: {
+    name: "Frost Archer", kind: "ranged",
+    hp: 72, speed: 60, armour: 0.05, gateDmg: 1, bounty: 13, xp: 7,
+    dmg: [9, 13], atk: 1.5, range: 190, r: 13, h: 58,
+    kingdom: "frost",
+    desc: "Outranges every soldier you have, but not Lady Elara. Left alone she picks your line apart from the trees.",
+  },
+  shieldRaider: {
+    name: "Shield Raider", kind: "infantry",
+    hp: 230, speed: 50, armour: 0.25, shieldBlock: 0.75, gateDmg: 2, bounty: 18, xp: 10,
+    dmg: [10, 14], atk: 1.15, r: 16, h: 62,
+    kingdom: "frost",
+    desc: "A wall of lime-wood and hide. Arrows are wasted on the shield face; catapults and blades are not.",
+  },
+  berserker: {
+    name: "Northern Berserker", kind: "infantry",
+    hp: 175, speed: 88, armour: 0.05, gateDmg: 3, bounty: 22, xp: 11,
+    dmg: [22, 31], atk: 0.62, r: 15, h: 62,
+    kingdom: "frost",
+    desc: "No shield, no armour, and he swings faster than anything in the realm. Kill him before he reaches a squad.",
+  },
+  frostCaptain: {
+    name: "Jarl's Huscarl", kind: "infantry",
+    hp: 620, speed: 52, armour: 0.42, shieldBlock: 0.35, gateDmg: 4, bounty: 70, xp: 26,
+    dmg: [16, 22], atk: 1.0, r: 17, h: 66, boss: "mini",
+    aura: { radius: 200, armour: 0.14, speed: 1.18, all: true },
+    kingdom: "frost",
+    desc: "The Jarl's own. Everything near his horn fights harder and marches faster.",
+  },
+  wolfDen: {
+    name: "Wolf Den", kind: "siege",
+    hp: 620, speed: 46, armour: 0.2, gateDmg: 0, bounty: 55, xp: 22,
+    dmg: [0, 0], atk: 0, r: 30, h: 62, boss: "mini", den: true,
+    /* rolls a short way in, digs in, then lets wolves out until it is destroyed */
+    tower: { dockAt: 40, unloadEvery: 6.5, unloads: ["direWolf", "direWolf", "direWolf", "direWolf", "direWolf", "direWolf", "direWolf", "direWolf"], wallDps: 0 },
+    kingdom: "frost",
+    desc: "A hide-and-timber den dragged onto the road. It keeps loosing wolves until somebody burns it.",
+  },
+  iceRam: {
+    name: "Iron-Shod Ram", kind: "siege",
+    hp: 1350, speed: 27, armour: 0.38, gateDmg: 9, bounty: 90, xp: 34,
+    dmg: [0, 0], atk: 0, r: 38, h: 76, boss: "mini", ram: true, wallDmg: 28, scale: 1.2,
+    kingdom: "frost",
+    desc: "Oak and iron on sled runners. It breaks the ice wall on the way past and the gate at the end.",
+  },
+  frostThrower: {
+    name: "Frost Trebuchet", kind: "siege",
+    hp: 1050, speed: 21, armour: 0.32, gateDmg: 5, bounty: 105, xp: 38,
+    dmg: [0, 0], atk: 0, r: 40, h: 92, boss: "mini",
+    engine: { stopAt: 0.56, standoff: 330, reload: 9.5, windup: 1.5, castleDmg: 1, wallDmg: 20, towerBurn: 4, radius: 62 },
+    kingdom: "frost",
+    desc: "Hurls frozen stone at the wall, the keep and your towers. A burning tower shoots slower until the crew is dead.",
+  },
+  iceWarlord: {
+    name: "Jarl Vorne", kind: "infantry",
+    hp: 4600, speed: 44, armour: 0.45, gateDmg: 14, bounty: 420, xp: 90,
+    dmg: [26, 36], atk: 1.05, r: 23, h: 90, boss: "final", persist: true,
+    aura: { radius: 230, armour: 0.16, speed: 1.18, all: true },
+    /* His fight is a shell, not a bodyguard: the ice on him has to be
+       broken before anything reaches the Jarl, and it re-forms twice. */
+    frost: {
+      shell: 900, shellRegen: 18, shellBreak: 7,      // hp, regen per second, seconds open once broken
+      camp: 190, patience: 55,                        // he advances anyway if the ice is never broken
+      nova: { cd: 13, windup: 1.5, radius: 130, dmg: 42, freeze: 2.2 },
+      howl: { cd: 24, windup: 1.6, dur: 8, wolves: 4, armour: 0.18, speed: 1.2 },
+      blizzard: { cd: 30, windup: 2, dur: 10, towerRate: 0.4, towerRange: 0.2 },
+      rage: { at: 0.35, atkMul: 1.5, speed: 66, novaCd: 8, shell: 0, push: [["direWolf", 1], ["direWolf", 1], ["direWolf", 2], ["berserker", 0], ["berserker", 0], ["shieldRaider", 1], ["frostRaider", 2], ["frostRaider", 2]] },
+    },
+    kingdom: "frost",
+    desc: "The Ice Warlord. Ice closes over him faster than you can cut it, and the storm answers when he calls.",
+  },
 };
 
-export const ENEMY_ORDER = ["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "crossbow", "scoutCav", "knightCav", "cavCommander", "ram", "heavyInf", "fireArcher", "siegeEngineer", "heavyCav", "eliteGuard", "warCaptain", "siegeRam", "siegeCatapult", "siegeTower", "warlord"];
+export const ENEMY_ORDER = ["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "crossbow", "scoutCav", "knightCav", "cavCommander", "ram", "heavyInf", "fireArcher", "siegeEngineer", "heavyCav", "eliteGuard", "warCaptain", "siegeRam", "siegeCatapult", "siegeTower", "warlord",
+  "frostRaider", "direWolf", "frostArcher", "shieldRaider", "berserker", "frostCaptain", "wolfDen", "iceRam", "frostThrower", "iceWarlord"];

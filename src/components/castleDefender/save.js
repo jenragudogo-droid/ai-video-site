@@ -190,10 +190,30 @@ export function totalStars(save) {
   return Object.values(save.stages).reduce((n, r) => n + (r.stars || 0), 0);
 }
 
-/* A stage is open when it is built and the previous stage is done. */
+/* Kingdoms open in order: Ashford from the start, and each one after it
+   when the kingdom before it has been completed. */
+export const KINGDOM_ORDER = ["ashford", "frost"];
+
+export function isKingdomUnlocked(save, kingdomId) {
+  const i = KINGDOM_ORDER.indexOf(kingdomId);
+  if (i <= 0) return i === 0;
+  return (save.campaignsDone || []).includes(KINGDOM_ORDER[i - 1]);
+}
+
+export function stagesOf(stages, kingdomId) {
+  return stages.filter((st) => (st.kingdom || "ashford") === kingdomId);
+}
+
+/* A stage is open when it is built, its kingdom is open, and the stage
+   before it *in that kingdom* is done. `idx` is an index into `stages`,
+   which may hold more than one kingdom. */
 export function isStageUnlocked(save, stages, idx) {
   const st = stages[idx];
   if (!st || !st.available) return false;
-  if (idx === 0) return true;
-  return stageRecord(save, stages[idx - 1].id).completed;
+  const kid = st.kingdom || "ashford";
+  if (!isKingdomUnlocked(save, kid)) return false;
+  const mine = stagesOf(stages, kid);
+  const at = mine.findIndex((x) => x.id === st.id);
+  if (at <= 0) return true;
+  return stageRecord(save, mine[at - 1].id).completed;
 }

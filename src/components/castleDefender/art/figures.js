@@ -59,7 +59,18 @@ export const FIGURES = {
      and a horned helm, Elara is slim with a bow and a long cloak. */
   frostRaider: { body: "leather", bodyColor: "#4a5568", trim: "#8fa6bd", helmet: "cap", helmetColor: "#39424f", horns: true, shield: "round", shieldColor: "#5a6476", boss: "#9aa4b6", weapon: "axe", cape: "#6b7382", legs: "#333b47", boots: "#20252e", h: 58 },
   iceWarlord: { body: "plate", bodyColor: "#54627a", trim: "#cfe0f0", tabard: "#2f3a4d", tabardTrim: "#9fc4d8", helmet: "greatHelm", helmetColor: "#3d4759", plume: "#9fc4d8", horns: true, shield: "none", weapon: "greataxe", cape: "#2b3444", legs: "#3a4356", boots: "#20252e", scale: 1.3, h: 86 },
-  elara: { body: "leather", bodyColor: "#4d5a52", trim: "#c9b070", helmet: "hood", hood: "#3c4a52", shield: "none", weapon: "bow", quiver: true, cape: "#6d7b74", legs: "#3a4148", boots: "#2a2f2c", h: 57 },
+  elara: { body: "leather", bodyColor: "#6d8a76", trim: "#d9c07a", helmet: "hood", hood: "#4a6356", shield: "none", weapon: "bow", quiver: true, cape: "#8fa8c4", legs: "#4a5560", boots: "#3a2f28", scale: 1.04, h: 58 },
+
+  /* The Sunspear Reach (teaser only, drawn as silhouettes) */
+  duneRaider: { body: "leather", bodyColor: "#a8804a", trim: "#e8c25a", helmet: "hood", hood: "#8c5a2c", shield: "buckler", shieldColor: "#8c2f2a", boss: "#e8c25a", weapon: "spear", cape: "#c98a4a", legs: "#6a4a28", boots: "#4a2f18", enemy: true, h: 58 },
+  sunGuard: { body: "plate", bodyColor: "#c9973f", trim: "#f0d9a8", tabard: "#8c2f2a", tabardTrim: "#e8c25a", helmet: "greatHelm", helmetColor: "#a8814c", plume: "#8c2f2a", shield: "tall", shieldColor: "#c9973f", emblem: "boss", emblemColor: "#f0d9a8", weapon: "spear", legs: "#8a6a38", boots: "#4a2f18", enemy: true, scale: 1.08, h: 64 },
+  kesi: { body: "leather", bodyColor: "#c98a4a", trim: "#e8c25a", helmet: "none", hairColor: "#2a1c14", shield: "none", weapon: "spear", cape: "#8c2f2a", legs: "#8a6a38", boots: "#4a2f18", scale: 1.04, h: 58 },
+
+  /* the rest of the northern host */
+  frostArcher: { body: "leather", bodyColor: "#4a5568", trim: "#9fc4d8", helmet: "hood", hood: "#39424f", shield: "none", weapon: "bow", quiver: true, legs: "#333b47", boots: "#20252e", enemy: true, h: 58 },
+  shieldRaider: { body: "mail", bodyColor: "#5c6678", trim: "#8fa6bd", helmet: "nasal", helmetColor: "#39424f", shield: "tall", shieldColor: "#6a7488", emblem: "boss", emblemColor: "#cfe0f0", weapon: "axe", legs: "#333b47", boots: "#20252e", enemy: true, h: 62 },
+  berserker: { body: "tunic", bodyColor: "#7a5a48", trim: "#a4563c", helmet: "none", hairColor: "#c9b070", shield: "none", weapon: "greataxe", legs: "#4a3f36", boots: "#2a221c", enemy: true, h: 62 },
+  frostCaptain: { body: "plate", bodyColor: "#5a6476", trim: "#c9b070", tabard: "#2f3a4d", tabardTrim: "#9fc4d8", helmet: "greatHelm", helmetColor: "#39424f", plume: "#c9b070", horns: true, shield: "round", shieldColor: "#4a5568", boss: "#cfe0f0", weapon: "sword", cape: "#3a4557", legs: "#333b47", boots: "#20252e", enemy: true, scale: 1.08, h: 66, banner: true },
 
   /* the realm's Royal Knights, drawn on their horses */
   royalRider: { body: "plate", bodyColor: PAL.plateLight, trim: PAL.gold, tabard: PAL.red, tabardTrim: PAL.gold, helmet: "greatHelm", helmetColor: PAL.plateLight, plume: PAL.gold, shield: "heater", shieldColor: PAL.red, emblem: "cross", emblemColor: PAL.gold, weapon: "lance", cape: PAL.red, legs: PAL.plate, boots: PAL.iron, h: 62 },

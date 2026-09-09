@@ -461,7 +461,8 @@
   .cdResultGrid { grid-template-columns: repeat(2, 1fr); }
   .cdCard { padding: 20px 18px; }
   .cdStage { grid-template-columns: 44px 1fr; }
-  .cdStageActions { grid-column: 1 / -1; flex-direction: row; }
+  .cdStageActions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+  .cdStageActions .cdBtn { flex: 1 1 120px; min-width: 0; }
   .cdStageNum { font-size: 26px; }
   .cdAbility { width: 58px; height: 58px; }
   .cdAbility--charge { width: 64px; }
@@ -856,4 +857,55 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .cdSnow { display: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * The campaign map — one section per kingdom.
+ * ------------------------------------------------------------------ */
+.cdRealm {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px; border-radius: 14px;
+  border: 1px solid var(--cd-line);
+  background: linear-gradient(180deg, rgba(30, 24, 16, 0.62), rgba(18, 14, 10, 0.72));
+}
+.cdRealm--frost {
+  border-color: rgba(159, 196, 216, 0.35);
+  background: linear-gradient(180deg, rgba(34, 46, 66, 0.72), rgba(20, 27, 40, 0.82));
+}
+.cdRealmHead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 18px; }
+.cdRealmTitle { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cdRealmTitle h4 { margin: 0; font: 700 26px var(--cd-serif); letter-spacing: 0.1em; color: var(--cd-gold-2); }
+.cdRealm--frost .cdRealmTitle h4 { color: #d7ecf4; }
+.cdRealmBlurb { margin: 0; max-width: 62ch; font-size: 13px; line-height: 1.5; color: var(--cd-dim); }
+.cdRealmMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12px; color: var(--cd-dim); }
+.cdRealmStars { font-variant-numeric: tabular-nums; color: var(--cd-gold-2); letter-spacing: 0.06em; }
+.cdBadge--realm { padding: 3px 10px; font-size: 10px; }
+.cdRealmHero {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px; border-radius: 10px;
+  border: 1px solid var(--cd-line); background: rgba(0, 0, 0, 0.3);
+}
+.cdRealm--frost .cdRealmHero { border-color: rgba(159, 196, 216, 0.28); }
+.cdRealmHero > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cdRealmHero strong { font: 600 16px var(--cd-serif); letter-spacing: 0.08em; color: var(--cd-ink); }
+.cdRealmHero span { font-size: 11px; color: var(--cd-dim); }
+.cdRealmHeroArt { display: block; flex: 0 0 auto; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.55)); }
+.cdRealm .cdRealmDone { margin: 0; }
+.cdFrostArt--locked { margin-top: 2px; }
+.cdFrost--sun { border-color: rgba(232, 194, 90, 0.35); background: linear-gradient(180deg, rgba(66, 44, 24, 0.9), rgba(34, 22, 14, 0.94)); }
+.cdFrost--sun .cdFrostArt { border-color: rgba(232, 194, 90, 0.28); }
+.cdFrost--sun .cdFrostText h4, .cdFrost--sun .cdShadowCard strong { color: #f2dcae; }
+.cdFrost--sun .cdFrostFlavour, .cdFrost--sun .cdFrostText .cdEyebrow { color: rgba(242, 220, 174, 0.8); }
+.cdSoon--sun { margin-top: 6px; align-self: center; border-color: rgba(232, 194, 90, 0.5); color: #f2dcae; background: rgba(40, 24, 12, 0.6); }
+
+/* the Jarl's ice shell, under his health bar */
+.cdBar--shell { width: min(320px, 46vw); height: 5px; margin-top: 3px; }
+.cdBarFill.is-shell { background: linear-gradient(90deg, #cfe9f5, #7fb6d8); box-shadow: 0 0 8px rgba(159, 210, 240, 0.7); }
+.cdStat--blizz { border-color: rgba(159, 210, 240, 0.5); background: rgba(22, 34, 52, 0.9); color: #d7ecf4; }
+.cdStat--blizz .cdWaveLabel { color: #9fd2f0; }
+
+@media (max-width: 620px) {
+  .cdRealm { padding: 10px; gap: 10px; }
+  .cdRealmTitle h4 { font-size: 21px; }
+  .cdRealmHero { padding: 7px 10px; gap: 10px; }
 }
