@@ -1,5 +1,8 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, useState } from "react";
 import "./App.css";
+import { GameShell, VideoModal } from "./components/SiteOverlays";
+import { parseVideoSource } from "./siteMedia.js";
+import { useHashOverlay } from "./useHashOverlay.js";
 // Beast Battle Arena, Kianimation Football League and Metro City Bus are
 // unlisted for now. Their source still lives in src/components/ — re-import
 // them here, restore their cards in the games grid and their mounts below to
@@ -21,8 +24,19 @@ const NeonSpaceShooter = lazy(() => import("./components/NeonSpaceShooter"));
    synth music, campaign save — and is fetched only when opened. */
 const CastleDefender = lazy(() => import("./components/CastleDefender"));
 
+/* Play now opens a game as its own full-screen screen rather than
+   mounting it further down the page. Each is addressed as #play/<id>,
+   so the phone's back button closes it and a link can open it directly. */
+const GAMES = [
+  { id: "endless-rush", title: "Kianimation Endless Rush", Component: EndlessRush, loading: "Loading Endless Rush…" },
+  { id: "neon-space-shooter", title: "Neon Space Shooter", Component: NeonSpaceShooter, loading: "Loading Neon Space Shooter…" },
+  { id: "castle-defender", title: "Castle Defender", Component: CastleDefender, loading: "Raising the banners…" },
+];
+const GAME_IDS = GAMES.map((game) => game.id);
+
 const videos = [
   {
+    id: "lion-vs-dragon-part-1",
     title: "Lion vs Dragon Part 1",
     description:
       "A fearless lion enters a forbidden realm and comes face to face with an ancient dragon.",
@@ -31,6 +45,7 @@ const videos = [
     accent: "gold",
   },
   {
+    id: "alien-visits-accra",
     title: "Alien Visits Accra",
     description:
       "A mysterious visitor arrives in Accra and turns a familiar city into a surreal adventure.",
@@ -40,49 +55,48 @@ const videos = [
   },
 ];
 
-function VideoCard({ video }) {
-  const player = useRef(null);
-  const [videoReady, setVideoReady] = useState(Boolean(video.src));
+const VIDEO_IDS = videos.map((video) => video.id);
 
-  const playPreview = () => {
-    player.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
+/* The card shows the video's poster, and both the poster and the button
+   open the player. The card no longer embeds a live player of its own:
+   a second copy of the same video playing in the grid is what made the
+   old button look dead. */
+function VideoCard({ video, onWatch }) {
+  const media = parseVideoSource(video.src);
+  const available = media.kind !== "none";
 
   return (
     <article className={`videoCard videoCard--${video.accent}`}>
       <div className="videoFrame">
-        {video.src ? (
-          <iframe
-            ref={player}
-            src={video.src}
-            title={`${video.title} video preview`}
-            loading="lazy"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="youtubeEmbed"
-          />
+        {available ? (
+          <button
+            type="button"
+            className="videoPoster"
+            onClick={() => onWatch(video.id)}
+            aria-label={`Play preview: ${video.title}`}
+            aria-haspopup="dialog"
+          >
+            {media.poster && (
+              <span className="videoPosterArt" aria-hidden="true">
+                <img src={media.poster} alt="" loading="lazy" decoding="async" />
+              </span>
+            )}
+            <span className="playIcon" aria-hidden="true">▶</span>
+          </button>
         ) : (
           <div className="comingSoonVisual" aria-hidden="true">
             <span className="cloche">♨</span>
           </div>
         )}
-
         <span className="episodeLabel">{video.label}</span>
-        {!videoReady && video.src && (
-          <div className="missingVideo">
-            <span className="playIcon">▶</span>
-            <small>Video unavailable</small>
-          </div>
-        )}
       </div>
 
       <div className="cardContent">
         <h3>{video.title}</h3>
         <p>{video.description}</p>
-        {video.src ? (
-          <button type="button" onClick={playPreview} disabled={!videoReady}>
-            {videoReady ? "Watch preview" : "Video unavailable"}
+        {available ? (
+          <button type="button" onClick={() => onWatch(video.id)} aria-haspopup="dialog">
+            Watch preview
           </button>
         ) : (
           <span className="placeholderButton" aria-label="Video coming soon">
@@ -96,14 +110,18 @@ function VideoCard({ video }) {
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [rushOpen, setRushOpen] = useState(false);
-  const [shooterOpen, setShooterOpen] = useState(false);
-  const [castleOpen, setCastleOpen] = useState(false);
+  const [gameId, openGame, closeGame] = useHashOverlay("play", GAME_IDS, "games");
+  const [videoId, openVideo, closeVideo] = useHashOverlay("watch", VIDEO_IDS, "videos");
+  const activeGame = GAMES.find((game) => game.id === gameId) || null;
+  const activeVideo = videos.find((video) => video.id === videoId) || null;
+  /* while a game or a video is open the page underneath is out of reach:
+     no stray taps, no tabbing into it, nothing read out behind it */
+  const overlayOpen = Boolean(activeGame || activeVideo);
   const closeMenu = () => setMenuOpen(false);
 
   return (
     <div className="app">
-      <header className="navbar">
+      <header className="navbar" inert={overlayOpen}>
         <a className="brand" href="#home" onClick={closeMenu}>
           <span className="brandMark">KS</span>
           <span>kianimationstudios</span>
@@ -130,7 +148,7 @@ function App() {
         </nav>
       </header>
 
-      <main>
+      <main inert={overlayOpen}>
         <section className="hero" id="home">
           <div className="heroGlow" aria-hidden="true" />
           <div className="heroContent">
@@ -158,7 +176,7 @@ function App() {
           </div>
 
           <div className="videoGrid">
-            {videos.map((video) => <VideoCard video={video} key={video.title} />)}
+            {videos.map((video) => <VideoCard video={video} key={video.id} onWatch={openVideo} />)}
           </div>
           <p className="videoHint">
             MP4 setup: place your finished files in <code>public/videos</code> using the filenames configured for each preview.
@@ -222,8 +240,8 @@ function App() {
                   <span>Power-ups</span>
                   <span>Swipe + keyboard</span>
                 </div>
-                <button type="button" onClick={() => setRushOpen((open) => !open)}>
-                  {rushOpen ? "Close game" : "Play now"}
+                <button type="button" onClick={() => openGame("endless-rush")} aria-haspopup="dialog">
+                  Play now
                 </button>
               </div>
             </article>
@@ -262,8 +280,8 @@ function App() {
                   <span>Combos + crystals</span>
                   <span>Touch + keyboard</span>
                 </div>
-                <button type="button" onClick={() => setShooterOpen((open) => !open)}>
-                  {shooterOpen ? "Close game" : "Play now"}
+                <button type="button" onClick={() => openGame("neon-space-shooter")} aria-haspopup="dialog">
+                  Play now
                 </button>
               </div>
             </article>
@@ -306,36 +324,12 @@ function App() {
                   <span>Original music</span>
                   <span>Touch + keyboard</span>
                 </div>
-                <button type="button" onClick={() => setCastleOpen((open) => !open)}>
-                  {castleOpen ? "Close game" : "Play now"}
+                <button type="button" onClick={() => openGame("castle-defender")} aria-haspopup="dialog">
+                  Play now
                 </button>
               </div>
             </article>
           </div>
-
-          {rushOpen && (
-            <div className="gameStageWrap">
-              <Suspense fallback={<div className="gameLoading">Loading Endless Rush…</div>}>
-                <EndlessRush />
-              </Suspense>
-            </div>
-          )}
-
-          {shooterOpen && (
-            <div className="gameStageWrap">
-              <Suspense fallback={<div className="gameLoading">Loading Neon Space Shooter…</div>}>
-                <NeonSpaceShooter />
-              </Suspense>
-            </div>
-          )}
-
-          {castleOpen && (
-            <div className="gameStageWrap gameStageWrap--castle">
-              <Suspense fallback={<div className="gameLoading">Raising the banners…</div>}>
-                <CastleDefender />
-              </Suspense>
-            </div>
-          )}
         </section>
 
         <section className="about" id="about">
@@ -366,11 +360,14 @@ function App() {
         </section>
       </main>
 
-      <footer>
+      <footer inert={overlayOpen}>
         <a className="brand footerBrand" href="#home"><span className="brandMark">KS</span><span>kianimationstudio</span></a>
         <p>Original worlds. Artificial intelligence. Human imagination.</p>
         <p>© 2026 kianimationstudio</p>
       </footer>
+
+      {activeGame && <GameShell game={activeGame} onClose={closeGame} />}
+      {activeVideo && <VideoModal video={activeVideo} onClose={closeVideo} />}
     </div>
   );
 }

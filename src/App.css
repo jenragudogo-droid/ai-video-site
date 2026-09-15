@@ -176,7 +176,6 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
 .gameCard .cardContent p { min-height: 66px; margin-bottom: 16px; }
 .gameLoading { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; min-height: 360px; max-height: min(76vh, 760px); border-radius: 18px; border: 1px solid var(--line); background: #0a0d14; color: var(--muted); font-size: .82rem; letter-spacing: .04em; }
 @media (max-width: 760px) { .gameLoading { aspect-ratio: 3 / 4; min-height: 440px; max-height: min(72vh, 640px); } }
-.gameStageWrap { max-width: 1240px; margin: 26px auto 0; padding: clamp(14px, 2vw, 22px); border: 1px solid var(--line); border-radius: 10px; background: #08080b; }
 
 @media (max-width: 900px) {
   .gameGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -189,7 +188,6 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
   .gameCard { max-width: none; }
   .gameArt { height: 210px; }
   .gameCard .cardContent p { min-height: auto; }
-  .gameStageWrap { padding: 10px; }
 }
 
 /* Kianimation Football League card artwork */
@@ -437,3 +435,130 @@ footer { padding: 35px clamp(22px, 6vw, 96px); display: flex; align-items: cente
 /* Game cards number themselves from their order in the grid: 01, 02, 03 … */
 .gameGrid { counter-reset: game; }
 .gameCard .gameLabel::before { counter-increment: game; content: "Game " counter(game, decimal-leading-zero); }
+
+/* ------------------------------------------------------------------ *
+ * Screens that open over the site: a game, and a video preview.
+ * Neither uses transform: a transformed ancestor would break a game's
+ * own position:fixed fullscreen, so both fade in rather than slide.
+ * ------------------------------------------------------------------ */
+@keyframes siteOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+/* the page behind a game or a video stays exactly where it is */
+html.siteOverlayOpen, html.siteOverlayOpen body { overflow: hidden; overscroll-behavior: none; }
+
+.gameShell {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  background: #050507;
+  overscroll-behavior: contain;
+  animation: siteOverlayIn .18s ease-out;
+}
+.gameShellBar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
+  min-height: 52px; box-sizing: border-box; padding: 6px clamp(10px, 2vw, 18px);
+  border-bottom: 1px solid var(--line); background: #09090c;
+}
+.gameShellBack {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 8px 16px 8px 12px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.22); background: transparent; color: var(--ink);
+  font-weight: 600; font-size: .8rem; cursor: pointer;
+}
+.gameShellArrow { font-size: 1.3rem; line-height: 1; margin-top: -2px; }
+.gameShellBack:hover { background: #fff; color: #111; }
+.gameShellTitle {
+  margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); font-size: .95rem; font-weight: 600; letter-spacing: -.01em;
+}
+.gameShellStage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; outline: none; }
+/* Every game already knows how to fill a screen (it is its own fullscreen
+   mode), so here its root takes the whole stage. The selector outranks
+   the games' lazily loaded stylesheets, and leaves a game's own pseudo
+   fullscreen alone so that still pins over everything. */
+.gameShell .gameShellStage > :not(.is-pseudo) {
+  flex: 1 1 auto; width: 100%; height: 100%;
+  aspect-ratio: auto; min-height: 0; max-height: none;
+  border: 0; border-radius: 0; box-shadow: none;
+}
+@media (max-height: 520px) {
+  .gameShellBar { min-height: 42px; padding-block: 3px; }
+  .gameShellBack { min-height: 34px; padding: 5px 12px 5px 9px; }
+}
+@media (max-width: 420px) { .gameShellTitle { font-size: .85rem; } }
+
+/* the video card: a poster that is itself the play button */
+.videoFrame { container-type: size; }
+.videoFrame .episodeLabel { pointer-events: none; }
+.videoPoster {
+  position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0;
+  display: grid; place-items: center; background: #000; cursor: pointer; overflow: hidden;
+}
+/* YouTube's always-available poster is 4:3 with the 16:9 frame letterboxed
+   inside it; this box is the 16:9 window, sized to cover the card */
+.videoPosterArt {
+  position: absolute; left: 50%; top: 50%;
+  width: max(100cqw, 177.78cqh); aspect-ratio: 16 / 9;
+  transform: translate(-50%, -50%); overflow: hidden;
+}
+.videoPosterArt img {
+  position: absolute; left: 0; top: -16.667%; width: 100%; height: 133.333%;
+  object-fit: cover; opacity: .82; transition: opacity .25s ease, transform .4s ease;
+}
+.videoPoster .playIcon {
+  position: relative; z-index: 1; color: #fff;
+  background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
+  transition: background .2s ease, color .2s ease, transform .2s ease;
+}
+.videoPoster:hover img, .videoPoster:focus-visible img { opacity: 1; transform: scale(1.03); }
+.videoPoster:hover .playIcon, .videoPoster:focus-visible .playIcon { background: #fff; color: #111; transform: scale(1.06); }
+.videoPoster:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+
+.videoModal {
+  position: fixed; inset: 0; z-index: 210;
+  display: grid; place-items: center; box-sizing: border-box;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(4,4,6,.88); backdrop-filter: blur(6px);
+  overscroll-behavior: contain;
+  animation: siteOverlayIn .18s ease-out;
+}
+/* as wide as the screen allows, but never so tall the controls fall off it */
+.videoModalPanel {
+  width: min(1100px, 100%, calc((100vh - 150px) * 16 / 9));
+  width: min(1100px, 100%, calc((100dvh - 150px) * 16 / 9));
+  background: #0d0d11; border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 40px 90px rgba(0,0,0,.6);
+}
+.videoModalHead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 12px 12px 18px; }
+.videoModalHeading { min-width: 0; }
+.videoModalLabel { display: block; margin-bottom: 3px; color: var(--gold); text-transform: uppercase; letter-spacing: .14em; font-size: .6rem; }
+.videoModalHead h2 {
+  margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); font-size: 1.05rem; font-weight: 600; letter-spacing: -.01em;
+}
+.videoModalClose {
+  flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid rgba(255,255,255,.22); background: transparent;
+  color: var(--ink); font-size: 1.5rem; line-height: 1; cursor: pointer;
+}
+.videoModalClose:hover { background: #fff; color: #111; }
+.videoModalPlayer { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.videoModalPlayer iframe, .videoModalPlayer video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #000; }
+.videoModalFallback { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 20px; color: var(--muted); text-align: center; }
+.videoModalFallback p { margin: 0; }
+.videoModalFallback a { padding: 10px 18px; border-radius: 999px; background: #fff; color: #111; text-decoration: none; font-weight: 600; font-size: .8rem; }
+@media (max-height: 520px) {
+  .videoModal { padding: 8px; }
+  .videoModalPanel {
+    width: min(1100px, 100%, calc((100vh - 76px) * 16 / 9));
+    width: min(1100px, 100%, calc((100dvh - 76px) * 16 / 9));
+  }
+  .videoModalHead { padding: 6px 8px 6px 14px; }
+  .videoModalClose { width: 38px; height: 38px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gameShell, .videoModal { animation: none; }
+  .videoPosterArt img, .videoPoster .playIcon { transition: none; }
+}
