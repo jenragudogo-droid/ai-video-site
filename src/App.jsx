@@ -37,6 +37,9 @@ const GAME_IDS = GAMES.map((game) => game.id);
 const videos = [
   {
     id: "lion-vs-dragon-part-1",
+    /* a vertical Short: the player follows the video's shape rather than
+       letterboxing it inside a widescreen box */
+    aspect: [9, 16],
     title: "Lion vs Dragon Part 1",
     description:
       "A fearless lion enters a forbidden realm and comes face to face with an ancient dragon.",
@@ -178,9 +181,6 @@ function App() {
           <div className="videoGrid">
             {videos.map((video) => <VideoCard video={video} key={video.id} onWatch={openVideo} />)}
           </div>
-          <p className="videoHint">
-            MP4 setup: place your finished files in <code>public/videos</code> using the filenames configured for each preview.
-          </p>
         </section>
 
         <section className="gamesSection" id="games">

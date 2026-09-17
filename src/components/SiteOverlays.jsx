@@ -61,6 +61,9 @@ export function GameShell({ game, onClose }) {
 export function VideoModal({ video, onClose }) {
   const closeButton = useRef(null);
   const media = parseVideoSource(video.src);
+  /* Portrait videos get a portrait player: a Short inside a widescreen
+     box is a thin strip, and on a phone that wasted most of the screen. */
+  const [aspectW, aspectH] = video.aspect || [16, 9];
 
   useEffect(() => {
     const release = holdPage();
@@ -85,7 +88,7 @@ export function VideoModal({ video, onClose }) {
       aria-labelledby="video-modal-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="videoModalPanel">
+      <div className="videoModalPanel" style={{ "--videoW": aspectW, "--videoH": aspectH }}>
         <div className="videoModalHead">
           <div className="videoModalHeading">
             <span className="videoModalLabel">{video.label}</span>
