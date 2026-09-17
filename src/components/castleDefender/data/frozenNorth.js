@@ -68,6 +68,16 @@ export const BADGES = {
     /* awarded when this kingdom's campaign is completed */
     kingdom: "ashford",
   },
+  championOfTheRealms: {
+    id: "championOfTheRealms",
+    name: "Champion of the Realms",
+    desc: "Every stage of every realm, won again on New Game+.",
+    icon: "⚔",
+    /* earned from the record rather than a single victory: the last
+       stage of the set awards it, and an older save that already has
+       them all gets it on load */
+    everyStageOnLegend: true,
+  },
   guardianOfTheFrozenNorth: {
     id: "guardianOfTheFrozenNorth",
     name: "Guardian of the Frozen North",
@@ -77,4 +87,4 @@ export const BADGES = {
   },
 };
 
-export const BADGE_ORDER = ["defenderOfAshford", "guardianOfTheFrozenNorth"];
+export const BADGE_ORDER = ["defenderOfAshford", "guardianOfTheFrozenNorth", "championOfTheRealms"];

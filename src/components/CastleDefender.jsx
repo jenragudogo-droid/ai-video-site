@@ -13,7 +13,7 @@ import {
 import { createRenderer } from "./castleDefender/render.js";
 import { createCastleAudio } from "./castleDefender/audio.js";
 import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked, saveBattle, clearBattle, saveDifficulty, buyUpgrade, badgesOf,
-  KINGDOM_ORDER, isKingdomUnlocked, stagesOf,
+  KINGDOM_ORDER, isKingdomUnlocked, stagesOf, isNewGamePlusUnlocked, hasBadge,
 } from "./castleDefender/save.js";
 import { PERK_BY_ID, RARITY, POWERS } from "./castleDefender/data/perks.js";
 import { CATEGORIES, KINGDOM_UPGRADES, upgradeCost as kingdomCost } from "./castleDefender/data/progression.js";
@@ -1194,6 +1194,12 @@ export default function CastleDefender() {
   const crowns = profile.meta?.crowns || 0;
   const realmDone = (profile.campaignsDone || []).includes("ashford");
   const northDone = (profile.campaignsDone || []).includes("frost");
+  /* New Game+: the whole campaign again, harder, with everything the
+     player earned the first time. It opens once every realm is held. */
+  const ngPlus = isNewGamePlusUnlocked(profile);
+  const legendWon = STAGES.filter((st) => stageRecord(profile, st.id).legendStars > 0).length;
+  const starsIn = (rec) => (difficulty === "legend" ? rec.legendStars : difficulty === "hard" ? rec.hardStars : rec.stars) || 0;
+  const realmsLeft = KINGDOM_ORDER.filter((k) => !(profile.campaignsDone || []).includes(k)).map((k) => REALMS[k]?.name || k);
   const outroFrost = (game?.stage.kingdom || "ashford") === "frost";
   const winFrost = (results?.kingdom || "ashford") === "frost";
   const badges = badgesOf(profile);
@@ -1586,7 +1592,7 @@ export default function CastleDefender() {
                 <span key={id} className="cdBadge" title={BADGES[id].desc}><i aria-hidden="true">{BADGES[id].icon}</i>{BADGES[id].name}</span>
               ))}
               <div className="cdDiff">
-                {Object.entries(DIFFICULTY).map(([id, d]) => (
+                {Object.entries(DIFFICULTY).filter(([id]) => id !== "legend" || ngPlus).map(([id, d]) => (
                   <button type="button" key={id} className={difficulty === id ? "is-on" : ""} onClick={() => setDifficulty(id)} title={d.desc}>{d.name}</button>
                 ))}
               </div>
@@ -1600,7 +1606,7 @@ export default function CastleDefender() {
                 const open = isKingdomUnlocked(profile, kid);
                 const done = (profile.campaignsDone || []).includes(kid);
                 const won = list.filter((st) => stageRecord(profile, st.id).completed).length;
-                const stars = list.reduce((n, st) => n + (difficulty === "hard" ? stageRecord(profile, st.id).hardStars : stageRecord(profile, st.id).stars), 0);
+                const stars = list.reduce((n, st) => n + starsIn(stageRecord(profile, st.id)), 0);
                 return (
                   <section key={kid} className={`cdRealm ${open ? "" : "is-locked"} ${kid === "frost" ? "cdRealm--frost" : ""}`} aria-label={realm.name}>
                     <header className="cdRealmHead">
@@ -1651,7 +1657,7 @@ export default function CastleDefender() {
                             <p className="cdStageIntro">{st.intro.join(" ")}</p>
                             {unlocked ? (
                               <div className="cdStageMeta">
-                                <Stars n={difficulty === "hard" ? rec.hardStars : rec.stars} />
+                                <Stars n={starsIn(rec)} />
                                 <span>Best {fmt(rec.bestScore)}</span>
                                 {rec.bestWave > 0 && <span>Endless: wave {rec.bestWave}</span>}
                               </div>
@@ -1737,14 +1743,42 @@ export default function CastleDefender() {
               )}
 
               {realmDone && (
-                <article className="cdStage cdStage--next is-locked">
+                <article className={`cdStage cdStage--next ${ngPlus ? "is-ngplus" : "is-locked"}`}>
                   <div className="cdStageNum">✦</div>
                   <div className="cdStageBody">
                     <h4>New Game+</h4>
                     <p className="cdStageSub">The whole campaign, again</p>
-                    <p className="cdStageIntro">Replay every kingdom with tougher enemies and new rewards.</p>
-                    <p className="cdLocked">Coming soon</p>
+                    <p className="cdStageIntro">
+                      The warband came back having learned: everything is tougher and the purse is thinner.
+                      Your crowns, kingdom upgrades and badges come with you, and every stage keeps its own
+                      New Game+ stars.
+                    </p>
+                    {ngPlus ? (
+                      <div className="cdStageMeta">
+                        <span>{legendWon} of {STAGES.length} stages held on New Game+</span>
+                        {hasBadge(profile, "championOfTheRealms") && (
+                          <span className="cdBadge cdBadge--sm" title={BADGES.championOfTheRealms.desc}>
+                            <i aria-hidden="true">{BADGES.championOfTheRealms.icon}</i>{BADGES.championOfTheRealms.name}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="cdLocked">
+                        Hold every realm to open it — {realmsLeft.join(" and ")} {realmsLeft.length > 1 ? "still stand" : "still stands"}.
+                      </p>
+                    )}
                   </div>
+                  {ngPlus && (
+                    <div className="cdStageActions">
+                      <button
+                        type="button"
+                        className={`cdBtn ${difficulty === "legend" ? "" : "cdBtn--main"}`}
+                        onClick={() => setDifficulty(difficulty === "legend" ? "normal" : "legend")}
+                      >
+                        {difficulty === "legend" ? "Leave New Game+" : "Begin New Game+"}
+                      </button>
+                    </div>
+                  )}
                 </article>
               )}
             </div>
@@ -1974,9 +2008,9 @@ export default function CastleDefender() {
             <div className="cdCol">
               {(() => { const idx = STAGES.findIndex((st) => st.id === results.stageId); const next = STAGES[idx + 1]; if (results.finale && results.mode !== "endless") {
                   const nk = STAGES.find((st) => (st.kingdom || "ashford") !== (results.kingdom || "ashford") && KINGDOM_ORDER.indexOf(st.kingdom || "ashford") > KINGDOM_ORDER.indexOf(results.kingdom || "ashford"));
-                  return nk
-                    ? <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(nk.id)}>March north · {nk.name}</button>
-                    : <div className="cdBtn cdBtn--soon" aria-disabled="true"><span>Next kingdom</span><small>Coming soon</small></div>;
+                  if (nk) return <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(nk.id)}>March north · {nk.name}</button>;
+                  if (ngPlus && difficulty !== "legend") return <button type="button" className="cdBtn cdBtn--main" onClick={() => { setDifficulty("legend"); setScreen("campaign"); }}>Begin New Game+</button>;
+                  return <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(results.stageId, { mode: "endless" })}>Endless siege on this map</button>;
                 } return next && next.available && results.mode !== "endless"
                 ? <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(next.id)}>Next stage · {next.name}</button>
                 : <button type="button" className="cdBtn cdBtn--main" onClick={() => startRun(results.stageId, { mode: "endless" })}>Endless siege on this map</button>; })()}
@@ -1984,7 +2018,6 @@ export default function CastleDefender() {
                 <button type="button" className="cdBtn" onClick={() => startRun(results.stageId, { skipIntro: true })}>Play again</button>
                 <button type="button" className="cdBtn cdBtn--ghost" onClick={quitToMenu}>Main menu</button>
               </div>
-              {results.stageId === "greenhollow" && !STAGES[1].available && <p className="cdNote">Stage II, Stonebridge Ford, is in development.</p>}
               {results.finale && results.mode !== "endless" && <p className="cdNote">Endless siege on this map is open from the campaign page.</p>}
             </div>
           </div>

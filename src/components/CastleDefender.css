@@ -913,3 +913,7 @@
   .cdRealmTitle h4 { font-size: 21px; }
   .cdRealmHero { padding: 7px 10px; gap: 10px; }
 }
+
+/* New Game+ sits at the end of the campaign list: gold once it is open */
+.cdStage--next.is-ngplus { border-color: var(--cd-gold); background: linear-gradient(180deg, rgba(60, 46, 20, 0.5), rgba(24, 20, 14, 0.7)); }
+.cdStage--next.is-ngplus h4 { color: var(--cd-gold-2); }

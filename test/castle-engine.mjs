@@ -19,7 +19,7 @@ import {
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
-import { readSave, writeSave, saveBattle, clearBattle, recordResult, resetProgress, SAVE_VERSION, badgesOf, hasBadge, stageRecord, isStageUnlocked, isKingdomUnlocked, stagesOf, KINGDOM_ORDER } from "../src/components/castleDefender/save.js";
+import { readSave, writeSave, saveBattle, clearBattle, recordResult, resetProgress, SAVE_VERSION, badgesOf, hasBadge, stageRecord, isStageUnlocked, isKingdomUnlocked, stagesOf, KINGDOM_ORDER, isNewGamePlusUnlocked } from "../src/components/castleDefender/save.js";
 import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, SUNSPEAR, SUN_TEASERS, SUN_HERO, BADGES, BADGE_ORDER } from "../src/components/castleDefender/data/frozenNorth.js";
 import { KINGDOMS } from "../src/components/castleDefender/data/kingdoms.js";
 import { sampleRoute } from "../src/components/castleDefender/engine/path.js";
@@ -1901,6 +1901,93 @@ console.log("— the two orientations defend alike —");
     });
     const ratio = Math.min(depth[0], depth[1]) / Math.max(depth[0], depth[1]);
     ok(ratio > 0.8, `${st.id}: both maps put a comparable number of towers on the road (${depth.map((d) => d.toFixed(2)).join(" and ")})`);
+  }
+}
+
+console.log("— New Game+ —");
+{
+  const L = DIFFICULTY.legend;
+  ok(!!L && L.name === "New Game+", "the tier exists and is named on the campaign page");
+  ok(L.hp > DIFFICULTY.hard.hp && L.gold < 1, `it is tougher than Hard (${L.hp}x health, ${L.gold}x gold)`);
+  ok(Object.keys(L).filter((k) => k !== "name" && k !== "desc").every((k) => k === "hp" || k === "gold"), "and changes nothing else: same waves, same maps, no hidden rules");
+  const a = mk("cairnhold"); const b = mk("cairnhold", { difficulty: "legend" });
+  ok(JSON.stringify(a.stage.waves) === JSON.stringify(b.stage.waves) && a.layout.plots.length === b.layout.plots.length, "the same stage, the same ground");
+
+  /* it opens only when the whole campaign is held */
+  resetProgress(readSave());
+  ok(!isNewGamePlusUnlocked(readSave()), "locked on a fresh profile");
+  for (const id of ["greenhollow", "stonebridge", "siege"]) { const g = mk(id); g.phase = "victory"; g.stars = 3; recordResult(readSave(), summarise(g)); }
+  ok(!isNewGamePlusUnlocked(readSave()), "still locked with only Ashford held");
+  for (const id of ["frostwatch", "wolfpine", "cairnhold"]) { const g = mk(id); g.phase = "victory"; g.stars = 3; recordResult(readSave(), summarise(g)); }
+  ok(isNewGamePlusUnlocked(readSave()), "open once both realms are held");
+
+  /* its stars are its own, and a harder win stands for the easier tiers */
+  resetProgress(readSave());
+  const g1 = mk("greenhollow", { difficulty: "legend" }); g1.phase = "victory"; g1.stars = 2;
+  recordResult(readSave(), summarise(g1));
+  const rec = stageRecord(readSave(), "greenhollow");
+  ok(rec.legendStars === 2, "a New Game+ win is recorded against New Game+");
+  ok(rec.hardStars === 2 && rec.stars === 2, "and stands for Hard and Normal, which it beats");
+  const g2 = mk("greenhollow"); g2.phase = "victory"; g2.stars = 3;
+  recordResult(readSave(), summarise(g2));
+  ok(stageRecord(readSave(), "greenhollow").legendStars === 2, "a later Normal win does not inflate the New Game+ record");
+  ok(stageRecord(readSave(), "greenhollow").stars === 3, "but it does raise the Normal one");
+  /* the chosen tier survives a reload */
+  writeSave({ ...readSave(), difficulty: "legend" });
+  ok(readSave().difficulty === "legend", "the tier is remembered across a reload");
+}
+
+console.log("— Champion of the Realms —");
+{
+  resetProgress(readSave());
+  ok(!hasBadge(readSave(), "championOfTheRealms"), "not held before New Game+ is played");
+  let flags = null;
+  for (const st of STAGES) {
+    const g = mk(st.id, { difficulty: "legend" }); g.phase = "victory"; g.stars = 1;
+    flags = recordResult(readSave(), summarise(g));
+    if (st !== STAGES[STAGES.length - 1]) ok(!hasBadge(readSave(), "championOfTheRealms"), `not yet after ${st.id}`);
+  }
+  ok(hasBadge(readSave(), "championOfTheRealms"), "held once every stage of every realm is won again");
+  ok((flags.newBadges || []).includes("championOfTheRealms"), "and the victory screen is told it is new");
+  const again = mk("cairnhold", { difficulty: "legend" }); again.phase = "victory"; again.stars = 3;
+  const f2 = recordResult(readSave(), summarise(again));
+  ok(!(f2.newBadges || []).includes("championOfTheRealms"), "a second win awards no second badge");
+  ok(badgesOf(readSave()).filter((b) => b === "championOfTheRealms").length === 1, "and it is never listed twice");
+  ok(BADGES.championOfTheRealms.icon && BADGES.championOfTheRealms.desc, "it has a face and a reason, like the others");
+  resetProgress(readSave());
+}
+
+console.log("— an older save meets New Game+ —");
+{
+  /* exactly what a player had on disk before the tier existed */
+  writeSave({
+    version: 2,
+    stages: { greenhollow: { stars: 3, bestScore: 4100, completed: true }, siege: { stars: 2, bestScore: 9000, completed: true } },
+    campaignsDone: ["ashford"],
+    meta: { crowns: 21, upgrades: { fletchers: 2 } },
+    settings: { sound: true, music: false },
+    difficulty: "hard",
+  });
+  const sv = readSave();
+  ok(stageRecord(sv, "greenhollow").stars === 3 && sv.meta.crowns === 21, "old stars and crowns survive");
+  ok(stageRecord(sv, "greenhollow").legendStars === 0, "and every stage starts New Game+ at zero");
+  ok(!isNewGamePlusUnlocked(sv) && !hasBadge(sv, "championOfTheRealms"), "nothing is handed out for free");
+  ok(sv.difficulty === "hard", "the old difficulty is untouched");
+  resetProgress(readSave());
+}
+
+console.log("— New Game+ is beatable with what the campaign gave you —");
+{
+  /* the crowns a finished campaign leaves behind, spent the way a
+     player would: this is the state New Game+ is meant to be played in */
+  const upgrades = { wallHealth: 2, treasury: 2, fletchers: 2, longbows: 1, drillYard: 1, armourers: 1, engineers: 1, vigour: 1, swordmaster: 1, tithes: 1, heralds: 1, muster: 1 };
+  for (const st of STAGES) {
+    const g = makeGame({ stageId: st.id, difficulty: "legend", seed: 3, upgrades });
+    startStage(g);
+    const plan = {}; let guard = 0;
+    while (g.phase === "playing" && guard < 240000) { autoStep(g, plan); stepGame(g, DT); drainEvents(g); guard += 1; }
+    ok(g.phase !== "playing", `${st.id}: New Game+ resolves rather than stalling`);
+    ok(g.wave >= Math.ceil(st.waves.length / 2), `${st.id}: and a scripted commander reaches wave ${g.wave} of ${st.waves.length}`);
   }
 }
 

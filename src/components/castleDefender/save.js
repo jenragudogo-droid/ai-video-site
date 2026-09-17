@@ -10,13 +10,14 @@
  * ------------------------------------------------------------------ */
 
 import { BADGES, BADGE_ORDER } from "./data/frozenNorth.js";
+import { STAGES } from "./data/stages.js";
 
 const KEY = "castleDefenderSave.v1";   // storage key stays; `version` inside tells the format
 export const SAVE_VERSION = 2;
 
 const DEFAULTS = {
   version: SAVE_VERSION,
-  stages: {},                 // id -> { stars, bestScore, bestWave, completed, hardStars }
+  stages: {},                 // id -> { stars, bestScore, bestWave, completed, hardStars, legendStars }
   settings: { sound: true, music: true, sfxVol: 0.8, musicVol: 0.55, quality: "auto", seenHowTo: false },
   campaignsDone: [],
   difficulty: "normal",
@@ -33,6 +34,7 @@ function derivedBadges(save) {
   const out = [];
   for (const [id, def] of Object.entries(BADGES)) {
     if (def.kingdom && (save.campaignsDone || []).includes(def.kingdom)) out.push(id);
+    if (def.everyStageOnLegend && STAGES.every((st) => ((save.stages || {})[st.id] || {}).legendStars > 0)) out.push(id);
   }
   return out;
 }
@@ -62,12 +64,12 @@ function migrate(data) {
   if (!data || typeof data !== "object") return out;
   if (data.stages && typeof data.stages === "object") {
     for (const [id, rec] of Object.entries(data.stages)) {
-      if (rec && typeof rec === "object") out.stages[id] = { stars: 0, bestScore: 0, bestWave: 0, completed: false, hardStars: 0, ...rec };
+      if (rec && typeof rec === "object") out.stages[id] = { stars: 0, bestScore: 0, bestWave: 0, completed: false, hardStars: 0, legendStars: 0, ...rec };
     }
   }
   if (data.settings && typeof data.settings === "object") out.settings = { ...out.settings, ...data.settings };
   if (Array.isArray(data.campaignsDone)) out.campaignsDone = data.campaignsDone.slice();
-  if (data.difficulty === "hard" || data.difficulty === "normal") out.difficulty = data.difficulty;
+  if (data.difficulty === "hard" || data.difficulty === "normal" || data.difficulty === "legend") out.difficulty = data.difficulty;
   if (data.meta && typeof data.meta === "object") out.meta = { ...out.meta, ...data.meta, upgrades: { ...(data.meta.upgrades || {}) }, unlocks: Array.isArray(data.meta.unlocks) ? data.meta.unlocks.slice() : [] };
   /* badges: keep any that were stored, then add the ones progress has already earned */
   const stored = Array.isArray(data.badges) ? data.badges.filter((id) => BADGES[id]) : [];
@@ -99,7 +101,7 @@ export function writeSave(save) {
 }
 
 export function stageRecord(save, id) {
-  return save.stages[id] || { stars: 0, bestScore: 0, bestWave: 0, completed: false, hardStars: 0 };
+  return save.stages[id] || { stars: 0, bestScore: 0, bestWave: 0, completed: false, hardStars: 0, legendStars: 0 };
 }
 
 /* Crowns are the kingdom-upgrade currency: one per star, three more for
@@ -115,20 +117,24 @@ export function recordResult(save, sum) {
     if (sum.won) {
       if (!rec.completed) flags.crowns += 3;
       rec.completed = true;
-      const key = sum.difficulty === "hard" ? "hardStars" : "stars";
+      const key = sum.difficulty === "legend" ? "legendStars" : sum.difficulty === "hard" ? "hardStars" : "stars";
       if (sum.stars > rec[key]) { flags.crowns += sum.stars - rec[key]; rec[key] = sum.stars; flags.newStars = true; }
-      if (sum.difficulty === "hard" && sum.stars > rec.stars) rec.stars = sum.stars;
+      /* winning on a harder tier stands for the easier ones too */
+      if (sum.difficulty === "legend") { rec.hardStars = Math.max(rec.hardStars || 0, sum.stars); rec.stars = Math.max(rec.stars, sum.stars); }
+      else if (sum.difficulty === "hard" && sum.stars > rec.stars) rec.stars = sum.stars;
     }
   }
   /* the last stage of a kingdom: the realm is complete */
   let campaignsDone = save.campaignsDone || [];
   if (sum.won && sum.finale && sum.kingdom && !campaignsDone.includes(sum.kingdom)) { campaignsDone = [...campaignsDone, sum.kingdom]; flags.realmComplete = true; flags.crowns += 5; }
   const meta = { ...save.meta, crowns: (save.meta?.crowns || 0) + flags.crowns };
-  /* a finished kingdom earns its cosmetic badge, once */
-  const badges = BADGE_ORDER.filter((id) => new Set([...(save.badges || []), ...derivedBadges({ campaignsDone })]).has(id));
+  /* a finished kingdom earns its cosmetic badge, once; so does a whole
+     campaign won again on New Game+ */
+  const stages = { ...save.stages, [sum.stageId]: rec };
+  const badges = BADGE_ORDER.filter((id) => new Set([...(save.badges || []), ...derivedBadges({ campaignsDone, stages })]).has(id));
   flags.newBadges = badges.filter((id) => !(save.badges || []).includes(id));
   /* only a finished battle leaves the slot; quitting to the menu keeps it for Continue */
-  const next = { ...save, stages: { ...save.stages, [sum.stageId]: rec }, meta, campaignsDone, badges, battle: sum.finished ? null : save.battle };
+  const next = { ...save, stages, meta, campaignsDone, badges, battle: sum.finished ? null : save.battle };
   writeSave(next);
   return { save: next, ...flags };
 }
@@ -198,6 +204,11 @@ export function isKingdomUnlocked(save, kingdomId) {
   const i = KINGDOM_ORDER.indexOf(kingdomId);
   if (i <= 0) return i === 0;
   return (save.campaignsDone || []).includes(KINGDOM_ORDER[i - 1]);
+}
+
+/* New Game+ opens once every realm in the campaign has been held. */
+export function isNewGamePlusUnlocked(save) {
+  return KINGDOM_ORDER.every((id) => (save.campaignsDone || []).includes(id));
 }
 
 export function stagesOf(stages, kingdomId) {

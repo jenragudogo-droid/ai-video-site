@@ -193,4 +193,7 @@ export const ABILITIES = {
 export const DIFFICULTY = {
   normal: { name: "Normal", hp: 1, gold: 1, desc: "The way it is meant to be played." },
   hard:   { name: "Hard",   hp: 1.18, gold: 0.9, desc: "Tougher enemies, thinner purse." },
+  /* New Game+: unlocked once both realms are held, and meant to be
+     played with the crowns and kingdom upgrades that came with them. */
+  legend: { name: "New Game+", hp: 1.28, gold: 0.96, desc: "The warband learned from its defeat. Your upgrades come with you." },
 };
