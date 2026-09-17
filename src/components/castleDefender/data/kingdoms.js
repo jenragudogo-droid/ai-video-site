@@ -35,6 +35,18 @@ export const KINGDOMS = [
     campaign: "The Frozen North",
   },
   {
+    id: "sun",
+    name: "The Sunspear Reach",
+    style: "Southern desert",
+    status: "playable",
+    tagline: "Red dunes, bronze shields and wyrms under the road.",
+    colours: { primary: "#8c2f2a", secondary: "#e8c25a", ground: "#e6bd83" },
+    hero: { name: "Kesi of the Reach", ability: "Spear Dance" },
+    units: ["Dune Raider", "Dune Archer", "Sunspear Guard", "Ember Thrower", "Sand Wyrm", "Scythed Chariot"],
+    environment: "Red dunes, sandstone bastions and a sun that does not set",
+    campaign: "The Sunspear Reach",
+  },
+  {
     id: "roma",
     name: "Legion of the Frontier",
     style: "Roman",

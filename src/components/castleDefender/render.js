@@ -20,6 +20,7 @@ import { FIGURES, figurePose, drawFigure, drawHorse, drawRam } from "./art/figur
 import { drawSiegeCatapult, drawSiegeTower, drawOuterWall } from "./art/siege.js";
 import { drawFrostScene, drawDireWolf, drawWolfDen, drawAsSilhouette, drawFrostRune, snowCaps, FROST } from "./art/frost.js";
 import { drawSunScene, drawSandWyrm, SUN } from "./art/sunspear.js";
+import { DESERT, drawWyrm, drawWyrmMound, drawChariot, drawScorpion, drawSunStandard, drawEmberGround, drawSunScorch, drawSandstoneWall } from "./art/desert.js";
 import { PAL, rgba } from "./art/palette.js";
 import { towerLevel } from "./engine/engine.js";
 import { HERO, TOWERS } from "./data/towers.js";
@@ -84,6 +85,7 @@ export function createRenderer() {
   let heroMark = null;
   let menuDrift = 0;
   let zoneFlicker = 0;
+  let standardUp = false;                 // a Sun Standard is burning somewhere
   let waveFlash = [0, 0];
   const blockText = new Map();
   const warnings = new Map();
@@ -247,15 +249,68 @@ export function createRenderer() {
     return cache.get(`den:${dead ? "dead" : "live"}:${f}:${w}`, 170, 130, 78, 116, (ctx) => drawWolfDen(ctx, f / n, { dead, wake: w }));
   }
 
-  function towerSprite(type, level, winter) {
-    return cache.get(`tower:${type}:${level}:${winter ? "w" : "s"}`, TOWER_BOX.w, TOWER_BOX.h, TOWER_BOX.ax, TOWER_BOX.ay, (ctx) => {
+  /* ---------------------------- the Reach ---------------------------- */
+
+  function wyrmSprite(anim, frame) {
+    const n = anim === "dead" ? 6 : 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`wyrm:${anim}:${f}`, 230, 170, 106, 150, (ctx) => drawWyrm(ctx, anim, f));
+  }
+
+  function moundSprite(frame) {
+    const n = 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`mound:${f}`, 180, 110, 90, 88, (ctx) => drawWyrmMound(ctx, 0, 0, f / n, 1));
+  }
+
+  function chariotSprite(anim, frame) {
+    const n = anim === "dead" ? 6 : 8;
+    const f = ((frame % n) + n) % n;
+    return cache.get(`chariot:${anim}:${f}`, 260, 170, 120, 148, (ctx) => drawChariot(ctx, anim, f));
+  }
+
+  function scorpionSprite(roll, arm, dead) {
+    const a = Math.round(Math.max(0, Math.min(1, arm)) * 6) / 6;
+    const f = dead ? 0 : ((roll % 8) + 8) % 8;
+    return cache.get(`scorpion:${f}:${a}:${dead ? "d" : "l"}`, 230, 180, 108, 152, (ctx) => drawScorpion(ctx, f / 8, a, dead));
+  }
+
+  function standardSprite(frame, dead, hpFrac) {
+    const n = 8;
+    const f = ((frame % n) + n) % n;
+    const hp = Math.round(Math.max(0, Math.min(1, hpFrac)) * 4) / 4;
+    return cache.get(`standard:${f}:${dead ? "d" : "l"}:${hp}`, 150, 190, 74, 168, (ctx) => drawSunStandard(ctx, f / n, dead, hp));
+  }
+
+  /* The Reach builds in sandstone. Rather than a second castle painter,
+     the same stone gets a warm wash laid over the finished sprite: it is
+     the one place in the game where a tint beats a repaint, because the
+     silhouette, the banners and the damage states all have to stay
+     exactly what the player already knows. */
+  function sunWash(ctx, w, h, alpha) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    const g = ctx.createLinearGradient(0, -h, 0, h * 0.4);
+    g.addColorStop(0, rgba("#ffd79a", alpha));
+    g.addColorStop(1, rgba("#c98a4a", alpha * 0.8));
+    ctx.fillStyle = g;
+    ctx.fillRect(-w, -h * 1.6, w * 3, h * 3.2);
+    ctx.restore();
+  }
+
+  function towerSprite(type, level, winter, desert) {
+    return cache.get(`tower:${type}:${level}:${winter ? "w" : desert ? "d" : "s"}`, TOWER_BOX.w, TOWER_BOX.h, TOWER_BOX.ax, TOWER_BOX.ay, (ctx) => {
       drawTowerBody(ctx, type, level);
       if (winter) snowCaps(ctx, { depth: 2.4, alpha: 0.85 });
+      if (desert) sunWash(ctx, TOWER_BOX.w, TOWER_BOX.h, 0.26);
     });
   }
 
-  function castleSprite(castle, dmg, winter) {
-    return cache.get(`castle:${castle.w}x${castle.h}:${dmg}:${winter ? "w" : "s"}`, castle.w + 70, castle.h + 150, 35, 118, (ctx) => drawCastle(ctx, castle, dmg, { winter }));
+  function castleSprite(castle, dmg, winter, desert) {
+    return cache.get(`castle:${castle.w}x${castle.h}:${dmg}:${winter ? "w" : desert ? "d" : "s"}`, castle.w + 70, castle.h + 150, 35, 118, (ctx) => {
+      drawCastle(ctx, castle, dmg, { winter });
+      if (desert) sunWash(ctx, castle.w + 70, castle.h + 150, 0.46);
+    });
   }
 
   /* ------------------------------ flags ------------------------------ */
@@ -446,6 +501,52 @@ export function createRenderer() {
         if (e.on) { fx.spawn("text", s.layout.castle.gate.x, s.layout.castle.gate.y - 90, { text: "BLIZZARD", size: 16, color: FROST.iceLight, max: 2.2, bold: true }); }
         break;
       case "frostArrow": fx.spawn("ring", e.x, e.y, { size: e.r * 1.6, color: rgba(FROST.iceLight, 0.7), max: 0.8, width: 3 }); break;
+      /* ---------------------------- the Reach ---------------------------- */
+      case "wyrmDive":
+        fx.spawn("dust", e.x, e.y + 2, { n: 12, spread: 26 });
+        fx.spawn("ring", e.x, e.y, { size: 70, color: rgba(DESERT.sandDark, 0.7), max: 0.6, width: 4 });
+        break;
+      case "wyrmSurface":
+        fx.spawn("dust", e.x, e.y + 2, { n: 20, spread: 40 });
+        fx.spawn("debris", e.x, e.y, { n: 8, color: DESERT.sandDark });
+        fx.spawn("ring", e.x, e.y, { size: 110, color: rgba(DESERT.sandLight, 0.8), max: 0.7, width: 5 });
+        gateShake = Math.max(gateShake, 0.16);
+        break;
+      case "standardPlant":
+        fx.spawn("ring", e.x, e.y, { size: 150, color: rgba(DESERT.emberLight, 0.85), max: 1.2, width: 5 });
+        fx.spawn("fire", e.x, e.y - 20, { n: 10, spread: 16 });
+        fx.spawn("text", e.x, e.y - 130, { text: "THE SUN STANDARD", size: 12, color: DESERT.emberLight, max: 1.8, bold: true });
+        break;
+      case "standardBurns":
+        fx.spawn("smoke", e.x, e.y - 30, { n: 8, size: 10 });
+        fx.spawn("text", e.x, e.y - 130, { text: "THE STANDARD BURNS OUT", size: 12, color: PAL.goldLight, max: 1.6, bold: true });
+        break;
+      case "standardHeal":
+        if (Math.random() < 0.5) fx.spawn("ring", e.x, e.y, { size: e.r * 1.4, color: rgba(DESERT.emberLight, 0.22), max: 0.8, width: 2 });
+        break;
+      case "embers":
+        fx.spawn("fire", e.x, e.y, { n: 10, spread: e.r * 0.8 });
+        fx.spawn("ring", e.x, e.y, { size: e.r * 1.8, color: rgba(DESERT.ember, 0.6), max: 0.6, width: 3 });
+        break;
+      case "emberfall":
+        fx.spawn("fire", e.x, e.y, { n: 22, spread: e.r * 0.9 });
+        fx.spawn("smoke", e.x, e.y - 10, { n: 6, size: 12 });
+        fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(DESERT.ember, 0.9), max: 0.7, width: 6 });
+        gateShake = Math.max(gateShake, 0.25);
+        break;
+      case "sunScorch":
+        fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(DESERT.emberLight, 0.7), max: 1.2, width: 5 });
+        fx.spawn("text", e.x, e.y - 130, { text: e.towers ? "THE TOWERS BURN" : "THE SUN ANSWERS", size: 13, color: DESERT.emberLight, max: 1.8, bold: true });
+        break;
+      case "spearDance":
+        fx.spawn("ring", e.x, e.y, { size: e.r * 1.2, color: rgba(DESERT.sandLight, 0.8), max: 0.5, width: 3 });
+        break;
+      case "danceBurst":
+        fx.spawn("dust", e.x, e.y + 2, { n: 16, spread: e.r * 0.7 });
+        fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(PAL.goldLight, 0.9), max: 0.7, width: 5 });
+        fx.spawn("spark", e.x, e.y - 24, { n: 14, color: PAL.goldLight });
+        gateShake = Math.max(gateShake, 0.18);
+        break;
       case "frostBurst":
         fx.spawn("ring", e.x, e.y, { size: e.r * 2, color: rgba(FROST.iceLight, 0.9), max: 0.55, width: 5 });
         fx.spawn("spark", e.x, e.y - 10, { n: 16, color: FROST.iceLight });
@@ -466,7 +567,7 @@ export function createRenderer() {
     if (!enemy && u.bracing && (u.state === "idle" || u.state === "fight")) return { anim: "brace", frame: 0 };
     if (u.state === "stun") return { anim: "stun", frame: Math.floor(u.animT * 6) };
     if (u.state === "wind") return { anim: "brace", frame: 0 };
-    if (u.state === "charge") return { anim: "charge", frame: Math.floor(u.animT * 14) };
+    if (u.state === "charge" || u.state === "dance") return { anim: "charge", frame: Math.floor(u.animT * 14) };
     if (u.state === "fight") {
       const atk = def.atk || (u.kind === "hero" ? HERO.atk : 1);
       const phase = Math.max(0, Math.min(0.999, 1 - u.atkCd / atk));
@@ -523,6 +624,14 @@ export function createRenderer() {
     } else if (e.type === "ram" || def.ram) {
       sp = ramSprite(e.state === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 8) : Math.floor(e.d / 14), e.state === "dead", def.scale || 1);
       if (e.state !== "dead" && Math.random() < 0.08) fx.spawn("dust", e.x - 30 * e.face, e.y + 4, { n: 1 });
+    } else if (def.engine && def.kingdom === "sun") {
+      const eg = def.engine;
+      let arm = 0;
+      if (e.windT > 0) arm = 0.1 * (1 - e.windT / eg.windup);
+      else if (e.stopped && e.reload > eg.reload - 0.7) arm = 1 - (eg.reload - e.reload) / 0.7;
+      sp = scorpionSprite(Math.floor(e.d / 14), Math.max(0, Math.min(1, arm)), e.state === "dead");
+      if (e.state !== "dead" && !e.stopped && Math.random() < 0.08) fx.spawn("dust", e.x - 36 * e.face, e.y + 4, { n: 1 });
+      if (e.state === "dead" && Math.random() < 0.5) fx.spawn("fire", e.x + (Math.random() - 0.5) * 50, e.y - 20, { n: 1, size: 5 });
     } else if (def.engine) {
       const eg = def.engine;
       let arm = 0;
@@ -531,6 +640,31 @@ export function createRenderer() {
       sp = catapultSprite(e.stopped ? 0 : Math.floor(e.d / 14), Math.round(Math.max(0, Math.min(1, arm)) * 6), e.state === "dead");
       if (e.state !== "dead" && !e.stopped && Math.random() < 0.08) fx.spawn("dust", e.x - 40 * e.face, e.y + 4, { n: 1 });
       if (e.state === "dead") { if (Math.random() < 0.5) fx.spawn("fire", e.x + (Math.random() - 0.5) * 60, e.y - 20, { n: 1, size: 5 }); if (Math.random() < 0.2) fx.spawn("smoke", e.x, e.y - 40, { n: 1, size: 8 }); }
+    } else if (def.burrow) {
+      /* Under the sand there is nothing to draw but the mound it pushes
+         ahead of it — which is the whole point: the player can see where
+         it is going and not one thing can touch it until it breaches. */
+      if (e.hidden) {
+        sp = moundSprite(Math.floor(e.animT * 8));
+        if (Math.random() < 0.5 * quality) fx.spawn("dust", e.x - e.face * 14, e.y + 3, { n: 1 });
+      } else {
+        const a = e.state === "dead" ? "dead" : e.state === "surface" ? "attack" : e.state === "fight" ? "attack" : e.state === "walk" ? "walk" : "idle";
+        const fr = a === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 6)
+          : a === "walk" ? Math.floor(e.animT * 6)
+            : a === "attack" ? Math.floor(Math.max(0, Math.min(0.999, 1 - e.atkCd / def.atk)) * 8) : Math.floor(e.animT * 4);
+        sp = wyrmSprite(a, fr);
+        if (e.state === "surface" && Math.random() < 0.8) fx.spawn("dust", e.x + (Math.random() - 0.5) * 40, e.y + 2, { n: 2 });
+      }
+    } else if (def.chariot) {
+      const a = e.state === "dead" ? "dead" : e.state === "charge" ? "charge" : e.state === "rear" ? "charge" : e.state === "walk" ? "walk" : "idle";
+      const fr = a === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 6) : Math.floor(e.animT * (a === "charge" ? 16 : 9));
+      sp = chariotSprite(a, fr);
+      if (e.state === "charge") fx.spawn("dust", e.x - e.face * 22, e.y + 3, { n: 2 });
+      else if (e.state === "walk" && Math.random() < 0.4) fx.spawn("dust", e.x - e.face * 20, e.y + 3, { n: 1 });
+    } else if (def.standardPole) {
+      sp = standardSprite(Math.floor(time * 6), e.state === "dead", e.hp / (e.maxHp || 1));
+      if (e.state !== "dead" && Math.random() < 0.5 * quality) fx.spawn("fire", e.x + (Math.random() - 0.5) * 16, e.y - 12, { n: 1, size: 4 });
+      if (e.state === "dead" && Math.random() < 0.3) fx.spawn("smoke", e.x, e.y - 30, { n: 1, size: 7 });
     } else if (def.beast) {
       const a = e.state === "dead" ? "dead" : e.state === "fight" ? "attack" : e.state === "walk" ? "walk" : "idle";
       const fr = a === "dead" ? Math.floor((1 - Math.max(0, e.deadT) / 1.5) * 6)
@@ -580,12 +714,13 @@ export function createRenderer() {
          warlord's red glow, or the two bosses read as the same fight. */
       const raged = e.boss.raged;
       const cold = !!def.frost;
-      const aura = cold ? (raged ? "#9fe4ff" : FROST.ice) : (raged ? "#ff4a2a" : PAL.redLight);
+      const sun = !!def.sun;
+      const aura = cold ? (raged ? "#9fe4ff" : FROST.ice) : sun ? (raged ? "#ffb02a" : DESERT.ember) : (raged ? "#ff4a2a" : PAL.redLight);
       const g = ctx.createRadialGradient(e.x, e.y + 2, 4, e.x, e.y + 2, raged ? 70 : 48);
       g.addColorStop(0, rgba(aura, (raged ? 0.45 : 0.25) + Math.sin(time * (raged ? 9 : 4)) * 0.08)); g.addColorStop(1, rgba(aura, 0));
       ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, raged ? 70 : 48, raged ? 30 : 20, 0, 0, Math.PI * 2); ctx.fill();
       if (cold && raged && Math.random() < 0.5) fx.spawn("spark", e.x + (Math.random() - 0.5) * 60, e.y - 20 - Math.random() * 40, { n: 1, color: FROST.iceLight });
-      if (e.boss.phase === 1 && !cold && e.state !== "dead") { ctx.strokeStyle = rgba("#cfd6e6", 0.45 + Math.sin(time * 3) * 0.15); ctx.lineWidth = 2; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 40, 17, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+      if (e.boss.phase === 1 && !cold && !sun && e.state !== "dead") { ctx.strokeStyle = rgba("#cfd6e6", 0.45 + Math.sin(time * 3) * 0.15); ctx.lineWidth = 2; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 40, 17, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
       /* the ice is down: the ground under him says so until it closes */
       if (cold && e.shell <= 0 && !raged && e.state !== "dead" && e.boss.shellT > 0) {
         const k = Math.max(0, Math.min(1, e.boss.shellT / (def.frost.shellBreak || 1)));
@@ -605,6 +740,13 @@ export function createRenderer() {
       }
       if (e.boss.roarT > 0 && e.state !== "dead") { const k = e.boss.roarT / 1.6; ctx.strokeStyle = rgba("#ff5a3c", 0.5 + Math.sin(time * 18) * 0.3); ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 70 * (1.4 - k), 30 * (1.4 - k), 0, 0, Math.PI * 2); ctx.stroke(); if (Math.random() < 0.6) fx.spawn("ember", e.x + (Math.random() - 0.5) * 50, e.y - 30, { n: 1 }); }
       if (raged && Math.random() < 0.4) fx.spawn("ember", e.x + (Math.random() - 0.5) * 30, e.y - 20, { n: 1 });
+      /* while the standard burns for him nothing lands: say so on the ground */
+      if (sun && e.state !== "dead" && standardUp) {
+        ctx.strokeStyle = rgba(DESERT.emberLight, 0.5 + Math.sin(time * 3) * 0.18); ctx.lineWidth = 2.4;
+        ctx.setLineDash([6, 8]);
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, 44, 19, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     cache.blit(ctx, sp, e.x, e.y + ay, flip);
     if (hitFlash && e.state !== "dead") {
@@ -683,7 +825,7 @@ export function createRenderer() {
       ctx.restore();
     }
     if (u.state === "walk" && u.chilled && Math.random() < 0.3) fx.spawn("spark", u.x - u.face * 8, u.y + 2, { n: 1, color: "#ffffff" });
-    if (u.chilled && u.state !== "dead") slowMark(ctx, u.x, u.y - (u.def && u.def.horse ? 76 : 52));
+    if ((u.chilled || u.sanded) && u.state !== "dead") slowMark(ctx, u.x, u.y - (u.def && u.def.horse ? 76 : 52));
     if (u.frozenT > 0 && u.state !== "dead") {
       /* held in the ice: a pale block and a rime outline */
       ctx.save();
@@ -726,7 +868,7 @@ export function createRenderer() {
     ctx.translate(p.x, p.y);
     ctx.scale(pop, pop);
     ctx.translate(-p.x, -p.y);
-    cache.blit(ctx, towerSprite(t.type, t.level, s.stage.season === "winter"), p.x, p.y);
+    cache.blit(ctx, towerSprite(t.type, t.level, s.stage.season === "winter", s.stage.season === "desert"), p.x, p.y);
     if (s.blizzT > 0 && t.buildT <= 0) {
       /* the crew is working in the storm: shooting slower, seeing less */
       const a = 0.55 + Math.sin(time * 3 + p.x * 0.03) * 0.2;
@@ -895,9 +1037,22 @@ export function createRenderer() {
     /* the outer siege wall, live so its damage shows */
     if (layout.outerWall) {
       const ratio = s.wallMax ? Math.max(0, s.wallHp) / s.wallMax : 1;
-      const key = `wall:${layout.name}:${ratio <= 0 ? 0 : ratio < 0.4 ? 1 : ratio < 0.75 ? 2 : 3}`;
-      const sp = cache.get(key, layout.w, 120, 0, 60, (c) => { c.translate(0, 0); const ow = layout.outerWall; const minY = Math.min(...ow.segments.flat().map((q) => q.y)); c.translate(0, -minY + 60); drawOuterWall(c, ow, ratio); });
-      const minY = Math.min(...layout.outerWall.segments.flat().map((q) => q.y));
+      const sand = s.stage.season === "desert";
+      const key = `wall:${layout.name}:${sand ? "sun" : "ash"}:${ratio <= 0 ? 0 : ratio < 0.4 ? 1 : ratio < 0.75 ? 2 : 3}`;
+      /* The sprite has to be as tall as the wall is. It used to be a flat
+         120-unit strip, which is fine for a wall lying across a portrait
+         map and cuts nine tenths off a wall standing down a landscape
+         one — the Siege of Ashford and the Cairnhold have both been
+         drawing a stub of their outer wall. */
+      const wallYs = layout.outerWall.segments.flat().map((q) => q.y);
+      const minY = Math.min(...wallYs);
+      const wallH = Math.max(...wallYs) - minY + 140;
+      const sp = cache.get(key, layout.w, wallH, 0, 70, (c) => {
+        const ow = layout.outerWall;
+        c.translate(0, -minY + 70);
+        if (sand) for (const [a, b] of ow.segments) drawSandstoneWall(c, a, b, ratio, ow.orient);
+        else drawOuterWall(c, ow, ratio);
+      });
       cache.blit(ctx, sp, 0, minY);
       if (ratio > 0 && ratio < 0.4 && Math.random() < 0.3 * quality) { const ow = layout.outerWall; const seg = ow.segments[Math.floor(Math.random() * ow.segments.length)]; const k = Math.random(); fx.spawn("smoke", seg[0].x + (seg[1].x - seg[0].x) * k, seg[0].y + (seg[1].y - seg[0].y) * k - 10, { n: 1, size: 5 }); }
     }
@@ -909,6 +1064,20 @@ export function createRenderer() {
     /* ground decorations: zones, particles, plots, ranges, markers */
     for (const z of s.zones) {
       const k = Math.min(1, z.t / 1);
+      if (z.frost && z.sand) {
+        /* blown sand hanging in the air: the same slowing ground the
+           Frost Arrow lays down, in the Reach's own colours */
+        ctx.fillStyle = rgba(DESERT.sandLight, 0.38 * k);
+        ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r, z.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = rgba(DESERT.sandDark, 0.55 * k); ctx.lineWidth = 1.6;
+        for (let i = 0; i < 4; i += 1) {
+          ctx.beginPath();
+          ctx.ellipse(z.x, z.y, z.r * (0.4 + i * 0.2), z.r * (0.22 + i * 0.11), 0.2 + i * 0.1, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if (Math.random() < 0.5 * quality) fx.spawn("dust", z.x + (Math.random() - 0.5) * z.r * 1.7, z.y + (Math.random() - 0.5) * z.r * 0.9, { n: 1 });
+        continue;
+      }
       if (z.frost) {
         /* iced ground: a pale sheet with rime cracks */
         ctx.fillStyle = rgba(FROST.ice, 0.34 * k);
@@ -921,6 +1090,14 @@ export function createRenderer() {
         ctx.strokeStyle = rgba(FROST.iceLight, 0.75 * k); ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r * 0.95, z.r * 0.52, 0, 0, Math.PI * 2); ctx.stroke();
         if (Math.random() < 0.25 * quality) fx.spawn("spark", z.x + (Math.random() - 0.5) * z.r * 1.6, z.y + (Math.random() - 0.5) * z.r * 0.9, { n: 1, color: FROST.iceLight });
+        continue;
+      }
+      if (z.ember) {
+        /* burning pitch on the ground: the Reach's fire burns your side,
+           so it has to read as a place to move a squad out of */
+        drawEmberGround(ctx, z.x, z.y, z.r, zoneFlicker, k);
+        if (Math.random() < 0.5 * quality) fx.spawn("fire", z.x + (Math.random() - 0.5) * z.r * 1.5, z.y + (Math.random() - 0.5) * z.r * 0.7, { n: 1, size: 5 });
+        if (Math.random() < 0.12) fx.spawn("smoke", z.x + (Math.random() - 0.5) * z.r, z.y - 6, { n: 1, size: 6 });
         continue;
       }
       const fl = 0.85 + Math.sin(zoneFlicker * 18 + z.x) * 0.15;
@@ -1001,6 +1178,14 @@ export function createRenderer() {
       } else if (m.kind === "howl" || m.kind === "blizzard") {
         ctx.strokeStyle = rgba(FROST.iceLight, (0.4 + k * 0.5) * pulse); ctx.lineWidth = 3;
         for (let r = 0; r < 3; r += 1) { const rr = 40 + ((time * 130 + r * 62) % 190); ctx.globalAlpha = 1 - rr / 230; ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, rr, rr * 0.5, 0, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+      } else if (m.kind === "ember") {
+        /* the Reach's warning is where the fire will fall, not where he
+           stands: the mark stays put even as he walks on */
+        drawSunScorch(ctx, m.x, m.y, m.r, time);
+      } else if (m.kind === "scorch") {
+        ctx.strokeStyle = rgba(DESERT.emberLight, (0.4 + k * 0.5) * pulse); ctx.lineWidth = 3;
+        for (let r = 0; r < 3; r += 1) { const rr = 60 + ((time * 150 + r * 90) % 280); ctx.globalAlpha = Math.max(0, 1 - rr / 320); ctx.beginPath(); ctx.ellipse(e.x, e.y + 2, rr, rr * 0.5, 0, 0, Math.PI * 2); ctx.stroke(); }
         ctx.globalAlpha = 1;
       } else if (m.kind === "sweep") {
         const g = ctx.createRadialGradient(e.x, e.y + 2, 6, e.x, e.y + 2, m.r);
@@ -1195,6 +1380,7 @@ export function createRenderer() {
     const dmg = castleDamageState(s.castleHp, s.castleMax);
     items.push({ y: castle.y + castle.h - 2, fn: () => drawCastleLive(ctx, s, castle, dmg) });
     if (!opts.menu) {
+      standardUp = s.enemies.some((o) => o.def.standardPole && o.state !== "dead" && !o.routed);
       for (const e of s.enemies) if (!outro || (e.state === "dead" && !e.routed)) items.push({ y: e.y + (e.state === "dead" ? -30 : 0), fn: () => drawEnemy(ctx, e) });
       for (const u of s.units) if (u.state !== "respawn") items.push({ y: u.y + (u.state === "dead" ? -30 : 0), fn: () => drawUnit(ctx, u) });
       if (s.hero.state !== "respawn") items.push({ y: s.hero.y + (s.hero.state === "dead" ? -30 : 0), fn: () => drawUnit(ctx, s.hero) });
@@ -1346,7 +1532,7 @@ export function createRenderer() {
   }
 
   function drawCastleLive(ctx, s, castle, dmg) {
-    const sp = castleSprite(castle, dmg, s && s.stage && s.stage.season === "winter");
+    const sp = castleSprite(castle, dmg, s && s.stage && s.stage.season === "winter", s && s.stage && s.stage.season === "desert");
     cache.blit(ctx, sp, castle.x, castle.y);
     castleFlags(castle).forEach((f, i) => drawFlag(ctx, castle.x + f.x, castle.y + f.y, f.h, f.size, f.color, f.trim, i * 1.3));
     if (outro && outro.banners > 0) {

@@ -198,7 +198,7 @@ export function totalStars(save) {
 
 /* Kingdoms open in order: Ashford from the start, and each one after it
    when the kingdom before it has been completed. */
-export const KINGDOM_ORDER = ["ashford", "frost"];
+export const KINGDOM_ORDER = ["ashford", "frost", "sun"];
 
 export function isKingdomUnlocked(save, kingdomId) {
   const i = KINGDOM_ORDER.indexOf(kingdomId);
@@ -206,9 +206,15 @@ export function isKingdomUnlocked(save, kingdomId) {
   return (save.campaignsDone || []).includes(KINGDOM_ORDER[i - 1]);
 }
 
-/* New Game+ opens once every realm in the campaign has been held. */
+/* New Game+ opens once Ashford and the north are both held. It is
+   deliberately NOT "every kingdom in KINGDOM_ORDER": a player who earned
+   New Game+ before the Sunspear Reach existed would have had it taken
+   back off them the day the Reach shipped. Champion of the Realms still
+   asks for every stage there is, so new kingdoms raise that bar instead. */
+export const NGPLUS_REALMS = ["ashford", "frost"];
+
 export function isNewGamePlusUnlocked(save) {
-  return KINGDOM_ORDER.every((id) => (save.campaignsDone || []).includes(id));
+  return NGPLUS_REALMS.every((id) => (save.campaignsDone || []).includes(id));
 }
 
 export function stagesOf(stages, kingdomId) {

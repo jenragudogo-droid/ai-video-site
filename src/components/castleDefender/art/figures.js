@@ -65,10 +65,15 @@ export const FIGURES = {
      silver trim, and she stands a head taller. */
   elara: { body: "leather", bodyColor: "#2f5f6e", trim: "#d8e6ef", helmet: "hood", hood: "#20444f", shield: "none", weapon: "bow", quiver: true, cape: "#e8f1f7", legs: "#33424e", boots: "#2a2118", scale: 1.14, h: 66 },
 
-  /* The Sunspear Reach (teaser only, drawn as silhouettes) */
+  /* The Sunspear Reach */
   duneRaider: { body: "leather", bodyColor: "#a8804a", trim: "#e8c25a", helmet: "hood", hood: "#8c5a2c", shield: "buckler", shieldColor: "#8c2f2a", boss: "#e8c25a", weapon: "spear", cape: "#c98a4a", legs: "#6a4a28", boots: "#4a2f18", enemy: true, h: 58 },
   sunGuard: { body: "plate", bodyColor: "#c9973f", trim: "#f0d9a8", tabard: "#8c2f2a", tabardTrim: "#e8c25a", helmet: "greatHelm", helmetColor: "#a8814c", plume: "#8c2f2a", shield: "tall", shieldColor: "#c9973f", emblem: "boss", emblemColor: "#f0d9a8", weapon: "spear", legs: "#8a6a38", boots: "#4a2f18", enemy: true, scale: 1.08, h: 64 },
   kesi: { body: "leather", bodyColor: "#c98a4a", trim: "#e8c25a", helmet: "none", hairColor: "#2a1c14", shield: "none", weapon: "spear", cape: "#8c2f2a", legs: "#8a6a38", boots: "#4a2f18", scale: 1.04, h: 58 },
+  duneArcher: { body: "leather", bodyColor: "#b08a52", trim: "#e8c25a", helmet: "hood", hood: "#7c4c24", shield: "none", weapon: "bow", quiver: true, legs: "#6a4a28", boots: "#4a2f18", enemy: true, h: 58 },
+  /* the pot on his hip is the tell: hooded, aproned and carrying fire */
+  emberThrower: { body: "leather", bodyColor: "#8c5a2c", trim: "#ff9a3c", helmet: "hood", hood: "#5c3418", shield: "none", weapon: "hammer", fire: true, apron: true, legs: "#5a3a1c", boots: "#3a2410", enemy: true, h: 59 },
+  spearWarden: { body: "plate", bodyColor: "#c9973f", trim: "#f6e3b4", tabard: "#7a2420", tabardTrim: "#e8c25a", helmet: "greatHelm", helmetColor: "#8a6a38", plume: "#e8c25a", shield: "round", shieldColor: "#8c2f2a", boss: "#f0d9a8", weapon: "spear", cape: "#7a2420", legs: "#8a6a38", boots: "#4a2f18", enemy: true, scale: 1.1, h: 66, banner: true },
+  sunTyrant: { body: "plate", bodyColor: "#d0a044", trim: "#ffe9b0", tabard: "#6e1f1c", tabardTrim: "#ffcf6a", helmet: "greatHelm", helmetColor: "#a8814c", plume: "#ff8a2a", horns: true, shield: "none", weapon: "greataxe", cape: "#6e1f1c", legs: "#9a7432", boots: "#4a2f18", scale: 1.3, h: 88 },
 
   /* the rest of the northern host */
   frostArcher: { body: "leather", bodyColor: "#4a5568", trim: "#9fc4d8", helmet: "hood", hood: "#39424f", shield: "none", weapon: "bow", quiver: true, legs: "#333b47", boots: "#20252e", enemy: true, h: 58 },

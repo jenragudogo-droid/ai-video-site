@@ -278,6 +278,10 @@ function unitSpeed(u, s) {
        The full penalty on friendly units made the Cairnhold's landscape
        map measurably harder than its portrait one. */
     terrain = 1 - (1 - ts) * 0.5;
+    /* loose sand takes its whole bite out of your side and none out of
+       theirs: the stage tips say so, and the renderer marks who is wading */
+    const sand = sandSlow(s, u.x, u.y);
+    if (sand < 1) { u.sanded = true; terrain *= sand; } else u.sanded = false;
   }
   return (u.kind === "hero" ? (u.def.speed || HERO.speed) : u.def.speed) * (f ? f.speed : 1) * lance * terrain;
 }
@@ -364,8 +368,11 @@ export function spawnEnemy(s, type, route, lat) {
     stopped: false, reload: def.engine ? 3.5 : 0, windT: 0, aim: null,
     docked: false, unloadT: 0, unloaded: 0, wallHit: false, repairT: 0,
     boss: def.phases ? { phase: 1, sweepCd: def.phases.sweep.cd * 0.5, hornCd: def.phases.horn.cd * 0.6, windT: 0, windKind: null, raged: false, openT: 0, roarT: 0 }
-      : def.frost ? { phase: 1, novaCd: def.frost.nova.cd * 0.5, howlCd: def.frost.howl.cd * 0.5, blizzCd: def.frost.blizzard.cd * 0.7, windT: 0, windKind: null, raged: false, shellT: 0 } : null,
+      : def.frost ? { phase: 1, novaCd: def.frost.nova.cd * 0.5, howlCd: def.frost.howl.cd * 0.5, blizzCd: def.frost.blizzard.cd * 0.7, windT: 0, windKind: null, raged: false, shellT: 0 }
+        : def.sun ? { phase: 1, emberCd: def.sun.emberfall.cd * 0.6, scorchCd: def.sun.scorch.cd * 0.7, windT: 0, windKind: null, raged: false, patience: 0, planted: false, replantCd: 0 } : null,
     shell: def.frost ? def.frost.shell : 0, shellMax: def.frost ? def.frost.shell : 0,
+    /* a wyrm starts above the sand and goes under once it is moving */
+    under: false, burrowT: def.burrow ? def.burrow.first : 0, hidden: false, surfaceT: 0,
   };
   syncEnemyPos(s, e);
   s.enemies.push(e);
@@ -446,14 +453,43 @@ export function terrainSlow(s, x, y) {
   return Math.max(0.35, worst);
 }
 
+/* Loose sand is the Reach's answer to the northern drift, and it works
+   the other way round: the Reach's own troops were born on it and cross
+   it at full stride, while your soldiers wade. It is why the stone road
+   is worth holding and why chasing a raider into the dunes is a mistake. */
+export function inSand(s, x, y) {
+  for (const z of s.layout.sands || []) if (dist2(x, y, z.x, z.y) < z.r * z.r) return true;
+  return false;
+}
+
+export function sandSlow(s, x, y) {
+  let worst = 1;
+  for (const z of s.layout.sands || []) {
+    if (dist2(x, y, z.x, z.y) < z.r * z.r) worst = Math.min(worst, 1 - (z.slow || 0.45));
+  }
+  return Math.max(0.5, worst);
+}
+
 function inNarrow(s, x, y) {
   for (const z of s.layout.narrow) if (dist2(x, y, z.x, z.y) < z.r * z.r) return true;
   return false;
 }
 
+/* Sarkaan's standard is the only thing between him and you: while it
+   burns he cannot be touched, and he plants it again when he can. */
+export function standardAlive(s) {
+  return s.enemies.some((o) => o.def.standardPole && o.state !== "dead" && !o.routed);
+}
+
 export function damageEnemy(s, e, amount, dtype, opts = {}) {
   if (e.state === "dead") return 0;
-  if (e.boss && e.boss.phase === 1 && !e.def.frost) {
+  if (e.hidden) return 0;                                            // nothing reaches a wyrm under the sand
+  if (e.def.sun) {
+    if (standardAlive(s)) {
+      if (s.t - (e.guardedT || -9) > 1.2) { e.guardedT = s.t; s.events.push({ type: "guarded", x: e.x, y: e.y, standard: true }); }
+      return 0;
+    }
+  } else if (e.boss && e.boss.phase === 1 && !e.def.frost) {
     /* Blackmoor waits behind his guard, and nothing reaches him yet.
        Vorne has no guard: his phase one *is* the ice below, so the blow
        has to land on the shell or the whole mechanic is inert. */
@@ -572,6 +608,8 @@ function stepEnemy(s, e, dt) {
   const blocker = e.blockers.length ? getUnit(s, e.blockers[0]) : null;
   const engaged = blocker && dist2(blocker.x, blocker.y, e.x, e.y) < (ENGAGE_DIST + 26) ** 2;
 
+  if (def.burrow && stepBurrow(s, e, dt, route)) return;
+
   if (def.kind === "cavalry" && def.charge) {
     if (stepCharge(s, e, dt, route)) return;
   }
@@ -593,6 +631,7 @@ function stepEnemy(s, e, dt) {
   if (def.engineer) stepEngineer(s, e, dt);
   if (e.boss && def.phases && stepWarlord(s, e, dt)) return;
   if (e.boss && def.frost && stepVorne(s, e, dt)) return;
+  if (e.boss && def.sun && stepSarkaan(s, e, dt)) return;
 
   if (engaged && def.kind !== "ranged") {
     e.state = "fight";
@@ -634,7 +673,7 @@ function stepEnemy(s, e, dt) {
       if (e.atkCd <= 0) {
         e.atkCd = def.atk;
         e.attackT = 0.4;
-        s.projectiles.push({ id: s.nextId++, kind: "enemyArrow", fire: true, x: e.x, y: e.y - 30, sx: e.x, sy: e.y - 30, targetKind: "tower", plot, tx: p.x + (s.rng() - 0.5) * 16, ty: p.y - 46, speed: ENEMY_ARROW_SPEED, t: 0, dur: Math.max(0.35, Math.sqrt(bd) / ENEMY_ARROW_SPEED), dmg: 0, dtype: "fire", arc: 40, burn: def.burns });
+        s.projectiles.push({ id: s.nextId++, kind: "enemyArrow", fire: true, x: e.x, y: e.y - 30, sx: e.x, sy: e.y - 30, targetKind: "tower", plot, tx: p.x + (s.rng() - 0.5) * 16, ty: p.y - 46, speed: ENEMY_ARROW_SPEED, t: 0, dur: Math.max(0.35, Math.sqrt(bd) / ENEMY_ARROW_SPEED), dmg: 0, dtype: "fire", arc: 40, burn: def.burns, embers: def.embers || null });
         s.events.push({ type: "enemyShoot", x: e.x, y: e.y, fire: true });
       }
       return;
@@ -666,7 +705,8 @@ function stepEnemy(s, e, dt) {
         s.projectiles.push({
           id: s.nextId++, kind: "enemyArrow", x: e.x, y: e.y - 30, sx: e.x, sy: e.y - 30,
           targetId: tgt.id, targetKind: "unit", speed: ENEMY_ARROW_SPEED, t: 0, dur: 0.5,
-          dmg, dtype: def.pierce ? "pierce" : "arrow", arc: 24,
+          dmg, dtype: def.embers ? "fire" : def.pierce ? "pierce" : "arrow", arc: def.embers ? 40 : 24,
+          fire: !!def.embers, embers: def.embers || null,
         });
         s.events.push({ type: "enemyShoot", x: e.x, y: e.y });
       }
@@ -686,6 +726,57 @@ function stepEnemy(s, e, dt) {
   e.d += speed * dt;
   syncEnemyPos(s, e);
   if (e.d >= route.length) reachGate(s, e);
+}
+
+/* Burning ground: the Reach's fire pots leave a patch alight where they
+   land, and it burns whoever is standing in it — which is your side, so
+   a squad left on it dies where it stands. */
+export function emberGround(s, x, y, em) {
+  s.zones.push({ id: s.nextId++, x, y, r: em.radius, t: em.dur, dps: em.dps, tick: 0, ember: true });
+  s.events.push({ type: "embers", x, y, r: em.radius });
+}
+
+/* ------------------------------ the wyrms ------------------------------ */
+
+/* A sand wyrm spends most of the road underneath it: while it is down
+   nothing can hit it and nothing can hold it, and it travels faster
+   than it can crawl. It has to breach to breathe and to strike, and
+   that window is the whole answer to it — which is why the mound is
+   drawn on the surface the entire time it is down. Returns true when
+   the burrow consumed the step. */
+function stepBurrow(s, e, dt, route) {
+  const bu = e.def.burrow;
+  e.burrowT -= dt;
+  if (e.surfaceT > 0) {
+    /* the breach itself: half a second of coming up, and it can be hit */
+    e.surfaceT -= dt;
+    e.state = "surface";
+    return true;
+  }
+  if (e.under) {
+    e.hidden = true;
+    e.blockers.forEach((id) => { const u = getUnit(s, id); if (u) u.target = null; });
+    e.blockers = [];
+    e.state = "burrow";
+    e.d += e.def.speed * bu.speedMul * dt;
+    syncEnemyPos(s, e);
+    if (e.d >= route.length) { e.under = false; e.hidden = false; reachGate(s, e); return true; }
+    if (e.burrowT <= 0) {
+      e.under = false; e.hidden = false;
+      e.burrowT = bu.up;
+      e.surfaceT = 0.55;
+      s.events.push({ type: "wyrmSurface", x: e.x, y: e.y, id: e.id });
+    }
+    return true;
+  }
+  if (e.burrowT <= 0 && !e.blockers.length && e.stun <= 0) {
+    e.under = true;
+    e.hidden = true;
+    e.burrowT = bu.under;
+    s.events.push({ type: "wyrmDive", x: e.x, y: e.y, id: e.id });
+    return true;
+  }
+  return false;
 }
 
 /* ------------------------------ siege engines ------------------------------ */
@@ -1052,6 +1143,181 @@ function stepVorne(s, e, dt) {
   return false;
 }
 
+/* ------------------------------ the Sun-Tyrant ------------------------------ */
+
+/* Sarkaan is neither Blackmoor's bodyguard nor Vorne's shell. He drives
+   the Sunspear standard into the sand and stands behind it: while it
+   burns nothing touches him and his whole host mends, and he sets it
+   again about every half minute until he is desperate. So the fight has
+   a rhythm — break the standard, spend the window on him, brace for the
+   next one — and he spends that window burning the ground you are
+   standing on and the towers you are holding it with. */
+function plantStandard(s, e) {
+  const sn = e.def.sun.standard;
+  const n = spawnEnemy(s, "sunStandard", e.route, e.lat + (s.rng() - 0.5) * 16);
+  n.d = Math.max(20, e.d - 16);
+  n.healFor = { radius: sn.radius, heal: sn.heal };
+  n.maxHp = Math.round(sn.hp * s.diff.hp);
+  n.hp = n.maxHp;
+  syncEnemyPos(s, n);
+  s.events.push({ type: "standardPlant", x: n.x, y: n.y, id: n.id });
+  return n;
+}
+
+function stepSarkaan(s, e, dt) {
+  const sn = e.def.sun;
+  const b = e.boss;
+  const route = s.layout.routes[e.route] || s.layout.routes[0];
+  const guarded = standardAlive(s);
+
+  /* The standard is a clock, not a wall. It burns down on its own after
+     `burnout` seconds whether or not anybody reached it, so there is
+     always a window on him and the fight can never stall — an early
+     version planted it at the road entrance where no tower could reach,
+     and the battle simply stopped. */
+  if (guarded) {
+    b.guardT = (b.guardT || 0) + dt;
+    if (b.guardT > sn.standard.burnout) {
+      for (const o of s.enemies) if (o.def.standardPole && o.state !== "dead") damageEnemy(s, o, o.hp + 1, "fire");
+      s.events.push({ type: "standardBurns", x: e.x, y: e.y });
+      b.guardT = 0;
+      b.replantCd = sn.standard.replant;
+    }
+  } else {
+    b.guardT = 0;
+    if (b.phase === 1 && b.planted) {
+      b.phase = 2; s.bossPhase = 2;
+      b.replantCd = sn.standard.replant;
+      s.events.push({ type: "bossPhase", phase: 2, x: e.x, y: e.y, boss: "sarkaan" });
+    } else if (!b.raged) {
+      b.replantCd -= dt;
+      /* never within reach of the gate: a tyrant replanting on the
+         doorstep was untouchable and still battering it down */
+      const toGate = route.length - e.d;
+      const far = e.d >= route.length * (sn.standard.plantAt || 0.5);
+      if (b.replantCd <= 0 && far && !e.atGate && toGate > (sn.standard.noPlantWithin || 0)) {
+        plantStandard(s, e);
+        b.planted = true;
+        b.replantCd = sn.standard.replant;
+        return true;
+      }
+    }
+  }
+  if (b.phase === 1) {
+    b.patience += dt;
+    if (b.patience > sn.patience) {
+      b.phase = 2; s.bossPhase = 2;
+      s.events.push({ type: "bossPhase", phase: 2, x: e.x, y: e.y, boss: "sarkaan" });
+    }
+  }
+
+  if (!e.atGate && e.d >= route.length - 40) e.atGate = true;
+  if (e.atGate) {
+    if (e.d > route.length - 36) { e.d = route.length - 36; syncEnemyPos(s, e); }
+    e.gateT = (e.gateT ?? 1) - dt;
+    if (e.gateT <= 0) {
+      e.gateT = b.raged ? 2 : 3;
+      const dmg = 3;
+      s.castleHp = Math.max(0, s.castleHp - dmg);
+      s.stats.gateHits += 1; s.stats.damageTaken += dmg; s.lastGateHit = s.t;
+      e.attackT = 0.35;
+      s.events.push({ type: "gateHit", x: e.x, y: e.y, dmg, enemy: e.type, siege: true });
+      gateCheck(s);
+      if (s.castleHp <= 0 && s.phase === "playing") { s.phase = "defeat"; s.events.push({ type: "defeat" }); return true; }
+    }
+  }
+
+  /* the last phase: no more standards, and the whole Reach comes with him */
+  if (!b.raged && e.hp <= e.maxHp * sn.rage.at) {
+    b.raged = true; b.phase = 3; s.bossPhase = 3;
+    b.windT = 0; b.windKind = null;
+    for (const o of s.enemies) if (o.def.standardPole && o.state !== "dead") damageEnemy(s, o, o.hp + 1, "fire");
+    s.events.push({ type: "bossPhase", phase: 3, x: e.x, y: e.y, boss: "sarkaan" });
+    for (const [type, r] of sn.rage.push) {
+      const ri = Math.min(r, s.layout.routes.length - 1);
+      const n = spawnEnemy(s, type, ri, (s.rng() - 0.5) * 24);
+      n.d = s.rng() * 40; syncEnemyPos(s, n);
+    }
+  }
+
+  if (b.windT > 0) {
+    b.windT -= dt;
+    e.state = "wind";
+    if (b.windT <= 0) {
+      if (b.windKind === "ember") {
+        const ef = sn.emberfall;
+        const at = b.windAt || { x: e.x, y: e.y };
+        for (const u of s.units.concat([s.hero])) {
+          if (!alive(u) || dist2(u.x, u.y, at.x, at.y) > ef.radius * ef.radius) continue;
+          damageUnit(s, u, ef.dmg, "fire", e);
+        }
+        s.zones.push({ id: s.nextId++, x: at.x, y: at.y, r: ef.burn.radius, t: ef.burn.dur, dps: ef.burn.dps, tick: 0, ember: true });
+        s.events.push({ type: "emberfall", x: at.x, y: at.y, r: ef.radius });
+      } else {
+        const sc = sn.scorch;
+        let lit = 0;
+        s.towers.forEach((t, i) => {
+          if (!t || t.type === "barracks" || t.buildT > 0) return;
+          const p = s.layout.plots[i];
+          if (dist2(p.x, p.y, e.x, e.y) > sc.radius * sc.radius) return;
+          t.burnT = Math.max(t.burnT || 0, sc.burn); t.burnSlow = 0.45; lit += 1;
+          s.events.push({ type: "towerBurn", plot: i, x: p.x, y: p.y + 10 });
+        });
+        for (const o of s.enemies) if (o !== e && o.state !== "dead") { o.buffT = sc.dur; o.buffArmour = sc.armour; o.buffSpeed = sc.speed; }
+        s.events.push({ type: "sunScorch", x: e.x, y: e.y, r: sc.radius, towers: lit });
+      }
+      b.windKind = null; b.windAt = null;
+    }
+    return true;
+  }
+
+  b.emberCd -= dt; b.scorchCd -= dt;
+  const ef = sn.emberfall;
+  if (b.emberCd <= 0) {
+    /* he throws it where your people are standing, not where he is */
+    let at = null; let bd = 420 * 420;
+    for (const u of s.units.concat([s.hero])) {
+      if (!alive(u)) continue;
+      const d = dist2(u.x, u.y, e.x, e.y);
+      if (d < bd) { bd = d; at = { x: u.x, y: u.y }; }
+    }
+    if (at) {
+      b.emberCd = b.raged ? sn.rage.emberCd : ef.cd;
+      b.windT = ef.windup; b.windKind = "ember"; b.windAt = at;
+      s.events.push({ type: "bossWind", kind: "ember", x: at.x, y: at.y, r: ef.radius, dur: ef.windup, id: e.id });
+      return true;
+    }
+  }
+  if (b.scorchCd <= 0) {
+    b.scorchCd = sn.scorch.cd;
+    b.windT = sn.scorch.windup; b.windKind = "scorch";
+    s.events.push({ type: "bossWind", kind: "scorch", x: e.x, y: e.y, r: sn.scorch.radius, dur: sn.scorch.windup, id: e.id });
+    return true;
+  }
+
+  if (b.raged && e.atkCd > 0) e.atkCd -= dt * (sn.rage.atkMul - 1);
+  /* he fights whatever has hold of him, and otherwise keeps walking */
+  const blocker = e.blockers.length ? getUnit(s, e.blockers[0]) : null;
+  if (blocker && alive(blocker) && !e.atGate) {
+    e.face = blocker.x < e.x ? -1 : 1; e.atkCd -= dt;
+    if (e.atkCd <= 0) { e.atkCd = e.def.atk; e.attackT = 0.35; damageUnit(s, blocker, e.def.dmg[0] + s.rng() * (e.def.dmg[1] - e.def.dmg[0]), "blade", e); s.events.push({ type: "swing", x: e.x, y: e.y, enemy: true }); }
+    e.state = "fight";
+    return true;
+  }
+  if (!e.atGate) {
+    /* He stands with the standard rather than walking behind it, so the
+       fight has a shape: he holds, you break it, he comes on, he sets
+       another. The burnout above is what makes standing safe to allow —
+       a standard nobody can reach still dies on its own clock. */
+    if (guarded && !b.raged) { e.state = "idle"; return true; }
+    e.state = "walk";
+    e.d += (b.raged ? sn.rage.speed : e.def.speed) * terrainSlow(s, e.x, e.y) * dt;
+    syncEnemyPos(s, e);
+    return true;
+  }
+  return false;
+}
+
 /* ------------------------------ the blizzard ------------------------------ */
 
 export function startBlizzard(s, dur, src) {
@@ -1173,6 +1439,25 @@ function endCharge(s, e, broken) {
 /* the commander's banner: nearby cavalry ride harder and shrug off more */
 function stepAuras(s, dt) {
   for (const e of s.enemies) if (e.buffT > 0) e.buffT -= dt;
+  /* the Reach's standards mend what you hurt. A Warden carries his own;
+     Sarkaan drives his into the sand and hides behind it. */
+  for (const c of s.enemies) {
+    const st = c.def.standard || (c.def.standardPole && c.healFor);
+    if (!st || c.state === "dead" || c.routed || c.hidden) continue;
+    c.healT = (c.healT || 0) - dt;
+    if (c.healT > 0) continue;
+    c.healT = 1;
+    const r2 = st.radius ** 2;
+    let mended = 0;
+    for (const e of s.enemies) {
+      if (e.state === "dead" || e.routed || e.hp >= e.maxHp) continue;
+      if (e.def.standardPole) continue;                    // a standard does not mend itself
+      if (dist2(e.x, e.y, c.x, c.y) > r2) continue;
+      e.hp = Math.min(e.maxHp, e.hp + st.heal);
+      mended += 1;
+    }
+    if (mended) s.events.push({ type: "standardHeal", x: c.x, y: c.y, r: st.radius, n: mended });
+  }
   for (const c of s.enemies) {
     if (c.state === "dead" || !c.def.aura) continue;
     const r2 = c.def.aura.radius ** 2;
@@ -1214,7 +1499,7 @@ function findEngagement(s, u, cx, cy, radius) {
   let best = null;
   let bd = radius * radius;
   for (const e of s.enemies) {
-    if (e.state === "dead" || e.routed) continue;
+    if (e.state === "dead" || e.routed || e.hidden) continue;
     if (e.freeT > 0) continue;
     const limit = e.def.kind === "siege" ? 3 : 2;
     if (e.blockers.length >= limit && !e.blockers.includes(u.id)) continue;
@@ -1428,6 +1713,40 @@ function stepHero(s, h, dt) {
   h.animT += dt;
   if (h.hitT > 0) h.hitT -= dt;
 
+  /* the Spear Dance: a short run to the marked spot and one spin there */
+  if (h.dance) {
+    const dn = h.dance;
+    const dx = dn.x - h.x; const dy = dn.y - h.y;
+    const l = Math.hypot(dx, dy);
+    const step = 760 * dt;
+    h.state = "dance";
+    if (l > step) { h.x += (dx / l) * step; h.y += (dy / l) * step; dn.t -= dt; if (dn.t > 0) return; }
+    else { h.x = dn.x; h.y = dn.y; }
+    for (const e of s.enemies) {
+      if (e.state === "dead" || e.hidden) continue;
+      if (dist2(e.x, e.y, h.x, h.y) > dn.radius * dn.radius) continue;
+      const counter = e.def.charge && (e.charging || e.chargeT > 0);
+      damageEnemy(s, e, dn.dmg * (counter ? 1.5 : 1), "charge", { src: h });
+      if (counter && e.state !== "dead") { endCharge(s, e, true); e.stun = 1.5; s.events.push({ type: "chargeBroken", x: e.x, y: e.y, by: "hero", enemy: e.type }); }
+      if (e.state !== "dead" && e.def.kind !== "siege" && !(e.boss && e.boss.phase === 1)) {
+        e.stun = Math.max(e.stun, HD.ability.stun);
+        e.d = Math.max(0, e.d - HD.ability.kb);
+        e.blockers = [];
+        syncEnemyPos(s, e);
+      }
+      s.events.push({ type: "chargeHit", x: e.x, y: e.y, king: false });
+    }
+    /* Sandstorm Dance leaves the ring blinding: the same slowing ground
+       the Frost Arrow lays down, in the Reach's own colours */
+    if (dn.sand) s.zones.push({ id: s.nextId++, x: h.x, y: h.y, r: dn.radius * 0.95, t: dn.sand.dur, dps: 0, tick: 0, frost: true, sand: true, slow: dn.sand.slow });
+    s.events.push({ type: "danceBurst", x: h.x, y: h.y, r: dn.radius });
+    h.dance = null;
+    h.post = { x: h.x, y: h.y };
+    h.moveTarget = null;
+    h.state = "idle";
+    return;
+  }
+
   if (h.charge) {
     const c = h.charge;
     const step = Math.min(c.left, 900 * dt);
@@ -1519,7 +1838,7 @@ function towerTarget(s, plotIdx, lvl) {
   const r2 = range * range;
   const min2 = (lvl.minRange || 0) ** 2;
   for (const e of s.enemies) {
-    if (e.state === "dead") continue;
+    if (e.state === "dead" || e.hidden) continue;        // a buried wyrm is not a target
     const d = dist2(e.x, e.y, p.x, p.y);
     if (d > r2 || d < min2) continue;
     if (e.progress > bp) { bp = e.progress; best = e; }
@@ -1678,6 +1997,7 @@ function stepProjectile(s, pr, dt) {
       const t = s.towers[pr.plot];
       if (t) { t.burnT = Math.max(t.burnT || 0, pr.burn.dur); t.burnSlow = pr.burn.slow; s.events.push({ type: "towerBurn", plot: pr.plot, x: pr.tx, y: pr.ty + 46 }); }
       else s.events.push({ type: "miss", x: pr.tx, y: pr.ty + 46, kind: pr.kind });
+      if (pr.embers) emberGround(s, pr.tx, pr.ty + 30, pr.embers);
     }
     return;
   }
@@ -1695,6 +2015,7 @@ function stepProjectile(s, pr, dt) {
   pr.dx /= l; pr.dy /= l;
   if (pr.t >= 1) {
     pr.done = true;
+    if (pr.embers) emberGround(s, pr.tx, pr.ty + 18, pr.embers);
     if (!tgtAlive) { s.events.push({ type: "miss", x: pr.tx, y: pr.ty, kind: pr.kind }); return; }
     if (pr.targetKind === "enemy") {
       if (pr.kind === "bolt") {
@@ -1713,7 +2034,7 @@ function stepProjectile(s, pr, dt) {
 function areaDamage(s, x, y, r, dmg, dtype) {
   let n = 0;
   for (const e of s.enemies) {
-    if (e.state === "dead") continue;
+    if (e.state === "dead" || e.hidden) continue;
     const d = dist2(e.x, e.y, x, y);
     if (d <= r * r) {
       const fall = 1 - 0.4 * Math.sqrt(d) / r;
@@ -2058,7 +2379,15 @@ export function stepGame(s, dt) {
     z.tick -= dt;
     if (z.tick <= 0) {
       z.tick = 0.25;
-      areaDamage(s, z.x, z.y, z.r, z.dps * 0.25, "fire");
+      /* burning pitch does not care whose ground it is, but the Reach
+         throws it at you: an ember patch burns your soldiers where oil
+         burns theirs, so a squad that stands in one dies standing */
+      if (z.ember) {
+        for (const u of s.units.concat([s.hero])) {
+          if (!alive(u) || dist2(u.x, u.y, z.x, z.y) > z.r * z.r) continue;
+          damageUnit(s, u, z.dps * 0.25, "fire", null);
+        }
+      } else areaDamage(s, z.x, z.y, z.r, z.dps * 0.25, "fire");
     }
   }
 
@@ -2289,6 +2618,26 @@ export function heroCharge(s, x, y) {
   const h = s.hero;
   const HD = s.heroDef || HERO;
   if (!alive(h) || h.charge || h.chargeCd > 0 || s.phase !== "playing") return false;
+  /* Kesi's Spear Dance: she runs to the tap and spins there. The run is
+     the charge machinery with no damage on the way through — everything
+     happens where she lands, so it clears a crowd off the gate rather
+     than punching a line through it. */
+  if (HD.ability && HD.ability.kind === "whirl") {
+    const ab = HD.ability;
+    let dx = x - h.x; let dy = y - h.y;
+    const l = Math.hypot(dx, dy) || 1;
+    if (l > ab.dist) { const k = ab.dist / l; dx *= k; dy *= k; }
+    const st = heroStatsFor(s, h.level);
+    const up = heroUpgrade(s);
+    const tx = clamp(h.x + dx, 20, s.layout.w - 20);
+    const ty = clamp(h.y + dy, 20, s.layout.h - 20);
+    h.dance = { x: tx, y: ty, t: 0.34, radius: ab.radius * (up ? up.radiusMul : 1), dmg: st.chargeDmg * (up ? up.dmgMul : 1), sand: up ? { slow: up.slow, dur: up.dur } : null };
+    h.moveTarget = null; h.target = null;
+    h.chargeCd = st.chargeCd;
+    h.face = dx < 0 ? -1 : 1;
+    s.events.push({ type: "spearDance", x: tx, y: ty, r: h.dance.radius, upgraded: !!up });
+    return true;
+  }
   if (HD.ability && HD.ability.kind === "frostArrow") {
     const ab = HD.ability;
     let dx = x - h.x; let dy = y - h.y;
@@ -2532,16 +2881,19 @@ export function serializeGame(s) {
     enemies: s.enemies.filter((e) => e.state !== "dead").map((e) => ({
       type: e.type, route: e.route, d: Math.round(e.d * 10) / 10, lat: e.lat, hp: Math.round(e.hp), maxHp: e.maxHp, chargeCd: Math.max(0, e.chargeCd || 0), stun: e.stun || 0,
       stopped: !!e.stopped, reload: e.reload || 0, shots: e.shots || 0, docked: !!e.docked, unloaded: e.unloaded || 0, unloadT: e.unloadT || 0, wallHit: !!e.wallHit,
+      under: !!e.under, hidden: !!e.hidden, burrowT: e.burrowT || 0, surfaceT: e.surfaceT || 0,
+      healFor: e.healFor ? { ...e.healFor } : null, maxHpOverride: e.def.standardPole ? e.maxHp : 0,
       boss: e.boss ? {
         phase: e.boss.phase, sweepCd: e.boss.sweepCd || 0, hornCd: e.boss.hornCd || 0, raged: !!e.boss.raged, atGate: !!e.atGate,
         openT: e.boss.openT || 0, roarT: e.boss.roarT || 0,
         novaCd: e.boss.novaCd || 0, howlCd: e.boss.howlCd || 0, blizzCd: e.boss.blizzCd || 0, shellT: e.boss.shellT || 0,
+        emberCd: e.boss.emberCd || 0, scorchCd: e.boss.scorchCd || 0, planted: !!e.boss.planted, replantCd: e.boss.replantCd || 0,
         windT: e.boss.windT || 0, windKind: e.boss.windKind || null, reforms: e.boss.reforms || 0, patience: e.boss.patience || 0,
       } : null,
       shell: Math.round(e.shell || 0),
       routed: !!e.routed,
     })),
-    zones: s.zones.map((z) => ({ x: z.x, y: z.y, r: z.r, t: z.t, dps: z.dps, frost: !!z.frost, slow: z.slow || 0 })),
+    zones: s.zones.map((z) => ({ x: z.x, y: z.y, r: z.r, t: z.t, dps: z.dps, frost: !!z.frost, ember: !!z.ember, sand: !!z.sand, slow: z.slow || 0 })),
     perks: (s.perks || []).slice(), mods: { ...(s.mods || {}) }, perkOffer: s.perkOffer ? s.perkOffer.slice() : null, perkPending: !!s.perkPending, unlocks: (s.unlocks || []).slice(),
   };
 }
@@ -2600,8 +2952,13 @@ export function restoreGame(data, opts = {}) {
     const en = spawnEnemy(s, e.type, e.route || 0, e.lat || 0);
     en.d = e.d; en.hp = Math.min(e.hp, en.maxHp); en.chargeCd = e.chargeCd || 0; en.stun = e.stun || 0;
     en.stopped = !!e.stopped; en.reload = e.reload || en.reload; en.shots = e.shots || 0; en.docked = !!e.docked; en.unloaded = e.unloaded || 0; en.unloadT = e.unloadT || 0; en.wallHit = !!e.wallHit;
+    en.under = !!e.under; en.hidden = !!e.hidden; en.burrowT = e.burrowT || 0; en.surfaceT = e.surfaceT || 0;
+    if (e.healFor) en.healFor = { ...e.healFor };
+    if (e.maxHpOverride) { en.maxHp = e.maxHpOverride; en.hp = Math.min(en.hp, en.maxHp); }
     if (en.boss && e.boss) {
       en.boss.phase = e.boss.phase || 1; en.boss.sweepCd = e.boss.sweepCd || 0; en.boss.hornCd = e.boss.hornCd || 0;
+      en.boss.emberCd = e.boss.emberCd || 0; en.boss.scorchCd = e.boss.scorchCd || 0;
+      en.boss.planted = !!e.boss.planted; en.boss.replantCd = e.boss.replantCd || 0;
       en.boss.raged = !!e.boss.raged; en.atGate = !!e.boss.atGate; en.boss.openT = e.boss.openT || 0; en.boss.roarT = e.boss.roarT || 0;
       en.boss.novaCd = e.boss.novaCd || 0; en.boss.howlCd = e.boss.howlCd || 0; en.boss.blizzCd = e.boss.blizzCd || 0;
       en.boss.shellT = e.boss.shellT || 0; en.boss.windT = e.boss.windT || 0; en.boss.windKind = e.boss.windKind || null;
@@ -2616,7 +2973,7 @@ export function restoreGame(data, opts = {}) {
   s.gateWarned = !!data.gateWarned;
   s.blizzT = data.blizzT || 0; s.blizzCd = data.blizzCd != null ? data.blizzCd : s.blizzCd;
   s.events = [];
-  s.zones = (data.zones || []).map((z) => ({ id: s.nextId++, x: z.x, y: z.y, r: z.r, t: z.t, dps: z.dps, tick: 0, frost: !!z.frost, slow: z.slow || 0 }));
+  s.zones = (data.zones || []).map((z) => ({ id: s.nextId++, x: z.x, y: z.y, r: z.r, t: z.t, dps: z.dps, tick: 0, frost: !!z.frost, ember: !!z.ember, sand: !!z.sand, slow: z.slow || 0 }));
   s.nextId = Math.max(s.nextId, data.nextId || 0);
   return s;
 }

@@ -259,7 +259,120 @@ export const ENEMIES = {
     kingdom: "frost",
     desc: "The Ice Warlord. Ice closes over him faster than you can cut it, and the storm answers when he calls.",
   },
+
+  /* ---------------- The Sunspear Reach ---------------- */
+  /* The turned Sunspear Guard fights a third way again. The north came
+     at you fast and from the flanks; the Reach comes at you heavy and
+     from underneath. Bronze shields shrug off arrows, chariots break a
+     line on open sand, ember throwers burn the ground your soldiers are
+     standing on, and the wyrms ignore the road entirely. */
+  duneRaider: {
+    name: "Dune Raider", kind: "infantry",
+    hp: 118, speed: 80, armour: 0.12, gateDmg: 1, bounty: 12, xp: 6,
+    dmg: [9, 13], atk: 0.95, r: 14, h: 59,
+    kingdom: "sun",
+    desc: "Light spears and a long stride. Loose sand does not slow them the way it slows your soldiers.",
+  },
+  duneArcher: {
+    name: "Dune Archer", kind: "ranged",
+    hp: 76, speed: 62, armour: 0.05, gateDmg: 1, bounty: 14, xp: 7,
+    dmg: [10, 14], atk: 1.5, range: 200, r: 13, h: 58,
+    kingdom: "sun",
+    desc: "Shoots from further than any soldier can answer. Towers and Kesi are the reply.",
+  },
+  sunGuard: {
+    name: "Sunspear Guard", kind: "infantry",
+    hp: 270, speed: 46, armour: 0.3, shieldBlock: 0.7, gateDmg: 2, bounty: 20, xp: 11,
+    dmg: [12, 16], atk: 1.15, r: 16, h: 63,
+    kingdom: "sun",
+    desc: "Bronze over the whole front. Arrows ring off it; catapults, fire and blades do not.",
+  },
+  emberThrower: {
+    name: "Ember Thrower", kind: "ranged",
+    hp: 88, speed: 52, armour: 0.08, gateDmg: 1, bounty: 18, xp: 8,
+    dmg: [8, 11], atk: 2.0, range: 185, r: 14, h: 59,
+    burns: { dur: 5, slow: 0.45 },
+    /* the pot does not just burn the tower: it leaves the ground alight */
+    embers: { dur: 7, dps: 9, radius: 54 },
+    kingdom: "sun",
+    desc: "Clay pots of burning pitch. A struck tower shoots slower, and the ground it lands on burns your soldiers.",
+  },
+  sandWyrm: {
+    name: "Sand Wyrm", kind: "infantry", beast: true,
+    hp: 320, speed: 62, armour: 0.18, gateDmg: 2, bounty: 32, xp: 15,
+    dmg: [19, 26], atk: 0.9, r: 22, h: 66,
+    /* Under the sand it cannot be hit or blocked, so the dive has to be
+       short: at seven seconds down it crossed most of a road untouched
+       and no tower placement could answer it. It spends longer up than
+       under, and the mound shows where it is the whole time. */
+    burrow: { under: 3.5, up: 6, speedMul: 1.6, first: 3 },
+    kingdom: "sun",
+    desc: "Goes under the sand and comes up behind your line. Nothing touches it while it is down — hold your fire for the moment it breaches.",
+  },
+  warChariot: {
+    name: "Scythed Chariot", kind: "cavalry",
+    hp: 255, speed: 128, armour: 0.25, gateDmg: 3, bounty: 30, xp: 13,
+    dmg: [13, 18], atk: 1.0, r: 24, h: 74, blockTime: 2.6, chariot: true,
+    charge: { buildup: 1.5, speedMul: 2.2, dist: 300, dmg: 40, kb: 52, stun: 0.8, cd: 9, spearDmg: 90 },
+    spearWeakness: 1.8,
+    kingdom: "sun",
+    desc: "Scythed wheels on open sand. It cannot build a charge in a canyon or at a gate, and pikes take it on the point.",
+  },
+  spearWarden: {
+    name: "Warden of the Reach", kind: "infantry",
+    hp: 720, speed: 50, armour: 0.4, shieldBlock: 0.3, gateDmg: 4, bounty: 78, xp: 28,
+    dmg: [17, 23], atk: 1.0, r: 17, h: 66, boss: "mini",
+    aura: { radius: 200, armour: 0.12, speed: 1.15, all: true },
+    /* the sun standard mends the host around him: leave him alive and
+       nothing you shoot at stays hurt */
+    standard: { radius: 190, heal: 11 },
+    kingdom: "sun",
+    desc: "A turned warden with the sun standard. Everything near it is healed as fast as you hurt it. Cut him down first.",
+  },
+  brazenRam: {
+    name: "Brazen Ram", kind: "siege",
+    hp: 1400, speed: 28, armour: 0.4, gateDmg: 10, bounty: 92, xp: 36,
+    dmg: [0, 0], atk: 0, r: 38, h: 78, boss: "mini", ram: true, wallDmg: 30, scale: 1.25,
+    kingdom: "sun",
+    desc: "A bronze ram's head on cedar. It breaks the sandstone wall on the way and the gate at the end.",
+  },
+  scorpion: {
+    name: "Fire Scorpion", kind: "siege",
+    hp: 980, speed: 23, armour: 0.3, gateDmg: 4, bounty: 108, xp: 38,
+    dmg: [0, 0], atk: 0, r: 38, h: 88, boss: "mini",
+    /* not a wall-breaker: a tower killer. Quicker than a trebuchet,
+       narrower, and every bolt it lands sets a tower alight. */
+    engine: { stopAt: 0.62, standoff: 360, reload: 7, windup: 1.2, castleDmg: 1, wallDmg: 14, towerBurn: 6, radius: 44, towerEvery: 2 },
+    kingdom: "sun",
+    desc: "A bolt-thrower with a pitch-soaked head. It parks out of reach and burns your towers down one at a time.",
+  },
+  sunTyrant: {
+    name: "Sun-Tyrant Sarkaan", kind: "infantry",
+    hp: 4600, speed: 40, armour: 0.48, gateDmg: 14, bounty: 450, xp: 95,
+    dmg: [27, 37], atk: 1.05, r: 23, h: 90, boss: "final", persist: true,
+    aura: { radius: 230, armour: 0.16, speed: 1.18, all: true },
+    /* His fight is neither a bodyguard nor a shell: it is the standard
+       he plants. While the Sunspear burns for him nothing can touch him,
+       and he sets it again and again until he is desperate. */
+    sun: {
+      standard: { hp: 380, plantAt: 0.45, burnout: 26, replant: 12, heal: 10, radius: 190, noPlantWithin: 240 },
+      emberfall: { cd: 12, windup: 1.5, radius: 120, dmg: 40, burn: { dur: 8, dps: 11, radius: 110 } },
+      scorch: { cd: 21, windup: 1.4, radius: 300, burn: 6, dur: 7, armour: 0.18, speed: 1.2 },
+      patience: 52,
+      rage: { at: 0.35, atkMul: 1.5, speed: 70, emberCd: 8, push: [["warChariot", 1], ["warChariot", 2], ["sandWyrm", 0], ["sandWyrm", 1], ["sunGuard", 0], ["sunGuard", 2], ["duneRaider", 1], ["duneRaider", 2]] },
+    },
+    kingdom: "sun",
+    desc: "The Sun-Tyrant. He took the Reach with its own guard, and he burns the ground he cannot hold.",
+  },
+  sunStandard: {
+    name: "The Sun Standard", kind: "siege",
+    hp: 520, speed: 0, armour: 0.15, gateDmg: 0, bounty: 40, xp: 18,
+    dmg: [0, 0], atk: 0, r: 26, h: 76, boss: "mini", standardPole: true,
+    kingdom: "sun",
+    desc: "Sarkaan's standard, driven into the sand. While it burns he cannot be touched and his host mends.",
+  },
 };
 
 export const ENEMY_ORDER = ["bandit", "archer", "manAtArms", "outrider", "shieldBearer", "crossbow", "scoutCav", "knightCav", "cavCommander", "ram", "heavyInf", "fireArcher", "siegeEngineer", "heavyCav", "eliteGuard", "warCaptain", "siegeRam", "siegeCatapult", "siegeTower", "warlord",
-  "frostRaider", "direWolf", "frostArcher", "shieldRaider", "berserker", "frostCaptain", "wolfDen", "iceRam", "frostThrower", "iceWarlord"];
+  "frostRaider", "direWolf", "frostArcher", "shieldRaider", "berserker", "frostCaptain", "wolfDen", "iceRam", "frostThrower", "iceWarlord",
+  "duneRaider", "duneArcher", "sunGuard", "emberThrower", "sandWyrm", "warChariot", "spearWarden", "brazenRam", "scorpion", "sunTyrant"];

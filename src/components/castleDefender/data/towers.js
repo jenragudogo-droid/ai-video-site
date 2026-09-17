@@ -159,8 +159,33 @@ export const ELARA = {
   maxLevel: 5,
 };
 
+/* Kesi of the Reach. Edric holds a line and Elara stays out of one;
+   Kesi goes through it. She fights at spear length rather than sword
+   length, and her dance is a short run and a spin that clears the
+   ground around her, so she is the hero you send into a crowd. */
+export const KESI = {
+  id: "kesi", name: "Kesi of the Reach", title: "Spear-Dancer of the Sunspear",
+  hp: 270, hpPerLevel: 48, dmg: [17, 23], dmgPerLevel: 4, armour: 0.22, atk: 0.85, speed: 148, r: 15,
+  regen: 9, respawn: 12, engageRange: 96,
+  /* spear reach: she strikes a little further than a sword can */
+  reach: 34,
+  ability: {
+    kind: "whirl", name: "Spear Dance", key: "Q",
+    cd: 19, dist: 250, dmg: 58, dmgPerLevel: 12, radius: 94, stun: 0.9, kb: 40,
+    desc: "Kesi runs to where you tap and spins the spear: everything around her is thrown back and stunned.",
+  },
+  /* the Reach's answer to King's Charge and Rapid Volley */
+  upgrade: {
+    id: "sandDance", name: "Sandstorm Dance",
+    radiusMul: 1.2, dmgMul: 1.3, slow: 0.5, dur: 5,
+    desc: "The dance throws up a ring of sand: wider, harder, and the ground stays blinding for five seconds.",
+  },
+  xpLevels: [0, 40, 100, 180, 290],
+  maxLevel: 5,
+};
+
 /* every hero the game knows; a stage picks one with `hero: "..."` */
-export const HEROES = { edric: HERO, elara: ELARA };
+export const HEROES = { edric: HERO, elara: ELARA, kesi: KESI };
 
 export function heroDefFor(stage) {
   return HEROES[(stage && stage.hero) || "edric"] || HERO;

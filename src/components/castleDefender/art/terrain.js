@@ -10,6 +10,7 @@
 import { PAL, shade, rgba } from "./palette.js";
 import { drawSiegeCamp, drawTrench, drawScorch, drawWreckage } from "./siege.js";
 import { FROST, frostPine } from "./frost.js";
+import { DESERT, desertPalm, dryShrub, sandDune, drawLooseSand } from "./desert.js";
 
 /* Ground colours by season. A stage picks one with `season: "winter"`;
    everything else keeps Ashford's summer palette exactly as it was. */
@@ -21,6 +22,16 @@ const SEASONS = {
     field: PAL.field, fieldDark: PAL.fieldDark, fieldEdge: "#b39a52",
     apron: "#a89c86", patchLight: "#a8d060", patchDark: "#3e6a2c",
     flower: ["#f2f0e8", "#e9c8e0"], light: PAL.sun,
+  },
+  desert: {
+    /* red earth roads over pale sand, and no green on the ground at all:
+       what grows here is dry grass and palm, and both are decor */
+    grass: DESERT.sand, grassLight: DESERT.sandLight, grassDark: DESERT.sandDark,
+    road: DESERT.road, roadDark: DESERT.roadDark, roadEdge: DESERT.roadEdge, pebble: DESERT.pebble,
+    river: "#5a8f8a", riverDeep: "#3d6f6c", riverFoam: "#bfe4dd", riverBank: "#d7b481",
+    field: "#cfae6a", fieldDark: "#ab8a4c", fieldEdge: "#8a6a38",
+    apron: "#d3b184", patchLight: "#f6dcae", patchDark: "#bf8a4e",
+    flower: ["#e8c25a", "#d98a4a"], light: "rgba(255, 226, 168, 0.22)",
   },
   winter: {
     /* packed snow over frozen ground; roads are trodden slush, rivers are ice */
@@ -169,9 +180,10 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.lineJoin = "round"; ctx.lineCap = "round";
-  const rng = mulberry(stage.number * 977 + (layout.name === "portrait" ? 31 : 7) + (stage.kingdom === "frost" ? 5000 : 0));
+  const rng = mulberry(stage.number * 977 + (layout.name === "portrait" ? 31 : 7) + (stage.kingdom === "frost" ? 5000 : stage.kingdom === "sun" ? 9000 : 0));
   const winter = stage.season === "winter";
-  const P = SEASONS[winter ? "winter" : "summer"];
+  const desert = stage.season === "desert";
+  const P = SEASONS[winter ? "winter" : desert ? "desert" : "summer"];
 
   /* helper: is (x,y) free of roads/plots/river/castle for decoration */
   const riverPts = layout.river ? sampleLine(layout.river) : [];
@@ -227,7 +239,7 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     const x = rng() * w; const y = rng() * h;
     if (!clear(x, y, -30)) continue;
     if (rng() < 0.18) drawFlower(ctx, x, y, rng() < 0.5 ? P.flower[0] : P.flower[1]);
-    else drawTuft(ctx, x, y, 0.7 + rng() * 0.8, rng() < 0.5 ? (winter ? "#c8d6e6" : PAL.grassLight) : (winter ? "#a9bcd2" : PAL.grassDark));
+    else drawTuft(ctx, x, y, 0.7 + rng() * 0.8, rng() < 0.5 ? (winter ? "#c8d6e6" : desert ? DESERT.dryGrass : PAL.grassLight) : (winter ? "#a9bcd2" : desert ? DESERT.sandDark : PAL.grassDark));
   }
 
   /* river */
@@ -398,6 +410,19 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
     ctx.restore();
   }
 
+  /* loose sand: the Reach's answer to the snowdrift, and the one piece of
+     ground the player has to read at a glance, because it slows their own
+     soldiers and none of the Reach's. */
+  layout.sands?.forEach((z, i) => drawLooseSand(ctx, z.x, z.y, z.r, stage.number * 31 + i));
+  /* a few dunes in the empty corners, where nothing walks */
+  if (desert) {
+    for (let i = 0; i < Math.floor(14 * quality); i += 1) {
+      const x = rng() * w; const y = rng() * h;
+      if (!clear(x, y, 40)) continue;
+      sandDune(ctx, x, y, 70 + rng() * 90, 26 + rng() * 22, rng);
+    }
+  }
+
   /* castle apron: paved ground under and in front of the castle */
   outlined(ctx, P.apron, () => ctx.rect(c.x - 6, c.y - 6, c.w + 12, c.h + 12), 1);
   const ag = ctx.createRadialGradient(c.gate.x, c.gate.y + 40, 10, c.gate.x, c.gate.y + 40, 120);
@@ -437,6 +462,13 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
       else if (d.kind === "bush") { drawBush(ctx, d.x, d.y, d.s, true); ctx.fillStyle = rgba(FROST.snow, 0.75); ctx.beginPath(); ctx.ellipse(d.x - 2 * d.s, d.y - 9 * d.s, 8 * d.s, 4 * d.s, 0, 0, Math.PI * 2); ctx.fill(); }
       else { drawRock(ctx, d.x, d.y, d.s, rng); ctx.fillStyle = rgba(FROST.snow, 0.8); ctx.beginPath(); ctx.ellipse(d.x - 1 * d.s, d.y - 7 * d.s, 7 * d.s, 3 * d.s, 0, 0, Math.PI * 2); ctx.fill(); }
     }
+    else if (desert) {
+      /* nothing green grows on this ground: palms where the map asks for
+         trees, thorn scrub for bushes, and the same rocks bleached warm */
+      if (d.kind === "bush") dryShrub(ctx, d.x, d.y, d.s, rng);
+      else if (d.kind === "rock") drawRock(ctx, d.x, d.y, d.s, rng);
+      else desertPalm(ctx, d.x, d.y, d.s, rng);
+    }
     else if (d.kind === "oak") drawOak(ctx, d.x, d.y, d.s, rng);
     else if (d.kind === "pine") drawPine(ctx, d.x, d.y, d.s);
     else if (d.kind === "bush") drawBush(ctx, d.x, d.y, d.s);
@@ -460,7 +492,7 @@ export function bakeTerrain(layout, stage, scale, quality = 1) {
   lg.addColorStop(0, stage.time === "dusk" ? rgba("#ffb070", 0.16) : P.light); lg.addColorStop(1, rgba("#000000", 0));
   ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
   const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.78);
-  vg.addColorStop(0, rgba("#000000", 0)); vg.addColorStop(1, rgba(winter ? "#1a2436" : "#1a1408", 0.4));
+  vg.addColorStop(0, rgba("#000000", 0)); vg.addColorStop(1, rgba(winter ? "#1a2436" : desert ? "#3a1c08" : "#1a1408", 0.4));
   ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
 
   return { canvas, w, h, scale };

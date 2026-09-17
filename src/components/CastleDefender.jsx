@@ -6,20 +6,20 @@ import {
   plotAt, canBuild, canUpgrade, nextWaveSummary, towerLevel, PLOT_R,
   canDrill, setDrill, DRILL_COST, canMount, setMount, MOUNT_COST,
   serializeGame, restoreGame, orderUnits, unitAt, squadOf, isFullSquad, sharedAbility, triggerUnitAbility,
-  castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, guardCount,
+  castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, guardCount, standardAlive,
   heroAbility,
   choosePerk, skipPerk, powerUnlocked, castWatchfire, castRoyalRally, buildCost, upgradeCostFor, repairCost,
 } from "./castleDefender/engine/engine.js";
 import { createRenderer } from "./castleDefender/render.js";
 import { createCastleAudio } from "./castleDefender/audio.js";
 import { readSave, recordResult, saveSettings, resetProgress, stageRecord, totalStars, isStageUnlocked, saveBattle, clearBattle, saveDifficulty, buyUpgrade, badgesOf,
-  KINGDOM_ORDER, isKingdomUnlocked, stagesOf, isNewGamePlusUnlocked, hasBadge,
+  KINGDOM_ORDER, isKingdomUnlocked, stagesOf, isNewGamePlusUnlocked, hasBadge, NGPLUS_REALMS,
 } from "./castleDefender/save.js";
 import { PERK_BY_ID, RARITY, POWERS } from "./castleDefender/data/perks.js";
 import { CATEGORIES, KINGDOM_UPGRADES, upgradeCost as kingdomCost } from "./castleDefender/data/progression.js";
 import { STAGES } from "./castleDefender/data/stages.js";
 import { KINGDOMS } from "./castleDefender/data/kingdoms.js";
-import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, SUNSPEAR, SUN_TEASERS, SUN_HERO, BADGES } from "./castleDefender/data/frozenNorth.js";
+import { FROZEN_NORTH, FROST_TEASERS, FROST_HERO, SUNSPEAR, SUN_TEASERS, SUN_HERO, NEXT_REALM, BADGES } from "./castleDefender/data/frozenNorth.js";
 import { TOWERS, TOWER_ORDER, ABILITIES, HERO, heroStatsOf, DIFFICULTY, SOLDIERS, PIKE_UNITS } from "./castleDefender/data/towers.js";
 import { ENEMIES } from "./castleDefender/data/enemies.js";
 import { fullscreenElement, onFullscreenChange, toggleGameFullscreen, unlockPageScroll } from "./fullscreen.js";
@@ -82,6 +82,60 @@ const REALMS = {
     badge: "guardianOfTheFrozenNorth",
     doneNote: "Frostwatch Pass, Wolfpine Hollow and the Cairnhold are all held.",
     hero: { id: "elara", name: "Lady Elara", note: "Ranger of the North · bow, evasion and Frost Arrow" },
+    scene: FROZEN_NORTH.scene,
+    flavour: FROZEN_NORTH.flavour,
+    lockLine: "Win the Siege of Ashford to march north",
+    teasers: FROST_TEASERS,
+    teaserHero: FROST_HERO,
+    snow: true,
+    className: "cdRealm--frost",
+  },
+  sun: {
+    eyebrow: "Kingdom three",
+    name: "The Sunspear Reach",
+    blurb: "Red sand, bronze shields and wyrms under the road. Hold the crossing, the canyon and the Sunspear itself.",
+    badge: "keeperOfTheSunspear",
+    doneNote: "Redsand Crossing, Wyrmsand Canyon and the Sunspear are all held.",
+    hero: { id: "kesi", name: "Kesi of the Reach", note: "Spear-dancer · spear, footwork and the Spear Dance" },
+    scene: SUNSPEAR.scene,
+    flavour: SUNSPEAR.flavour,
+    lockLine: "Hold the Cairnhold to march south",
+    teasers: SUN_TEASERS,
+    teaserHero: SUN_HERO,
+    className: "cdRealm--sun",
+  },
+};
+
+/* What each kingdom is called at the moments the game says it out loud:
+   the stage card, the outro and the victory screen. A fourth kingdom is
+   an entry here, not another ternary. */
+const KINGDOM_COPY = {
+  ashford: {
+    realm: "The Realm of Ashford", short: "Realm of Ashford",
+    fell: ["The warband breaks", "Blackmoor is fallen"],
+    held: ["The Realm of Ashford", "Ashford stands"],
+    stages: "Greenhollow · Stonebridge Ford · The Siege of Ashford",
+    won: "The campaign is won",
+    conquered: "Warlord Blackmoor is dead and the siege is broken. The Realm of Ashford is yours.",
+    salute: "The walls barely scratched. Ashford salutes you.",
+  },
+  frost: {
+    realm: "The Frozen North", short: "The Frozen North",
+    fell: ["The ice gives way", "Vorne is broken"],
+    held: ["The Frozen North", "The Cairnhold holds"],
+    stages: "Frostwatch Pass · Wolfpine Hollow · The Cairnhold",
+    won: "The north is yours",
+    conquered: "Jarl Vorne is broken and the storm has passed. The Frozen North is yours.",
+    salute: "Barely a mark on the walls. The north salutes you.",
+  },
+  sun: {
+    realm: "The Sunspear Reach", short: "The Sunspear Reach",
+    fell: ["The fire goes out", "Sarkaan is thrown down"],
+    held: ["The Sunspear Reach", "The Sunspear stands"],
+    stages: "Redsand Crossing · Wyrmsand Canyon · The Sunspear",
+    won: "The Reach is free",
+    conquered: "Sun-Tyrant Sarkaan is thrown down and the Sunspear still stands. The Reach is yours.",
+    salute: "Not a stone out of place. The Reach salutes you.",
   },
 };
 
@@ -154,6 +208,7 @@ export default function CastleDefender() {
   const [heroSel, setHeroSel] = useState(false);
   const [banners, setBanners] = useState([]);
   const [results, setResults] = useState(null);
+  const wyrmSeen = useRef(false);            // the first breach explains itself, the rest do not
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFull, setPseudoFull] = useState(false);
   const [howPage, setHowPage] = useState(0);
@@ -409,9 +464,13 @@ export default function CastleDefender() {
           else if (e.enemy === "siegeTower") { a?.play("spawnRam"); banner("Siege tower", "Slow and vast. Burn it before it reaches the wall.", "boss", 3000); }
           else if (e.enemy === "siegeRam") { a?.play("spawnRam"); banner("Iron Ram", "It will smash the outer wall on its way to the gate.", "boss", 3000); }
           else if (e.enemy === "warCaptain") { a?.play("commanderEnter"); banner("Warband Captain", "Everyone near his banner fights harder. Cut him down.", "boss", 3200); }
+          else if (e.enemy === "spearWarden") { a?.play("commanderEnter"); banner("A Warden of the Reach", "His standard mends the host as fast as you hurt it. Cut him down first.", "boss", 3400); }
+          else if (e.enemy === "brazenRam") { a?.play("spawnRam"); banner("Brazen Ram", "It breaks the sandstone wall on its way to the gate.", "boss", 3000); }
+          else if (e.enemy === "scorpion") { a?.play("spawnRam"); banner("Fire Scorpion", "It parks out of reach and burns your towers. Kill it first.", "boss", 3000); }
+          else if (e.enemy === "sunStandard") { a?.play("miniboss"); banner("The Sun Standard", "Nothing touches Sarkaan while it burns. Break it.", "boss", 3200); }
           else { a?.play("miniboss"); banner("Battering Ram", "Nothing blocks it. Ballistas and catapults, now.", "boss", 3200); }
           break;
-        case "minibossDown": a?.play("minibossDown"); banner(s.stage.id === "stonebridge" && s.wave >= 10 ? "Captain Malric falls" : s.stage.finale ? "Siege engine destroyed" : "The ram is broken", "", "good", 2000); break;
+        case "minibossDown": a?.play("minibossDown"); banner(s.stage.id === "stonebridge" && s.wave >= 10 ? "Captain Malric falls" : s.stage.kingdom === "sun" ? "The Reach's engine is broken" : s.stage.finale ? "Siege engine destroyed" : "The ram is broken", "", "good", 2000); break;
         case "charge": a?.play("charge"); break;
         case "chargeHit": a?.play("chargeHit"); break;
         case "routeOpen": a?.play("routeOpen"); banner("A new road has opened", "The warband is coming from the north too", "alert", 3400); break;
@@ -498,6 +557,25 @@ export default function CastleDefender() {
         case "heroEvade": a?.play("evade"); break;
         case "watchfire": a?.play("watchfire"); break;
         case "royalRally": a?.play("royalRally"); break;
+        /* the Sunspear Reach */
+        case "wyrmSurface":
+          a?.play("spawnRam");
+          if (!wyrmSeen.current) { wyrmSeen.current = true; banner("A wyrm breaches", "It cannot be touched under the sand. Kill it while it is up.", "alert", 3000); }
+          break;
+        case "wyrmDive": a?.play("breakFree"); break;
+        case "standardPlant":
+          a?.play("miniboss");
+          banner("The Sun Standard", "Nothing touches Sarkaan while it burns, and his host mends. Break it.", "boss", 3200);
+          break;
+        case "standardBurns": a?.play("minibossDown"); banner("The standard burns out", "", "good", 1800); break;
+        case "embers": a?.play("fire"); break;
+        case "emberfall":
+          a?.play("fireImpact");
+          banner("The ground is burning", "Move your soldiers off the fire", "alert", 2200);
+          break;
+        case "sunScorch": a?.play("fireImpact"); if (e.towers) banner("The towers burn", "Burning towers shoot slower until the fire is out", "alert", 2600); break;
+        case "spearDance": a?.play("charge"); break;
+        case "danceBurst": a?.play("chargeHit"); break;
         case "towerAbility": a?.play(e.id === "skewer" ? "bolt" : e.id === "barrage" ? "catapult" : "volley"); break;
         case "victory": if (s.stage.finale && s.mode !== "endless") { outroRef.current = false; setScreen("outro"); a?.music(null); a?.play("rout"); } else finishRun(true); break;
         case "defeat": finishRun(false); break;
@@ -532,6 +610,7 @@ export default function CastleDefender() {
         guards: boss.boss && boss.boss.phase === 1 && boss.def.phases ? guardCount(s) : 0,
         open: !!(boss.boss && boss.boss.openT > 0), roar: !!(boss.boss && boss.boss.roarT > 0),
         shell: boss.shellMax ? Math.max(0, boss.shell) / boss.shellMax : 0, hasShell: !!boss.shellMax, frost: !!boss.def.frost,
+        sun: !!boss.def.sun, standard: standardAlive(s),
       } : null,
       wall: s.wallHp != null ? { hp: s.wallHp, max: s.wallMax } : null,
       kingsCharge: kingsCharge(s), formations: !!s.stage.formations, finale: !!s.stage.finale,
@@ -685,6 +764,7 @@ export default function CastleDefender() {
     const save = readSave();
     const g = makeGame({ stageId, layout: layoutFor(w, h), difficulty: opts.difficulty || difficulty, mode: opts.mode || "campaign", seed: (Math.random() * 0x7fffffff) | 0, upgrades: save.meta?.upgrades || null });
     gameRef.current = g;
+    wyrmSeen.current = false;
     setGame(g);
     setProfile(clearBattle(save));
     rendererRef.current?.reset();
@@ -1062,7 +1142,7 @@ export default function CastleDefender() {
     holdRef.current = setTimeout(() => {
       holdRef.current = null;
       const s = gameRef.current;
-      if (s && s.hero.chargeCd <= 0) { const ab = heroAbility(s); const hn = (s.heroDef || HERO).name; setHeroSel(true); setMode("charge"); audioRef.current?.play("open"); banner(ab.name, `${coarse ? "Tap" : "Click"} where ${hn} should ${ab.kind === "frostArrow" ? "shoot" : "charge"}`, "good", 1400); }
+      if (s && s.hero.chargeCd <= 0) { const ab = heroAbility(s); const hn = (s.heroDef || HERO).name; setHeroSel(true); setMode("charge"); audioRef.current?.play("open"); banner(ab.name, `${coarse ? "Tap" : "Click"} where ${hn} should ${ab.kind === "frostArrow" ? "shoot" : ab.kind === "whirl" ? "dance" : "charge"}`, "good", 1400); }
       else audioRef.current?.play("error");
     }, 420);
   }, [banner, coarse]);
@@ -1181,7 +1261,7 @@ export default function CastleDefender() {
     if (mode === "reinforce") return `${tap} where the levies should stand`;
     if (mode === "barrage") return `${tap} where the stones should fall`;
     if (mode === "ability") return `${tap} a target inside the tower's range`;
-    if (mode === "charge") return `${tap} where ${heroName} should ${heroKind === "frostArrow" ? "put the arrow" : "charge"}`;
+    if (mode === "charge") return `${tap} where ${heroName} should ${heroKind === "frostArrow" ? "put the arrow" : heroKind === "whirl" ? "dance" : "charge"}`;
     if (mode === "unitMove") return `${tap} where the soldiers should go`;
     if (mode === "unitAttack") return `${tap} the enemy to attack`;
     if (mode === "unitTower") return `${tap} the tower to defend`;
@@ -1199,9 +1279,12 @@ export default function CastleDefender() {
   const ngPlus = isNewGamePlusUnlocked(profile);
   const legendWon = STAGES.filter((st) => stageRecord(profile, st.id).legendStars > 0).length;
   const starsIn = (rec) => (difficulty === "legend" ? rec.legendStars : difficulty === "hard" ? rec.hardStars : rec.stars) || 0;
-  const realmsLeft = KINGDOM_ORDER.filter((k) => !(profile.campaignsDone || []).includes(k)).map((k) => REALMS[k]?.name || k);
-  const outroFrost = (game?.stage.kingdom || "ashford") === "frost";
-  const winFrost = (results?.kingdom || "ashford") === "frost";
+  const realmsLeft = NGPLUS_REALMS.filter((k) => !(profile.campaignsDone || []).includes(k)).map((k) => REALMS[k]?.name || k);
+  const outroKing = game?.stage.kingdom || "ashford";
+  const outroFrost = outroKing === "frost";
+  const outroCopy = KINGDOM_COPY[outroKing] || KINGDOM_COPY.ashford;
+  const winKing = results?.kingdom || "ashford";
+  const winCopy = KINGDOM_COPY[winKing] || KINGDOM_COPY.ashford;
   const badges = badgesOf(profile);
 
   /* ------------------------------ view ------------------------------ */
@@ -1270,6 +1353,8 @@ export default function CastleDefender() {
                 {hud.boss.final && hud.boss.phase ? <em className="cdBossPhase">{
                   hud.boss.frost
                     ? (hud.boss.shell > 0 ? "Sheathed in ice · break it" : hud.boss.phase === 3 ? "Phase 3 · Enraged" : "The ice is broken · strike now")
+                    : hud.boss.sun
+                      ? (hud.boss.standard ? "The standard burns · break it" : hud.boss.phase === 3 ? "Phase 3 · Enraged" : "The standard is down · strike now")
                     : hud.boss.open ? "Winded · strike now" : hud.boss.roar ? "Roaring · untouchable" : hud.boss.phase === 1 ? `Behind his guard · ${hud.boss.guards} left` : hud.boss.phase === 2 ? "Phase 2 · Marching on the gate" : "Phase 3 · Enraged"
                 }</em> : null}
               </span>
@@ -1302,7 +1387,7 @@ export default function CastleDefender() {
               aria-label={hud.hero.name}
               title={`Select ${hud.hero.name} (H). Hold for ${hud.hero.ability.name} (${hud.hero.ability.key})`}
             >
-              <IconCanvas kind="figure" id={hud.hero.id === "elara" ? "elara" : "hero"} w={46} h={54} renderer={rendererRef} className="cdHeroPortrait" />
+              <IconCanvas kind="figure" id={hud.hero.id === "edric" ? "hero" : hud.hero.id} w={46} h={54} renderer={rendererRef} className="cdHeroPortrait" />
               <span className="cdHeroInfo">
                 <strong>{hud.hero.name}</strong>
                 <span className="cdBar cdBar--hero"><span className="cdBarFill is-hero" style={{ width: `${Math.max(0, hud.heroHp / hud.heroMax) * 100}%` }} /></span>
@@ -1312,8 +1397,10 @@ export default function CastleDefender() {
             </button>
             <button type="button" className={`cdAbility cdAbility--charge ${hud.chargeCd <= 0 ? "is-ready" : ""} ${mode === "charge" ? "is-on" : ""}`} onClick={chargeNow} disabled={hud.chargeCd > 0 || hud.heroState === "dead" || hud.heroState === "respawn"} title={`${hud.hero.ability.name} (${hud.hero.ability.key}): ${hud.hero.ability.desc || ""}`}>
               <span className="cdCd" style={{ "--p": hud.chargeMax ? Math.max(0, hud.chargeCd) / hud.chargeMax : 0 }} />
-              <span className="cdAbilityLabel">{hud.hero.ability.kind === "frostArrow" ? (hud.hero.ability.upgraded ? "Volley" : "Frost") : hud.hero.ability.upgraded ? "King's" : "Charge"}</span>
-              {hud.hero.ability.upgraded && <span className="cdCrownBadge" aria-hidden="true">{hud.hero.ability.kind === "frostArrow" ? "❄" : "👑"}</span>}
+              <span className="cdAbilityLabel">{hud.hero.ability.kind === "frostArrow" ? (hud.hero.ability.upgraded ? "Volley" : "Frost")
+                : hud.hero.ability.kind === "whirl" ? (hud.hero.ability.upgraded ? "Sandstorm" : "Dance")
+                  : hud.hero.ability.upgraded ? "King's" : "Charge"}</span>
+              {hud.hero.ability.upgraded && <span className="cdCrownBadge" aria-hidden="true">{hud.hero.ability.kind === "frostArrow" ? "❄" : hud.hero.ability.kind === "whirl" ? "☀" : "👑"}</span>}
               {hud.chargeCd > 0 && <span className="cdCdText">{Math.ceil(hud.chargeCd)}</span>}
             </button>
           </div>
@@ -1517,19 +1604,13 @@ export default function CastleDefender() {
 
       {/* ------------------------------ intro ------------------------------ */}
       {screen === "outro" && (
-        <div className={`cdIntro cdIntro--outro ${outroFrost ? "cdIntro--north" : ""}`} onClick={() => rendererRef.current?.skipOutro()}>
+        <div className={`cdIntro cdIntro--outro ${outroFrost ? "cdIntro--north" : ""} ${outroKing === "sun" ? "cdIntro--reach" : ""}`} onClick={() => rendererRef.current?.skipOutro()}>
           <div className="cdLetterbox cdLetterbox--top" />
           <div className="cdLetterbox cdLetterbox--bottom" />
           <div className={`cdIntroText cdIntroText--${introPhase}`}>
-            {introPhase === 0 && (outroFrost
-              ? (<><p className="cdEyebrow">The ice gives way</p><h3>Vorne is broken</h3></>)
-              : (<><p className="cdEyebrow">The warband breaks</p><h3>Blackmoor is fallen</h3></>))}
-            {introPhase === 1 && (outroFrost
-              ? (<><p className="cdEyebrow">The Frozen North</p><h3>The Cairnhold holds</h3></>)
-              : (<><p className="cdEyebrow">The Realm of Ashford</p><h3>Ashford stands</h3></>))}
-            {introPhase === 2 && (outroFrost
-              ? (<><p className="cdEyebrow">Frostwatch Pass · Wolfpine Hollow · The Cairnhold</p><h3>The north is yours</h3></>)
-              : (<><p className="cdEyebrow">Greenhollow · Stonebridge Ford · The Siege of Ashford</p><h3>The campaign is won</h3></>))}
+            {introPhase === 0 && (<><p className="cdEyebrow">{outroCopy.fell[0]}</p><h3>{outroCopy.fell[1]}</h3></>)}
+            {introPhase === 1 && (<><p className="cdEyebrow">{outroCopy.held[0]}</p><h3>{outroCopy.held[1]}</h3></>)}
+            {introPhase === 2 && (<><p className="cdEyebrow">{outroCopy.stages}</p><h3>{outroCopy.won}</h3></>)}
           </div>
           <button type="button" className="cdSkip" onClick={(e) => { e.stopPropagation(); rendererRef.current?.skipOutro(); }}>Skip ▸</button>
         </div>
@@ -1540,7 +1621,7 @@ export default function CastleDefender() {
           <div className="cdLetterbox cdLetterbox--top" />
           <div className="cdLetterbox cdLetterbox--bottom" />
           <div className={`cdIntroText cdIntroText--${introPhase}`}>
-            {introPhase === 0 && (<><p className="cdEyebrow">{game?.stage.kingdom === "frost" ? "The Frozen North" : "The Realm of Ashford"}</p><h3>Stage {game?.stage.numeral} · {game?.stage.name}</h3></>)}
+            {introPhase === 0 && (<><p className="cdEyebrow">{outroCopy.realm}</p><h3>Stage {game?.stage.numeral} · {game?.stage.name}</h3></>)}
             {introPhase === 1 && (<><p className="cdEyebrow">{game?.stage.kingdom === "frost" ? "Out of the snow" : "From the west"}</p><h3>{game?.stage.kingdom === "frost" ? (game?.stage.id === "cairnhold" ? "Jarl Vorne comes to the Cairnhold" : "The northern host is moving") : game?.stage.id === "stonebridge" ? "The warband rides on Stonebridge" : "The Blackmoor Warband approaches"}</h3></>)}
             {introPhase >= 2 && (<>{(game?.stage.intro || []).map((l) => <h3 key={l} className="cdIntroLine">{l}</h3>)}</>)}
           </div>
@@ -1608,7 +1689,7 @@ export default function CastleDefender() {
                 const won = list.filter((st) => stageRecord(profile, st.id).completed).length;
                 const stars = list.reduce((n, st) => n + starsIn(stageRecord(profile, st.id)), 0);
                 return (
-                  <section key={kid} className={`cdRealm ${open ? "" : "is-locked"} ${kid === "frost" ? "cdRealm--frost" : ""}`} aria-label={realm.name}>
+                  <section key={kid} className={`cdRealm ${open ? "" : "is-locked"} ${realm.className || ""}`} aria-label={realm.name}>
                     <header className="cdRealmHead">
                       <div className="cdRealmTitle">
                         <p className="cdEyebrow">{realm.eyebrow}</p>
@@ -1675,13 +1756,13 @@ export default function CastleDefender() {
                       );
                     }) : (
                       <div className="cdFrostArt cdFrostArt--locked">
-                        <IconCanvas kind="scene" id="frostNorth" w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
-                        <div className="cdSnow" aria-hidden="true">{SNOW.map((f, i) => <i key={i} style={{ left: `${f.x}%`, animationDelay: `${f.d}s`, animationDuration: `${f.t}s`, width: f.s, height: f.s }} />)}</div>
+                        <IconCanvas kind="scene" id={realm.scene} w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
+                        {realm.snow && <div className="cdSnow" aria-hidden="true">{SNOW.map((f, i) => <i key={i} style={{ left: `${f.x}%`, animationDelay: `${f.d}s`, animationDuration: `${f.t}s`, width: f.s, height: f.s }} />)}</div>}
                         <div className="cdFrostText">
                           <p className="cdEyebrow">{list.length} stages · a new hero</p>
-                          <h4>{FROZEN_NORTH.name}</h4>
-                          <p className="cdFrostFlavour">{FROZEN_NORTH.flavour.map((line) => <span key={line}>{line}</span>)}</p>
-                          <span className="cdSoon cdSoon--frost">🔒 Win the Siege of Ashford to march north</span>
+                          <h4>{realm.name}</h4>
+                          <p className="cdFrostFlavour">{(realm.flavour || []).map((line) => <span key={line}>{line}</span>)}</p>
+                          <span className={`cdSoon ${kid === "sun" ? "cdSoon--sun" : "cdSoon--frost"}`}>🔒 {realm.lockLine}</span>
                         </div>
                       </div>
                     )}
@@ -1689,7 +1770,7 @@ export default function CastleDefender() {
                     {!open && (
                       <>
                         <div className="cdShadowRow">
-                          {FROST_TEASERS.map((t) => (
+                          {(realm.teasers || []).map((t) => (
                             <div key={t.id} className="cdShadowCard">
                               <IconCanvas kind="shade" id={t.id} w={78} h={78} renderer={rendererRef} className="cdShadowArt" fluid />
                               <strong>{t.name}</strong>
@@ -1698,11 +1779,11 @@ export default function CastleDefender() {
                           ))}
                         </div>
                         <div className="cdShadowCard cdShadowCard--hero">
-                          <IconCanvas kind="shade" id={FROST_HERO.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
+                          <IconCanvas kind="shade" id={realm.teaserHero.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
                           <div>
                             <p className="cdEyebrow">New hero</p>
-                            <strong>{FROST_HERO.name}</strong>
-                            <span>{FROST_HERO.note}</span>
+                            <strong>{realm.teaserHero.name}</strong>
+                            <span>{realm.teaserHero.note}</span>
                           </div>
                         </div>
                       </>
@@ -1712,33 +1793,14 @@ export default function CastleDefender() {
               })}
 
               {northDone && (
-                <section className="cdFrost cdFrost--sun" aria-label={`${SUNSPEAR.name}, coming soon`}>
-                  <div className="cdFrostArt">
-                    <IconCanvas kind="scene" id="sunReach" w={760} h={310} renderer={rendererRef} className="cdFrostScene" fluid />
-                    <div className="cdFrostText">
-                      <p className="cdEyebrow">{SUNSPEAR.eyebrow}</p>
-                      <h4>{SUNSPEAR.name}</h4>
-                      <p className="cdFrostFlavour">{SUNSPEAR.flavour.map((line) => <span key={line}>{line}</span>)}</p>
-                      <span className="cdSoon cdSoon--sun">🔒 Coming soon</span>
-                    </div>
+                <section className="cdWarRoom" aria-label={`${NEXT_REALM.name}, planned`}>
+                  <div className="cdWarRoomText">
+                    <p className="cdEyebrow">{NEXT_REALM.eyebrow}</p>
+                    <h4>{NEXT_REALM.name}</h4>
+                    <p className="cdFrostFlavour">{NEXT_REALM.flavour.map((line) => <span key={line}>{line}</span>)}</p>
+                    <p className="cdLocked">{NEXT_REALM.environment}. None of it is built yet: the Kingdoms page has the whole roadmap, drawn up and honest about what is still on paper.</p>
                   </div>
-                  <div className="cdShadowRow">
-                    {SUN_TEASERS.map((t) => (
-                      <div key={t.id} className="cdShadowCard">
-                        <IconCanvas kind="shade" id={t.id} w={78} h={78} renderer={rendererRef} className="cdShadowArt" fluid />
-                        <strong>{t.name}</strong>
-                        <span>{t.note}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="cdShadowCard cdShadowCard--hero">
-                    <IconCanvas kind="shade" id={SUN_HERO.id} w={66} h={78} renderer={rendererRef} className="cdShadowArt cdShadowArt--hero" fluid />
-                    <div>
-                      <p className="cdEyebrow">New hero — coming soon</p>
-                      <strong>{SUN_HERO.name}</strong>
-                      <span>{SUN_HERO.note}</span>
-                    </div>
-                  </div>
+                  <span className="cdSoon">🔒 Coming soon</span>
                 </section>
               )}
 
@@ -1984,16 +2046,16 @@ export default function CastleDefender() {
       {screen === "victory" && results && (
         <div className="cdOverlay">
           <div className={`cdCard cdCard--result ${results.finale && results.mode !== "endless" ? "cdCard--conquered" : ""}`}>
-            <p className="cdEyebrow">{results.mode === "endless" ? "The siege ends" : results.finale ? (winFrost ? "The Frozen North" : "Realm of Ashford") : `Stage ${game?.stage.numeral} complete`}</p>
+            <p className="cdEyebrow">{results.mode === "endless" ? "The siege ends" : results.finale ? winCopy.short : `Stage ${game?.stage.numeral} complete`}</p>
             <h3>{results.finale && results.mode !== "endless" ? "Conquered" : "Victory"}</h3>
             <Stars n={starsShown} big />
-            <p className="cdResultLine">{results.finale && results.mode !== "endless" ? (winFrost ? "Jarl Vorne is broken and the storm has passed. The Frozen North is yours." : "Warlord Blackmoor is dead and the siege is broken. The Realm of Ashford is yours.") : results.stars === 3 ? (winFrost ? "Barely a mark on the walls. The north salutes you." : "The walls barely scratched. Ashford salutes you.") : results.stars === 2 ? "The gate held, though the masons have work to do." : "Won by a thread. The castle needs rebuilding."}{results.crowns ? ` +${results.crowns} crowns for the kingdom.` : ""}</p>
+            <p className="cdResultLine">{results.finale && results.mode !== "endless" ? winCopy.conquered : results.stars === 3 ? winCopy.salute : results.stars === 2 ? "The gate held, though the masons have work to do." : "Won by a thread. The castle needs rebuilding."}{results.crowns ? ` +${results.crowns} crowns for the kingdom.` : ""}</p>
             {results.finale && results.mode !== "endless" && (
               <div className="cdConquered">
                 <div className="cdConqueredRow"><span>Best score</span><strong>{fmt(Math.max(results.score, stageRecord(profile, results.stageId).bestScore || 0))}</strong></div>
                 <div className="cdConqueredRow"><span>Crowns earned</span><strong>👑 {results.crowns || 0}</strong></div>
                 <div className="cdConqueredRow"><span>Perks earned</span><strong>{results.perks && results.perks.length ? results.perks.map((id) => PERK_BY_ID[id]?.name || id).join(" · ") : "None chosen"}</strong></div>
-                <div className="cdConqueredRow"><span>Kingdom</span><strong>{winFrost ? "The Frozen North" : "The Realm of Ashford"}{results.realmComplete ? " · first conquest" : ""}</strong></div>
+                <div className="cdConqueredRow"><span>Kingdom</span><strong>{winCopy.realm}{results.realmComplete ? " · first conquest" : ""}</strong></div>
                 {(results.newBadges || []).length > 0 && (
                   <div className="cdConqueredRow"><span>Badge earned</span><strong>{results.newBadges.map((id) => `${BADGES[id]?.icon || "★"} ${BADGES[id]?.name || id}`).join(" · ")}</strong></div>
                 )}

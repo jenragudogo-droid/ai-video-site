@@ -16,6 +16,7 @@ import {
   castBurningOil, castEmergencyRepair, castBarrage, setFormation, formationFor, stagePowers, powerWave, kingsCharge, damageWall, guardCount,
   canMount, setMount, MOUNT_COST,
   heroUpgrade, heroAbility, terrainSlow, blizzardRate, blizzardRange, startBlizzard, damageEnemy, spawnEnemy, onFrost, inDrift,
+  sandSlow, inSand, standardAlive, emberGround,
 } from "../src/components/castleDefender/engine/engine.js";
 import { PERKS, PERK_BY_ID, POWERS } from "../src/components/castleDefender/data/perks.js";
 import { KINGDOM_UPGRADES, metaMods } from "../src/components/castleDefender/data/progression.js";
@@ -1236,17 +1237,17 @@ console.log("— the Frozen North is a real kingdom —");
   const list = stagesOf(STAGES, "frost");
   ok(list.length === 3 && list.map((st) => st.id).join(",") === FROST_IDS.join(","), "three frost stages, in order");
   ok(stagesOf(STAGES, "ashford").length === 3, "Ashford still has exactly its three stages");
-  ok(STAGES.length === 6 && STAGES.every((st) => st.kingdom), "six stages in all, each tagged with its kingdom");
+  ok(STAGES.length === 9 && STAGES.every((st) => st.kingdom), "nine stages in all, each tagged with its kingdom");
   const k = KINGDOMS.find((x) => x.id === "frost");
   ok(k && k.status === "playable" && k.hero.name === "Lady Elara", "the Kingdoms page lists the north as playable under Lady Elara");
-  ok(KINGDOMS.filter((x) => x.status === "playable").length === 2, "two playable kingdoms, no more");
+  ok(KINGDOMS.filter((x) => x.status === "playable").length === 3, "three playable kingdoms, no more");
   ok(list.every((st) => st.available && st.waves.length >= 9), "every frost stage is available and at least nine waves long");
   ok(list[2].finale === true && list[2].waves.length === 12, "the Cairnhold is the twelve-wave finale");
-  /* Kingdom three is teased and nothing else */
-  ok(SUNSPEAR.status === "soon" && !STAGES.some((st) => st.kingdom === "sun"), "the Sunspear Reach is locked with no stages");
+  /* Kingdom three is real now; the teaser copy is what a locked card shows */
+  ok(SUNSPEAR.status === "playable" && stagesOf(STAGES, "sun").length === 3, "the Sunspear Reach is playable with three stages");
   ok(SUN_TEASERS.length === 3 && SUN_TEASERS.every((t) => t.name && t.art && !t.hp && !t.dmg), "three Sunspear teasers, none carrying stats");
-  ok(SUN_HERO.name === "Kesi of the Reach" && !SUN_HERO.hp && !SUN_HERO.ability, "the Sunspear hero is a silhouette and a name");
-  ok(!SOLDIERS[SUN_HERO.id] && !ENEMIES.duneRaider && !ENEMIES.sandWyrm, "no Sunspear unit exists in the tables yet");
+  ok(SUN_HERO.name === "Kesi of the Reach" && !SUN_HERO.hp && !SUN_HERO.ability, "the Sunspear teaser hero is still a silhouette and a name");
+  ok(!!ENEMIES.duneRaider && !!ENEMIES.sandWyrm && !!HEROES.kesi, "and the Reach's units and hero are in the tables");
 }
 
 console.log("— unlocking the north —");
@@ -1620,7 +1621,7 @@ console.log("— finishing the north —");
   const f2 = recordResult(readSave(), summarise(again));
   ok((f2.newBadges || []).length === 0 && badgesOf(readSave()).length === 2, "a second victory awards no second badge");
   ok((readSave().campaignsDone || []).filter((k) => k === "frost").length === 1, "and the kingdom is not listed twice");
-  ok(!isKingdomUnlocked(readSave(), "sun"), "kingdom three stays locked even with both kingdoms won");
+  ok(isKingdomUnlocked(readSave(), "sun"), "the Reach opens once the north is held");
   ok(stageRecord(readSave(), "greenhollow").completed && stageRecord(readSave(), "cairnhold").completed, "both kingdoms keep their records side by side");
   resetProgress(readSave());
 }
@@ -1988,6 +1989,243 @@ console.log("— New Game+ is beatable with what the campaign gave you —");
     while (g.phase === "playing" && guard < 240000) { autoStep(g, plan); stepGame(g, DT); drainEvents(g); guard += 1; }
     ok(g.phase !== "playing", `${st.id}: New Game+ resolves rather than stalling`);
     ok(g.wave >= Math.ceil(st.waves.length / 2), `${st.id}: and a scripted commander reaches wave ${g.wave} of ${st.waves.length}`);
+  }
+}
+
+
+console.log("— the Sunspear Reach —");
+{
+  const SUN_IDS = ["redsand", "wyrmsand", "sunspear"];
+  const list = stagesOf(STAGES, "sun");
+  ok(list.length === 3 && list.map((st) => st.id).join(",") === SUN_IDS.join(","), "three Reach stages, in order");
+  ok(list.every((st) => st.available && st.hero === "kesi" && st.season === "desert"), "all three are available, in the desert, under Kesi");
+  ok(list.map((st) => st.waves.length).join(",") === "8,10,12", "eight, ten and twelve waves");
+  ok(list[2].finale === true && list[2].layouts.landscape.outerWall, "the Sunspear is the finale, behind a wall");
+  ok(list.every((st) => st.intro.length === 2 && st.tips.length === 4), "every stage has its two intro lines and four tips");
+  for (const st of list) {
+    for (const name of ["landscape", "portrait"]) {
+      const L = st.layouts[name];
+      ok(L.routes.length >= 2 && L.plots.length >= 9, `${st.id} ${name}: roads and plots`);
+      ok(L.sands && L.sands.length >= 3, `${st.id} ${name}: loose sand on the map`);
+      const gate = L.castle.gate;
+      ok(L.routes.every((r) => Math.hypot(r.points[r.points.length - 1].x - gate.x, r.points[r.points.length - 1].y - gate.y) < 20), `${st.id} ${name}: every road ends at the gate`);
+      ok(L.plots.filter((q) => Math.hypot(q.x - gate.x, q.y - gate.y) < 240).length >= 2, `${st.id} ${name}: two plots can defend the gate`);
+    }
+    ok(st.layouts.landscape.plots.length === st.layouts.portrait.plots.length, `${st.id}: both layouts share their plot count`);
+    ok(st.layouts.landscape.routes.length === st.layouts.portrait.routes.length, `${st.id}: and their road count`);
+  }
+}
+
+console.log("— loose sand cuts one way —");
+{
+  const g = mk("redsand");
+  const z = g.layout.sands[0];
+  ok(inSand(g, z.x, z.y) && !inSand(g, 10, 10), "the sand knows where it is");
+  ok(sandSlow(g, z.x, z.y) < 1 && sandSlow(g, 10, 10) === 1, "and it slows what stands in it");
+  /* the Reach's own troops are not slowed by it at all */
+  const e = spawnEnemy(g, "duneRaider", 0, 0);
+  e.x = z.x; e.y = z.y;
+  const clean = terrainSlow(g, 10, 10);
+  ok(terrainSlow(g, z.x, z.y) === clean, "the Reach crosses its own sand at full stride");
+  const frost = mk("frostwatch");
+  ok(!frost.layout.sands && terrainSlow(frost, frost.layout.drifts[0].x, frost.layout.drifts[0].y) < 1, "and a northern drift still slows everything, as before");
+}
+
+console.log("— the wyrms —")
+{
+  const g = mk("wyrmsand");
+  const w = spawnEnemy(g, "sandWyrm", 0, 0);
+  ok(!w.hidden && w.burrowT > 0, "a wyrm arrives above the sand");
+  run(g, 4);
+  ok(w.under && w.hidden, "and goes under it");
+  const before = w.hp;
+  damageEnemy(g, w, 500, "arrow");
+  ok(w.hp === before, "nothing touches it while it is down");
+  const dBefore = w.d;
+  run(g, 1);
+  ok(w.d > dBefore, "it keeps coming while it is down");
+  const evts = run(g, 6);
+  ok(!w.hidden && count(evts, "wyrmSurface") >= 1, "it has to breach");
+  damageEnemy(g, w, 500, "arrow");
+  ok(w.hp < before, "and it can be killed when it is up");
+  /* and the mechanic never leaks into the other kingdoms */
+  ok(!ENEMIES.direWolf.burrow && !ENEMIES.bandit.burrow, "nothing in Ashford or the north burrows");
+}
+
+console.log("— fire on the ground —")
+{
+  const g = mk("wyrmsand");
+  buildTower(g, 0, "barracks");
+  const u = g.units.find((x) => x.kind === "soldier");
+  const zx = u.x; const zy = u.y;
+  const hp = u.hp;
+  emberGround(g, zx, zy, { dur: 6, dps: 12, radius: 60 });
+  ok(g.zones.some((z) => z.ember), "a fire pot leaves burning ground");
+  const e = spawnEnemy(g, "duneRaider", 0, 0);
+  e.x = zx; e.y = zy; const ehp = e.hp;
+  run(g, 2);
+  ok(u.hp < hp, "and it burns your soldiers");
+  ok(e.hp === ehp, "and not the Reach's own");
+  const oil = mk("wyrmsand");
+  const oe = spawnEnemy(oil, "duneRaider", 0, 0);
+  oil.zones.push({ id: 9901, x: oe.x, y: oe.y, r: 70, t: 4, dps: 14, tick: 0, oil: true });
+  run(oil, 2);
+  ok(oe.hp < ENEMIES.duneRaider.hp, "while burning oil still burns them");
+}
+
+console.log("— the Warden's standard —")
+{
+  const g = mk("wyrmsand");
+  const warden = spawnEnemy(g, "spearWarden", 0, 0);
+  const hurt = spawnEnemy(g, "sunGuard", 0, 10);
+  hurt.hp = 50;
+  run(g, 3);
+  ok(hurt.hp > 50, "everything near the standard is mended");
+  const was = hurt.hp;
+  warden.state = "dead";
+  run(g, 3);
+  ok(hurt.hp === was, "and the mending stops with the Warden");
+}
+
+console.log("— Sun-Tyrant Sarkaan —")
+{
+  const g = mk("sunspear", { seed: 5 });
+  const boss = spawnEnemy(g, "sunTyrant", 0, 0);
+  boss.d = g.layout.routes[0].length * 0.55;
+  run(g, 2);
+  ok(standardAlive(g), "he plants the Sunspear standard");
+  const hp = boss.hp;
+  damageEnemy(g, boss, 900, "arrow");
+  ok(boss.hp === hp, "and nothing touches him while it burns");
+  const standard = g.enemies.find((e) => e.def.standardPole);
+  damageEnemy(g, standard, standard.hp + 1, "fire");
+  run(g, 0.5);
+  ok(!standardAlive(g) && boss.boss.phase === 2, "breaking it brings him on");
+  damageEnemy(g, boss, 300, "arrow");
+  ok(boss.hp < hp, "and he can be hurt");
+  /* he sets it again, and it burns out on its own if nobody reaches it */
+  const evts = run(g, 60);
+  ok(count(evts, "standardPlant") >= 1, "he plants another");
+  ok(count(evts, "standardBurns") >= 1, "and a standard nobody breaks burns out by itself");
+  ok(count(evts, "bossWind") >= 1 && (count(evts, "emberfall") + count(evts, "sunScorch")) >= 1, "his fire is telegraphed before it lands");
+  /* the last phase drops the standard for good */
+  boss.hp = boss.maxHp * 0.3;
+  run(g, 2);
+  ok(boss.boss.raged && boss.boss.phase === 3 && !standardAlive(g), "at the end there are no more standards");
+}
+
+console.log("— the Sun-Tyrant's fight always resolves —")
+{
+  /* An early build planted the standard at the road entrance, where no
+     tower could reach it: the boss stood still, shielded, forever. */
+  for (const layout of ["landscape", "portrait"]) {
+    const g = makeGame({ stageId: "sunspear", layout, difficulty: "normal", seed: 9 });
+    startStage(g);
+    const boss = spawnEnemy(g, "sunTyrant", 0, 0);
+    let guard = 0;
+    while (g.phase === "playing" && boss.state !== "dead" && !boss.atGate && guard < 60000) { stepGame(g, DT); drainEvents(g); guard += 1; }
+    ok(boss.atGate || g.phase !== "playing", `${layout}: he reaches the gate rather than stalling behind the standard`);
+  }
+}
+
+console.log("— Kesi of the Reach —")
+{
+  const g = mk("redsand");
+  ok(g.heroDef.id === "kesi" && g.hero.hp === heroStatsOf(HEROES.kesi, 1).maxHp, "Kesi leads in the Reach, at her own health");
+  ok(heroAbility(g).kind === "whirl" && heroAbility(g).name === "Spear Dance", "and her ability is the Spear Dance");
+  /* she dances where you tap, within her reach: an enemy is pinned to
+     its road, so bring it up the road rather than moving it off one */
+  const e = spawnEnemy(g, "duneRaider", 0, 0);
+  e.d = g.layout.routes[0].length - 90;
+  run(g, 0.2);
+  const hp = e.hp;
+  heroCharge(g, e.x, e.y);
+  run(g, 1.5);
+  ok(e.hp < hp, "the dance hits what it lands on");
+  ok(Math.hypot(g.hero.x - e.x, g.hero.y - e.y) < 160, "and she is standing there afterwards");
+  ok(g.hero.chargeCd > 0, "and it goes on cooldown");
+  /* the upgrade leaves blown sand behind */
+  const up = mk("redsand");
+  up.unlocks = [...(up.unlocks || []), HEROES.kesi.upgrade.id];
+  const e2 = spawnEnemy(up, "duneRaider", 0, 0);
+  e2.d = up.layout.routes[0].length - 90;
+  run(up, 0.2);
+  heroCharge(up, e2.x, e2.y);
+  run(up, 1.5);
+  ok(up.zones.some((z) => z.sand), "Sandstorm Dance leaves a slowing ring");
+  ok(heroAbility(up).upgraded && heroAbility(up).name === "Sandstorm Dance", "and the button says so");
+}
+
+console.log("— the Reach in the campaign —")
+{
+  resetProgress(readSave());
+  ok(KINGDOM_ORDER.join(",") === "ashford,frost,sun", "three kingdoms, in order");
+  ok(!isKingdomUnlocked(readSave(), "sun"), "the Reach is shut to a new profile");
+  writeSave({ ...readSave(), campaignsDone: ["ashford"] });
+  ok(!isKingdomUnlocked(readSave(), "sun"), "and to a profile that has only taken Ashford");
+  writeSave({ ...readSave(), campaignsDone: ["ashford", "frost"] });
+  ok(isKingdomUnlocked(readSave(), "sun"), "and open once the north is held");
+  /* New Game+ does not get taken back off anyone by kingdom three arriving */
+  ok(isNewGamePlusUnlocked(readSave()), "a save that had New Game+ before the Reach shipped still has it");
+  /* the finale awards the Reach's badge and nothing else */
+  const g = mk("sunspear");
+  g.phase = "victory"; g.stars = 3;
+  const flags = recordResult(readSave(), summarise(g));
+  ok((flags.newBadges || []).includes("keeperOfTheSunspear"), "holding the Sunspear earns Keeper of the Sunspear");
+  ok(BADGES.keeperOfTheSunspear.kingdom === "sun" && BADGE_ORDER.includes("keeperOfTheSunspear"), "and the badge belongs to the Reach");
+  ok((readSave().campaignsDone || []).includes("sun"), "and the kingdom is marked complete");
+  resetProgress(readSave());
+}
+
+console.log("— Champion of the Realms now asks for the Reach too —")
+{
+  resetProgress(readSave());
+  const stages = {};
+  for (const st of STAGES) stages[st.id] = { stars: 3, bestScore: 1, bestWave: 0, completed: true, hardStars: 3, legendStars: st.kingdom === "sun" ? 0 : 3 };
+  writeSave({ ...readSave(), stages, campaignsDone: ["ashford", "frost"] });
+  ok(!hasBadge(readSave(), "championOfTheRealms"), "every old stage on New Game+ is no longer enough");
+  const all = { ...stages };
+  for (const st of STAGES) all[st.id] = { ...all[st.id], legendStars: 3 };
+  writeSave({ ...readSave(), stages: all });
+  ok(hasBadge(readSave(), "championOfTheRealms"), "and the Reach's three complete it");
+  resetProgress(readSave());
+}
+
+console.log("— a battle in the Reach survives a reload —")
+{
+  const g = mk("wyrmsand", { seed: 4 });
+  const w = spawnEnemy(g, "sandWyrm", 0, 0);
+  run(g, 5);
+  const wasUnder = w.under;
+  const boss = spawnEnemy(g, "spearWarden", 0, 0);
+  const snap = serializeGame(g);
+  const back = restoreGame(snap);
+  const w2 = back.enemies.find((e) => e.type === "sandWyrm");
+  ok(!!w2 && w2.under === wasUnder && w2.hidden === wasUnder, "the wyrm comes back where it was, under or over");
+  ok(back.enemies.some((e) => e.type === "spearWarden"), "and the Warden with it");
+  ok(boss.def.standard.heal > 0, "the standard's numbers live in data");
+  const g2 = mk("sunspear", { seed: 6 });
+  const t = spawnEnemy(g2, "sunTyrant", 0, 0);
+  t.d = g2.layout.routes[0].length * 0.6;
+  run(g2, 3);
+  const snap2 = serializeGame(g2);
+  const back2 = restoreGame(snap2);
+  ok(back2.enemies.some((e) => e.def.standardPole), "a planted standard survives the reload");
+  ok(back2.enemies.find((e) => e.type === "sunTyrant").boss.phase === t.boss.phase, "and the Tyrant keeps his phase");
+}
+
+console.log("— the Reach is winnable on every tier —")
+{
+  const upgrades = { wallHealth: 2, treasury: 2, fletchers: 2, longbows: 1, drillYard: 1, armourers: 1, engineers: 1, vigour: 1, swordmaster: 1, tithes: 1, heralds: 1, muster: 1 };
+  for (const id of ["redsand", "wyrmsand", "sunspear"]) {
+    for (const difficulty of ["normal", "hard", "legend"]) {
+      const g = makeGame({ stageId: id, difficulty, seed: 3, upgrades });
+      startStage(g);
+      const plan = {}; let guard = 0;
+      while (g.phase === "playing" && guard < 240000) { autoStep(g, plan); stepGame(g, DT); drainEvents(g); guard += 1; }
+      ok(g.phase !== "playing", `${id} on ${difficulty}: the stage resolves rather than stalling`);
+      ok(g.wave >= Math.ceil(g.totalWaves / 2), `${id} on ${difficulty}: a scripted commander reaches wave ${g.wave} of ${g.totalWaves}`);
+    }
   }
 }
 

@@ -25,19 +25,34 @@ export const FROZEN_NORTH = {
   status: "playable",
 };
 
-/* Kingdom three, teased once the north is held. Sand and heat against
-   Ashford's green and the north's white: as far from a blizzard as the
-   world goes. Nothing here is playable. */
+/* Kingdom three, teased in v2.0 and real in v3.0: sand and heat against
+   Ashford's green and the north's white. The teaser copy below is what
+   the campaign map still shows while the Reach is locked. */
 export const SUNSPEAR = {
   id: "sun",
   name: "The Sunspear Reach",
-  eyebrow: "The next kingdom",
+  eyebrow: "Kingdom three",
   scene: "sunReach",
   flavour: [
     "South past the last frozen river,",
-    "a burning kingdom has been waiting for its turn.",
+    "the Reach's own guard has turned on it.",
   ],
   environment: "Red dunes, sandstone bastions and a sun that does not set",
+  status: "playable",
+};
+
+/* Kingdom four is only a plan. It is drawn up in the war room on the
+   Kingdoms page with the rest of the roadmap, and it says so: no art,
+   no stats, no promises it cannot keep. */
+export const NEXT_REALM = {
+  id: "savanna",
+  name: "The Kingdom of the Golden Stool",
+  eyebrow: "The next kingdom",
+  flavour: [
+    "Beyond the last dune the sand gives way to grass,",
+    "and a fortified city that has never opened its gates.",
+  ],
+  environment: "Warm savanna, forest edge and a city of woven banners",
   status: "soon",
 };
 
@@ -85,6 +100,13 @@ export const BADGES = {
     icon: "❄",
     kingdom: "frost",
   },
+  keeperOfTheSunspear: {
+    id: "keeperOfTheSunspear",
+    name: "Keeper of the Sunspear",
+    desc: "Sun-Tyrant Sarkaan is thrown down and the Reach is free.",
+    icon: "☀",
+    kingdom: "sun",
+  },
 };
 
-export const BADGE_ORDER = ["defenderOfAshford", "guardianOfTheFrozenNorth", "championOfTheRealms"];
+export const BADGE_ORDER = ["defenderOfAshford", "guardianOfTheFrozenNorth", "keeperOfTheSunspear", "championOfTheRealms"];

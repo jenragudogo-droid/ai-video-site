@@ -917,3 +917,22 @@
 /* New Game+ sits at the end of the campaign list: gold once it is open */
 .cdStage--next.is-ngplus { border-color: var(--cd-gold); background: linear-gradient(180deg, rgba(60, 46, 20, 0.5), rgba(24, 20, 14, 0.7)); }
 .cdStage--next.is-ngplus h4 { color: var(--cd-gold-2); }
+
+/* Kingdom three: the campaign card and the realm block run warm sandstone
+   where the north runs blue, so the three kingdoms never read alike. */
+.cdRealm--sun { border-color: rgba(200, 140, 70, 0.4); background: linear-gradient(180deg, rgba(62, 40, 20, 0.5), rgba(26, 20, 14, 0.7)); }
+.cdRealm--sun .cdRealmTitle h4 { color: #f0c977; }
+.cdSoon--sun { border-color: rgba(232, 194, 90, 0.5); color: #f0d9a8; }
+
+/* The war room: the next kingdom is a plan, and the card says only that.
+   No art, no stats, nothing that could be mistaken for built content. */
+.cdWarRoom {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin-top: 12px; padding: 14px 16px; border: 1px dashed rgba(200, 170, 120, 0.35); border-radius: 12px;
+  background: rgba(24, 20, 14, 0.5);
+}
+.cdWarRoom h4 { margin: 2px 0 4px; font-size: 19px; color: var(--cd-gold-2); }
+.cdWarRoomText { min-width: 0; flex: 1 1 260px; }
+.cdWarRoom .cdFrostFlavour span { display: block; }
+.cdWarRoom .cdLocked { margin-top: 6px; }
+@media (max-width: 560px) { .cdWarRoom { flex-direction: column; align-items: flex-start; } }
